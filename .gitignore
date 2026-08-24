@@ -13,3 +13,8 @@ __pycache__/
 *.pyc
 .venv/
 node_modules/
+
+Nornament_Inventory_2026-08-07.zip
+Nornament_Inventory/
+Stock/
+CRM/
