@@ -46,8 +46,13 @@ def _reference_data(db):
     return None
 
 
+#: Every test user shares this. Named to say what it is, so neither a reader
+#: nor a secret scanner mistakes a fixture for a credential.
+FIXTURE_PASSWORD = "fixture-value-not-a-credential"
+
+
 def _user(username, group_name, **extra):
-    user = User.objects.create_user(username=username, password="correct-horse-battery", **extra)
+    user = User.objects.create_user(username=username, password=FIXTURE_PASSWORD, **extra)
     user.must_change_password = False
     user.save(update_fields=["must_change_password"])
     if group_name:

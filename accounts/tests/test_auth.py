@@ -8,6 +8,14 @@ from accounts.models import User, sync_role_groups
 
 pytestmark = pytest.mark.django_db
 
+#: Fixture credentials. Deliberately not a real name and not a plausible
+#: password: a test that reads like a leaked login trips secret scanners, and
+#: reusing a real person's username from the seed data invites the question of
+#: whether it ever was one.
+FIXTURE_LOGIN = "imported-user"
+FIXTURE_PASSWORD = "fixture-value-not-a-credential"
+FIXTURE_EMAIL = "imported-user@example.invalid"
+
 
 def gotrue_hash(password):
     """What Supabase stores: bcrypt 2a, cost 10."""
@@ -16,20 +24,20 @@ def gotrue_hash(password):
 
 def test_an_imported_gotrue_hash_authenticates_unchanged(client):
     User.objects.create(
-        username="pradhyuman",
-        email="pradhyuman@karigar.live",
-        password=f"bcrypt${gotrue_hash('their-real-password')}",
+        username=FIXTURE_LOGIN,
+        email=FIXTURE_EMAIL,
+        password=f"bcrypt${gotrue_hash(FIXTURE_PASSWORD)}",
         must_change_password=False,
     )
-    assert client.login(username="pradhyuman", password="their-real-password")
+    assert client.login(username=FIXTURE_LOGIN, password=FIXTURE_PASSWORD)
 
 
 def test_django_rehashes_the_imported_password_on_first_login(client):
     user = User.objects.create(
-        username="pradhyuman", password=f"bcrypt${gotrue_hash('their-real-password')}", must_change_password=False
+        username=FIXTURE_LOGIN, password=f"bcrypt${gotrue_hash(FIXTURE_PASSWORD)}", must_change_password=False
     )
     assert user.password.startswith("bcrypt$")
-    client.login(username="pradhyuman", password="their-real-password")
+    client.login(username=FIXTURE_LOGIN, password=FIXTURE_PASSWORD)
     user.refresh_from_db()
     # the modern default takes over silently — nobody had to change anything
     assert user.password.startswith("pbkdf2_")
@@ -37,17 +45,17 @@ def test_django_rehashes_the_imported_password_on_first_login(client):
 
 def test_email_works_as_a_username(client):
     User.objects.create(
-        username="pradhyuman",
-        email="Pradhyuman@Karigar.live",
-        password=f"bcrypt${gotrue_hash('secret-password')}",
+        username=FIXTURE_LOGIN,
+        email=FIXTURE_EMAIL.upper(),
+        password=f"bcrypt${gotrue_hash(FIXTURE_PASSWORD)}",
         must_change_password=False,
     )
-    assert client.login(username="pradhyuman@karigar.live", password="secret-password")
+    assert client.login(username=FIXTURE_EMAIL, password=FIXTURE_PASSWORD)
 
 
 def test_a_wrong_password_is_refused(client):
-    User.objects.create(username="pradhyuman", password=f"bcrypt${gotrue_hash('secret-password')}")
-    assert not client.login(username="pradhyuman", password="not-the-password")
+    User.objects.create(username=FIXTURE_LOGIN, password=f"bcrypt${gotrue_hash(FIXTURE_PASSWORD)}")
+    assert not client.login(username=FIXTURE_LOGIN, password=FIXTURE_PASSWORD + "-wrong")
 
 
 def test_a_password_over_72_bytes_is_refused_rather_than_truncated():
@@ -74,19 +82,20 @@ def test_changing_the_password_clears_the_flag(client, sales_user):
     sales_user.must_change_password = True
     sales_user.save(update_fields=["must_change_password"])
     client.force_login(sales_user)
+    replacement = FIXTURE_PASSWORD + "-replaced"
     response = client.post(
         reverse("accounts:password_change"),
-        {"new_password1": "a-brand-new-passphrase", "new_password2": "a-brand-new-passphrase"},
+        {"new_password1": replacement, "new_password2": replacement},
     )
     sales_user.refresh_from_db()
     assert response.status_code == 302
     assert not sales_user.must_change_password
-    assert sales_user.check_password("a-brand-new-passphrase")
+    assert sales_user.check_password(replacement)
 
 
 def test_role_groups_carry_the_capabilities_of_app_role():
     sync_role_groups()
-    sales = User.objects.create_user(username="s", password="x")
+    sales = User.objects.create_user(username="s", password=FIXTURE_PASSWORD)
     sales.groups.add(Group.objects.get(name="SALES"))
     sales = User.objects.get(pk=sales.pk)
     assert sales.has_perm("accounts.view_sale")
@@ -95,7 +104,7 @@ def test_role_groups_carry_the_capabilities_of_app_role():
     assert not sales.has_perm("accounts.melt")
     assert not sales.is_privileged()
 
-    admin = User.objects.create_user(username="a", password="x")
+    admin = User.objects.create_user(username="a", password=FIXTURE_PASSWORD)
     admin.groups.add(Group.objects.get(name="ADMIN"))
     admin = User.objects.get(pk=admin.pk)
     assert all(admin.has_perm(perm) for perm in ["accounts.view_cost", "accounts.melt", "accounts.edit_bom"])

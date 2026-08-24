@@ -12,6 +12,8 @@ INSERT INTO app.location (code,name,kind,city) VALUES ('HO','Head Office','GODOW
 CREATE TABLE app.app_user (user_id SERIAL PRIMARY KEY, username TEXT UNIQUE, full_name TEXT, email TEXT, phone TEXT,
   password_hash TEXT, role_id INT REFERENCES app.role(role_id), home_location_id INT, is_active BOOLEAN DEFAULT true,
   auth_uid UUID, must_change_password BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT now());
+-- The password_hash below is bcrypt's own published test vector, not anybody's
+-- login: this fixture never authenticates, it only exercises the ETL's mapping.
 INSERT INTO app.app_user (username, full_name, email, password_hash, role_id, auth_uid, must_change_password)
 VALUES ('pradhyuman','Pradhyuman','pradhyuman@karigar.live','$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy',1,'fda6fe50-cff2-4c32-8f99-da40d25f8cfc',false),
        ('showroom','Showroom','showroom@karigar.live','$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy',2,'5cf533f2-54fb-4267-af32-ca91a14405de',false);
