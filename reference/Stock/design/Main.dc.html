@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body{margin:0;background:#f9f9f7;color:#0b0b0b;
+         font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial}
+    a{color:#8a6d2f} a:hover{color:#6d5525}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  </style>
+</helmet>
+
+<div style="padding:26px 26px 34px">
+
+  <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px">
+    <div class="mono" style="font-size:24px;font-weight:600;letter-spacing:-.02em">25P00084</div>
+    <div style="font-size:13px;color:#898781">Polki drop earring · 18K Yellow</div>
+  </div>
+  <div style="font-size:12.5px;color:#898781;margin-bottom:18px">Overview</div>
+
+  <!-- THE NEW COLUMN -->
+  <div style="background:#fcfcfb;border:1px solid #e1e0d9;border-radius:11px;padding:18px 20px;margin-bottom:16px">
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:#e1e0d9;
+                border:1px solid #e1e0d9;border-radius:9px;overflow:hidden">
+
+      <div style="background:#fcfcfb;padding:15px 17px">
+        <div style="font-size:12px;color:#52514e;margin-bottom:6px">Cost — frozen on BOM v1</div>
+        <div class="mono" style="font-size:26px;font-weight:600;letter-spacing:-.025em;line-height:1.05">₹1,33,728</div>
+        <div style="font-size:11.5px;color:#898781;margin-top:5px">gold at ₹7,309/g, 12 Mar 2025</div>
+      </div>
+
+      <div style="background:#f4eee0;padding:15px 17px;position:relative">
+        <div style="font-size:12px;color:#6d5525;margin-bottom:6px;font-weight:600">
+          Current cost — today's gold</div>
+        <div class="mono" style="font-size:26px;font-weight:600;letter-spacing:-.025em;line-height:1.05;color:#6d5525">{{cur}}</div>
+        <div style="font-size:11.5px;color:#8a6d2f;margin-top:5px">gold at {{goldNow}}/g · {{goldMove}}</div>
+        <div style="position:absolute;top:10px;right:12px;font-size:9.5px;font-weight:700;letter-spacing:.06em;
+                    text-transform:uppercase;color:#8a6d2f;border:1px solid #d9c9a0;border-radius:4px;padding:2px 6px">
+          read only</div>
+      </div>
+
+      <div style="background:#fcfcfb;padding:15px 17px">
+        <div style="font-size:12px;color:#52514e;margin-bottom:6px">Sale price — live</div>
+        <div class="mono" style="font-size:26px;font-weight:600;letter-spacing:-.025em;line-height:1.05">₹2,47,872</div>
+        <div style="font-size:11.5px;color:#898781;margin-top:5px">Retail scenario · as on today</div>
+      </div>
+    </div>
+
+    <!-- the two margins, side by side, because that is the whole point -->
+    
+
+    
+  </div>
+
+  <!-- identity, with size now editable -->
+  
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"pureGold":{"editor":"int","default":15481,"min":8000,"max":30000,"step":50,"unit":"₹/g","section":"Live rate"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const pure = this.props.pureGold ?? 15481;
+    const inr = n => '₹' + Math.round(n).toLocaleString('en-IN');
+    // 18K true fineness .75 is the COST basis; the sale side uses .76
+    const goldCostNow = Math.round(pure * 0.75);
+    const nonGold = 11520 + 2808 + 14370;          // polki + stones + making, at their own rates
+    const cur = nonGold + Math.round(14.37 * goldCostNow);
+    const sale = 247872;
+    const m = sale - cur;
+    return {
+      goldNow: inr(goldCostNow),
+      goldMove: goldCostNow > 7309
+        ? 'up ' + Math.round((goldCostNow / 7309 - 1) * 100) + '% since this BOM'
+        : 'down ' + Math.round((1 - goldCostNow / 7309) * 100) + '% since this BOM',
+      cur: inr(cur),
+      curMargin: inr(m),
+      curPct: (100 * m / sale).toFixed(1) + '%',
+      marginColour: m <= 0 ? '#a32a2a' : (m / sale < 0.25 ? '#9c4a22' : '#006300')
+    };
+  }
+}
+</script>
+</body>
+</html>

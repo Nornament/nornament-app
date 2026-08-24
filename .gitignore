@@ -1,0 +1,15 @@
+# secrets — never commit
+.env
+.env.*
+*.pem
+*.key
+logins.csv
+*.dump
+*.sql.gz
+
+# local
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+node_modules/

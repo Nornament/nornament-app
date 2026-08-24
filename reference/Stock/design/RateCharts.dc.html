@@ -1,0 +1,154 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body{margin:0;background:#f9f9f7;color:#0b0b0b;
+         font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial}
+    a{color:#8a6d2f} a:hover{color:#6d5525}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;
+       color:#898781;font-weight:600;padding:8px 10px;border-bottom:1px solid #c3c2b7;white-space:nowrap}
+    td{padding:8px 10px;border-bottom:1px solid #e1e0d9;font-size:13.5px}
+    td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;
+              font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
+    .chip{display:inline-flex;align-items:center;font-size:11.5px;font-weight:600;
+          padding:2.5px 8px;border-radius:99px;border:1px solid #e1e0d9;background:#f2f1ec;color:#52514e}
+    .in{background:#fcfcfb;border:1px solid #c3c2b7;border-radius:6px;padding:3px 7px;
+        font-size:12.5px;font-family:ui-monospace,Menlo,monospace;text-align:right;width:88px;color:#0b0b0b}
+  </style>
+</helmet>
+
+<div style="padding:26px">
+  <div style="font-size:17px;font-weight:600;letter-spacing:-.01em;margin-bottom:2px">Rate charts</div>
+  <div style="font-size:12.5px;color:#898781;margin-bottom:16px">Users &amp; Settings · Rate charts</div>
+
+  <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+
+    <!-- the charts you keep -->
+    <div style="flex:none;width:262px;background:#fcfcfb;border:1px solid #e1e0d9;
+                border-radius:11px;padding:16px 16px 12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <h3 style="margin:0;font-size:14.5px">Charts</h3>
+        <button style="background:#fcfcfb;border:1px solid #c3c2b7;border-radius:8px;padding:4px 9px;
+                       font-size:12.5px;font-family:inherit;color:#0b0b0b">+ New</button>
+      </div>
+
+      <div style="border:1px solid #8a6d2f;background:#f4eee0;border-radius:9px;padding:10px 12px;margin-bottom:8px">
+        <div style="font-size:13.5px;font-weight:600;color:#6d5525">Standard 2026</div>
+        <div style="font-size:11.5px;color:#8a6d2f;margin-top:2px">106 materials · cost + sale</div>
+        <div style="margin-top:6px"><span class="chip" style="background:#8a6d2f;color:#fff;border-color:#8a6d2f">
+          default</span></div>
+      </div>
+
+      <div style="border:1px solid #e1e0d9;border-radius:9px;padding:10px 12px;margin-bottom:8px">
+        <div style="font-size:13.5px;font-weight:600">Bridal — premium stones</div>
+        <div style="font-size:11.5px;color:#898781;margin-top:2px">41 materials · sale only</div>
+      </div>
+
+      <div style="border:1px solid #e1e0d9;border-radius:9px;padding:10px 12px;margin-bottom:8px">
+        <div style="font-size:13.5px;font-weight:600">Export — USD basis</div>
+        <div style="font-size:11.5px;color:#898781;margin-top:2px">88 materials · cost + sale</div>
+      </div>
+
+      <div style="border:1px dashed #c3c2b7;border-radius:9px;padding:10px 12px">
+        <div style="font-size:13.5px;color:#898781">Jan 2025 (archived)</div>
+        <div style="font-size:11.5px;color:#898781;margin-top:2px">still priced 38 live pieces</div>
+      </div>
+
+      <div style="font-size:11.5px;color:#898781;margin-top:12px;line-height:1.5">
+        A chart is never edited in place once a piece has used it. Changing a rate forks a new
+        version so an old quote still reconciles.
+      </div>
+    </div>
+
+    <!-- the open chart -->
+    <div style="flex:1;min-width:430px;background:#fcfcfb;border:1px solid #e1e0d9;
+                border-radius:11px;padding:18px 20px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px">
+        <div>
+          <h3 style="margin:0 0 3px;font-size:14.5px">Standard 2026</h3>
+          <p style="color:#898781;font-size:12.5px;margin:0">
+            Cost is what you pay. Sale is the starting ask — a pricing scenario may move it.</p>
+        </div>
+        <button style="background:#fcfcfb;border:1px solid #c3c2b7;border-radius:8px;padding:7px 13px;
+                       font-size:13.5px;font-family:inherit;color:#0b0b0b;white-space:nowrap">
+          &#8681; Import from Excel</button>
+      </div>
+
+      <table style="width:100%;border-collapse:collapse;margin-top:14px">
+        <thead><tr>
+          <th>Material</th><th style="width:86px">Size</th>
+          <th class="n" style="width:104px">Cost rate</th>
+          <th class="n" style="width:104px">Sale rate</th>
+          <th class="n" style="width:64px">Mult.</th>
+        </tr></thead>
+        <tbody>
+          <tr><td colspan="5" style="background:#f6efdc;padding:5px 10px;font-size:10.5px;
+                font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#6d5525">Metal</td></tr>
+          <tr>
+            <td><span class="mono" style="font-weight:600">G18K</span> Gold 18K</td>
+            <td style="color:#898781">—</td>
+            <td class="n" style="color:#898781">live &times; .750</td>
+            <td class="n" style="color:#898781">live &times; .760</td>
+            <td class="n" style="color:#898781">—</td></tr>
+          <tr style="background:#fdf6f6">
+            <td><span class="mono" style="font-weight:600">S925</span> Silver 925</td>
+            <td style="color:#898781">—</td>
+            <td class="n"><input class="in" value="126"></td>
+            <td class="n"><input class="in" value="" placeholder="needed"
+                  style="border-color:#d03b3b;background:#fdf0f0"></td>
+            <td class="n" style="color:#a32a2a">—</td></tr>
+
+          <tr><td colspan="5" style="background:#f0edf6;padding:5px 10px;font-size:10.5px;
+                font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#5b4a7a">Diamond</td></tr>
+          <tr>
+            <td><span class="mono" style="font-weight:600">DRKL SI-I</span> Diamond RKL SI-I</td>
+            <td class="mono" style="font-size:12.5px">+2</td>
+            <td class="n"><input class="in" value="42000"></td>
+            <td class="n"><input class="in" value="86000"></td>
+            <td class="n">2.05&times;</td></tr>
+          <tr>
+            <td><span class="mono" style="font-weight:600">DRKL SI-I</span> Diamond RKL SI-I</td>
+            <td class="mono" style="font-size:12.5px">-2</td>
+            <td class="n"><input class="in" value="31000"></td>
+            <td class="n"><input class="in" value="62000"></td>
+            <td class="n">2.00&times;</td></tr>
+
+          <tr><td colspan="5" style="background:#eef1f6;padding:5px 10px;font-size:10.5px;
+                font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#3f5a8a">Diamond Polki</td></tr>
+          <tr>
+            <td><span class="mono" style="font-weight:600">FPL</span> Foil Polki</td>
+            <td class="mono" style="font-size:12.5px">+36-44</td>
+            <td class="n"><input class="in" value="8000"></td>
+            <td class="n"><input class="in" value="30000"></td>
+            <td class="n">3.75&times;</td></tr>
+
+          <tr><td colspan="5" style="background:#edf4ef;padding:5px 10px;font-size:10.5px;
+                font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#37674f">Setting Stones</td></tr>
+          <tr>
+            <td><span class="mono" style="font-weight:600">SP156G</span> Emerald green round</td>
+            <td class="mono" style="font-size:12.5px">3.5 mm</td>
+            <td class="n"><input class="in" value="80"></td>
+            <td class="n"><input class="in" value="400"></td>
+            <td class="n">5.00&times;</td></tr>
+        </tbody>
+      </table>
+
+      <div style="border-left:3px solid #8a6d2f;padding:2px 0 2px 14px;margin-top:16px;
+                  font-size:13px;color:#52514e">
+        When a rate is typed on a bill of materials, the chart's figure is shown beside the box as
+        the suggestion. It is never forced — a stone bought at an odd price stays at that price,
+        and the line is marked as off-chart so you can find it later.
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

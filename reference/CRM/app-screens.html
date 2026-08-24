@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nornament CRM — App Screens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,500;0,600;1,400&family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --canvas: #F7F6F3;
+  --card: #FFFFFF;
+  --ink: #111111;
+  --muted: #787774;
+  --border: #E8E8E4;
+  --gold: #B08C3C;
+  --gold-light: #F5EDD8;
+  --ok: #2D6E3E;
+  --ok-light: #E8F3EC;
+  --blue: #2A65C0;
+  --blue-light: #EAF0FB;
+  --rust: #C0392B;
+  --rust-light: #FBEAE8;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Outfit', system-ui, sans-serif;
+  background: #ECEBE7;
+  min-height: 100vh;
+  padding: 64px 32px 80px;
+}
+
+/* Page header */
+.page-header {
+  text-align: center;
+  margin-bottom: 64px;
+}
+.page-header .eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 12px;
+}
+.page-header h1 {
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 40px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  margin-bottom: 12px;
+}
+.page-header p {
+  font-size: 16px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* Screens grid */
+.screens-grid {
+  display: flex;
+  gap: 28px;
+  justify-content: center;
+  flex-wrap: wrap;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+/* Screen label */
+.screen-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.screen-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Phone frame */
+.phone {
+  width: 320px;
+  height: 693px;
+  background: var(--card);
+  border-radius: 44px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.08),
+    0 2px 4px rgba(0,0,0,0.04),
+    0 8px 24px rgba(0,0,0,0.10),
+    0 24px 64px rgba(0,0,0,0.14);
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* Status bar */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 24px 0;
+  height: 44px;
+}
+.status-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.status-icons {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.status-icons svg { color: var(--ink); }
+
+/* Screen content area */
+.screen-content {
+  background: var(--canvas);
+  height: calc(100% - 44px - 64px); /* minus status + bottom nav */
+  overflow: hidden;
+  position: relative;
+}
+.screen-content.white { background: var(--card); }
+
+/* Bottom nav */
+.bottom-nav {
+  height: 64px;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 4px 8px;
+}
+.nav-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 0;
+}
+.nav-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.nav-icon svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 1.8;
+}
+.nav-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.nav-tab.active .nav-label { color: var(--gold); }
+.nav-tab.active .nav-icon svg { color: var(--gold); }
+.nav-tab:not(.active) .nav-icon svg { color: var(--muted); }
+
+/* Screen header */
+.screen-header {
+  padding: 16px 20px 12px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+.screen-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.screen-title {
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.screen-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.header-action {
+  width: 32px;
+  height: 32px;
+  background: var(--ink);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.header-action svg { width: 16px; height: 16px; color: white; stroke-width: 2; }
+
+/* Search bar */
+.search-bar {
+  margin: 12px 16px 0;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+}
+.search-bar svg { width: 16px; height: 16px; color: var(--muted); stroke-width: 2; }
+.search-placeholder { font-size: 14px; color: var(--muted); }
+
+/* Status badge */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.badge-active { background: var(--blue-light); color: var(--blue); }
+.badge-delivered { background: var(--ok-light); color: var(--ok); }
+.badge-enquiry { background: var(--gold-light); color: #8a6800; }
+.badge-repair { background: #F0EFED; color: var(--muted); }
+
+/* Customer list item */
+.customer-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 20px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+.avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--gold-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Newsreader', serif;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--gold);
+  flex-shrink: 0;
+}
+.customer-name { font-size: 14px; font-weight: 600; color: var(--ink); }
+.customer-meta { font-size: 12px; color: var(--muted); margin-top: 1px; }
+.customer-chevron { margin-left: auto; color: var(--border); }
+.customer-chevron svg { width: 14px; height: 14px; stroke-width: 2.5; }
+
+/* Section label */
+.section-label {
+  padding: 12px 20px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--canvas);
+}
+
+/* Order card */
+.order-card {
+  margin: 0 16px 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  gap: 12px;
+}
+.order-thumb {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.order-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.order-thumb svg { width: 20px; height: 20px; color: var(--muted); }
+.order-info { flex: 1; min-width: 0; }
+.order-code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.order-name { font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.order-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+.order-amount { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 500; color: var(--ink); }
+
+/* Dashboard stats */
+.stats-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 14px 16px 0;
+}
+.stat-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+}
+.stat-label { font-size: 11px; color: var(--muted); font-weight: 500; margin-bottom: 6px; }
+.stat-value {
+  font-family: 'Newsreader', serif;
+  font-size: 26px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.stat-value.gold { color: var(--gold); }
+.stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.stat-card.wide {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.stat-card.wide .stat-value { font-size: 22px; }
+
+/* Greeting block */
+.greeting {
+  padding: 18px 20px 14px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+.greeting-eyebrow { font-size: 11px; color: var(--muted); font-weight: 500; margin-bottom: 4px; }
+.greeting-title {
+  font-family: 'Newsreader', serif;
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.greeting-date { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+/* Quote screen */
+.quote-section { padding: 14px 16px 0; }
+.quote-label { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; }
+.quote-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 14px;
+  margin-bottom: 10px;
+}
+.quote-input-row .q-label { font-size: 13px; color: var(--muted); flex: 1; }
+.quote-input-row .q-val { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 600; color: var(--ink); }
+.quote-input-row.active { border-color: var(--gold); background: #FDFBF5; }
+.quote-input-row.active .q-val { color: var(--gold); }
+.quote-divider { height: 1px; background: var(--border); margin: 10px 0; }
+.quote-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--ink);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-top: 10px;
+}
+.quote-total-label { font-size: 13px; color: rgba(255,255,255,0.6); font-weight: 500; }
+.quote-total-val {
+  font-family: 'Newsreader', serif;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--gold);
+  letter-spacing: -0.01em;
+}
+
+/* Customer profile */
+.profile-header {
+  background: var(--card);
+  padding: 16px 20px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.profile-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--gold-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Newsreader', serif;
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--gold);
+  flex-shrink: 0;
+}
+.profile-name {
+  font-family: 'Newsreader', serif;
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.profile-phone { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.profile-tag { display: inline-flex; background: var(--gold-light); color: #8a6800; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; border-radius: 6px; padding: 2px 7px; margin-top: 5px; }
+
+.profile-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid var(--border);
+}
+.profile-stat {
+  padding: 14px 10px;
+  text-align: center;
+  border-right: 1px solid var(--border);
+}
+.profile-stat:last-child { border-right: none; }
+.profile-stat-val {
+  font-family: 'Newsreader', serif;
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.profile-stat-label { font-size: 10px; color: var(--muted); font-weight: 500; margin-top: 2px; }
+
+/* Purchase row */
+.purchase-row {
+  display: flex;
+  gap: 10px;
+  padding: 12px 20px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+.purchase-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.purchase-thumb svg { width: 16px; height: 16px; color: var(--muted); }
+.purchase-desc { font-size: 13px; font-weight: 500; color: var(--ink); }
+.purchase-date { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.purchase-amount { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; color: var(--ink); }
+
+/* Filter pills */
+.filter-pills {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+.pill {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  background: var(--canvas);
+}
+.pill.active {
+  background: var(--ink);
+  color: white;
+  border-color: var(--ink);
+}
+
+/* Dot indicator */
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 4px;
+}
+.dot.active { background: var(--blue); }
+.dot.ok { background: var(--ok); }
+.dot.gold { background: var(--gold); }
+
+/* Scroll hint */
+.scroll-area { overflow-y: hidden; position: relative; }
+
+/* Photo strip */
+.photo-strip {
+  display: flex;
+  gap: 8px;
+  padding: 10px 20px;
+  overflow: hidden;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+.photo-thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Back button row */
+.back-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px 0;
+  background: var(--card);
+}
+.back-btn { display: flex; align-items: center; gap: 4px; color: var(--gold); font-size: 14px; font-weight: 500; }
+.back-btn svg { width: 18px; height: 18px; stroke-width: 2; }
+
+/* Detail rows */
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 11px 20px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+.detail-key { font-size: 13px; color: var(--muted); }
+.detail-val { font-size: 13px; font-weight: 600; color: var(--ink); text-align: right; }
+
+/* Action button */
+.action-btn {
+  margin: 12px 16px 0;
+  background: var(--ink);
+  color: white;
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* Scrollable inner */
+.inner-scroll { height: 100%; overflow-y: hidden; }
+
+/* Footer note */
+.page-footer {
+  text-align: center;
+  margin-top: 64px;
+  font-size: 13px;
+  color: #9a9894;
+}
+
+@media (max-width: 768px) {
+  body { padding: 32px 16px 48px; }
+  .phone { width: 280px; height: 608px; }
+  .page-header h1 { font-size: 28px; }
+  .screens-grid { gap: 20px; }
+}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="eyebrow">Nornament CRM · App Design · July 2026</div>
+  <h1>Mobile App Screens</h1>
+  <p>5 key screens — Contacts, Orders, Customer Profile, Quote, Order Detail</p>
+</div>
+
+<div class="screens-grid">
+
+  <!-- SCREEN 1: DASHBOARD / HOME -->
+  <div class="screen-wrap">
+    <div class="phone">
+      <!-- Status bar -->
+      <div class="status-bar">
+        <span class="status-time">9:41</span>
+        <div class="status-icons">
+          <svg width="16" height="12" viewBox="0 0 16 12" fill="currentColor"><rect x="0" y="3" width="3" height="9" rx="1"/><rect x="4.5" y="2" width="3" height="10" rx="1"/><rect x="9" y="0" width="3" height="12" rx="1"/><rect x="13.5" y="0" width="2.5" height="12" rx="1" opacity=".3"/></svg>
+          <svg width="16" height="12" viewBox="0 0 20 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 4C3.5 1.5 7 0 10 0s6.5 1.5 9 4"/><path d="M4 7c1.5-1.5 3.5-2.5 6-2.5s4.5 1 6 2.5"/><path d="M7 10c1-1 2-1.5 3-1.5s2 .5 3 1.5"/><circle cx="10" cy="12" r="1.5" fill="currentColor"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="currentColor" stroke-opacity=".35"/><rect x="2" y="2" width="16" height="8" rx="2" fill="currentColor"/><path d="M23 4v4a2 2 0 0 0 0-4z" fill="currentColor" opacity=".4"/></svg>
+        </div>
+      </div>
+      <!-- Content -->
+      <div class="screen-content">
+        <div class="greeting">
+          <div class="greeting-eyebrow">Saturday, 4 July 2026</div>
+          <div class="greeting-title">Good morning, Pradhyum</div>
+        </div>
+        <div style="padding: 14px 16px 0; background: var(--canvas);">
+          <div class="stats-row">
+            <div class="stat-card">
+              <div class="stat-label">Active Orders</div>
+              <div class="stat-value">14</div>
+              <div class="stat-sub">3 due this week</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Repairs</div>
+              <div class="stat-value">6</div>
+              <div class="stat-sub">2 ready to deliver</div>
+            </div>
+            <div class="stat-card wide">
+              <div>
+                <div class="stat-label">July Revenue</div>
+                <div class="stat-value gold">₹3,84,000</div>
+              </div>
+              <div style="text-align: right;">
+                <div class="stat-sub" style="color: var(--ok); font-weight: 600;">+12% vs June</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="section-label" style="margin-top: 14px;">Recent Activity</div>
+        <div class="customer-item">
+          <div class="avatar" style="width:36px;height:36px;font-size:13px;">MK</div>
+          <div style="flex:1;">
+            <div class="order-code" style="margin:0 0 1px;">NOR-038 · Order</div>
+            <div class="customer-name" style="font-size:13px;">Meena Kapoor</div>
+          </div>
+          <div><span class="badge badge-active"><span class="dot active"></span>In Workshop</span></div>
+        </div>
+        <div class="customer-item">
+          <div class="avatar" style="width:36px;height:36px;font-size:13px;background:#E8F3EC;color:var(--ok);">RS</div>
+          <div style="flex:1;">
+            <div class="order-code" style="margin:0 0 1px;">NOR-035 · Order</div>
+            <div class="customer-name" style="font-size:13px;">Riya Shah</div>
+          </div>
+          <div><span class="badge badge-delivered"><span class="dot ok"></span>Delivered</span></div>
+        </div>
+        <div class="customer-item">
+          <div class="avatar" style="width:36px;height:36px;font-size:13px;background:#F5EDD8;color:var(--gold);">PD</div>
+          <div style="flex:1;">
+            <div class="order-code" style="margin:0 0 1px;">ENQ-019 · Enquiry</div>
+            <div class="customer-name" style="font-size:13px;">Priya Doshi</div>
+          </div>
+          <div><span class="badge badge-enquiry"><span class="dot gold"></span>Quote Sent</span></div>
+        </div>
+      </div>
+      <!-- Bottom nav -->
+      <div class="bottom-nav">
+        <div class="nav-tab active">
+          <div class="nav-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          </div>
+          <span class="nav-label">Home</span>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <span class="nav-label">Contacts</span>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          </div>
+          <span class="nav-label">Orders</span>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </div>
+          <span class="nav-label">Quote</span>
+        </div>
+      </div>
+    </div>
+    <div class="screen-label">Dashboard</div>
+  </div>
+
+  <!-- SCREEN 2: CONTACTS -->
+  <div class="screen-wrap">
+    <div class="phone">
+      <div class="status-bar">
+        <span class="status-time">9:41</span>
+        <div class="status-icons">
+          <svg width="16" height="12" viewBox="0 0 16 12" fill="currentColor"><rect x="0" y="3" width="3" height="9" rx="1"/><rect x="4.5" y="2" width="3" height="10" rx="1"/><rect x="9" y="0" width="3" height="12" rx="1"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="currentColor" stroke-opacity=".35"/><rect x="2" y="2" width="16" height="8" rx="2" fill="currentColor"/><path d="M23 4v4a2 2 0 0 0 0-4z" fill="currentColor" opacity=".4"/></svg>
+        </div>
+      </div>
+      <div class="screen-content">
+        <div class="screen-header">
+          <div class="screen-header-top">
+            <div>
+              <div class="screen-title">Contacts</div>
+              <div class="screen-sub">48 customers</div>
+            </div>
+            <div class="header-action">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </div>
+          </div>
+          <div class="search-bar" style="margin-top: 10px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span class="search-placeholder">Search customers...</span>
+          </div>
+        </div>
+        <div class="section-label">Recent</div>
+        <div class="customer-item">
+          <div class="avatar">MK</div>
+          <div style="flex:1;">
+            <div class="customer-name">Meena Kapoor</div>
+            <div class="customer-meta">+91 98765 43210 · Regular</div>
+          </div>
+          <div class="customer-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 18 15 12 9 6"/></svg></div>
+        </div>
+        <div class="customer-item">
+          <div class="avatar" style="background:#E8F3EC;color:var(--ok);">RS</div>
+          <div style="flex:1;">
+            <div class="customer-name">Riya Shah</div>
+            <div class="customer-meta">+91 99887 76655 · VIP</div>
+          </div>
+          <div class="customer-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 18 15 12 9 6"/></svg></div>
+        </div>
+        <div class="customer-item">
+          <div class="avatar" style="background:#EAF0FB;color:var(--blue);">PD</div>
+          <div style="flex:1;">
+            <div class="customer-name">Priya Doshi</div>
+            <div class="customer-meta">+91 98112 34567 · New</div>
+          </div>
+          <div class="customer-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 18 15 12 9 6"/></svg></div>
+        </div>
+        <div class="section-label">A</div>
+        <div class="customer-item">
+          <div class="avatar" style="background:#F0EFED;color:#5a5a58;">AN</div>
+          <div style="flex:1;">
+            <div class="customer-name">Anjali Nair</div>
+            <div class="customer-meta">+91 97654 32109</div>
+          </div>
+          <div class="customer-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 18 15 12 9 6"/></svg></div>
+        </div>
+        <div class="customer-item">
+          <div class="avatar" style="background:#F5EDD8;color:var(--gold);">AP</div>
+          <div style="flex:1;">
+            <div class="customer-name">Asha Patel</div>
+            <div class="customer-meta">+91 96543 21098</div>
+          </div>
+          <div class="customer-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 18 15 12 9 6"/></svg></div>
+        </div>
+        <div class="section-label">D</div>
+        <div class="customer-item">
+          <div class="avatar" style="background:#F0EFED;color:#5a5a58;">DM</div>
+          <div style="flex:1;">
+            <div class="customer-name">Deepa Mehta</div>
+            <div class="customer-meta">+91 95432 10987</div>
+          </div>
+          <div class="customer-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 18 15 12 9 6"/></svg></div>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-tab">
+          <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+          <span class="nav-label">Home</span>
+        </div>
+        <div class="nav-tab active">
+          <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+          <span class="nav-label">Contacts</span>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
+          <span class="nav-label">Orders</span>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
+          <span class="nav-label">Quote</span>
+        </div>
+      </div>
+    </div>
+    <div class="screen-label">Contacts</div>
+  </div>
+
+  <!-- SCREEN 3: CUSTOMER PROFILE -->
+  <div class="screen-wrap">
+    <div class="phone">
+      <div class="status-bar">
+        <span class="status-time">9:41</span>
+        <div class="status-icons">
+          <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="currentColor" stroke-opacity=".35"/><rect x="2" y="2" width="14" height="8" rx="2" fill="currentColor"/><path d="M23 4v4a2 2 0 0 0 0-4z" fill="currentColor" opacity=".4"/></svg>
+        </div>
+      </div>
+      <div class="screen-content">
+        <div class="back-row">
+          <div class="back-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="15 18 9 12 15 6"/></svg>
+            Contacts
+          </div>
+        </div>
+        <div class="profile-header">
+          <div class="profile-avatar">MK</div>
+          <div>
+            <div class="profile-name">Meena Kapoor</div>
+            <div class="profile-phone">+91 98765 43210</div>
+            <span class="profile-tag">Regular · Warm</span>
+          </div>
+        </div>
+        <div class="profile-stats">
+          <div class="profile-stat">
+            <div class="profile-stat-val">8</div>
+            <div class="profile-stat-label">Orders</div>
+          </div>
+          <div class="profile-stat">
+            <div class="profile-stat-val gold" style="color:var(--gold);">₹4.2L</div>
+            <div class="profile-stat-label">Total Spent</div>
+          </div>
+          <div class="profile-stat">
+            <div class="profile-stat-val">3</div>
+            <div class="profile-stat-label">Referrals</div>
+          </div>
+        </div>
+        <div class="section-label" style="background: var(--canvas);">Purchase History</div>
+        <div class="purchase-row">
+          <div class="purchase-thumb">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:18px;height:18px;"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          </div>
+          <div style="flex:1;">
+            <div class="purchase-desc">22K Gold Necklace Set</div>
+            <div class="purchase-date">14 Jun 2026</div>
+          </div>
+          <div class="purchase-amount">₹1,24,000</div>
+        </div>
+        <div class="purchase-row">
+          <div class="purchase-thumb">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:18px;height:18px;"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          </div>
+          <div style="flex:1;">
+            <div class="purchase-desc">Diamond Solitaire Ring</div>
+            <div class="purchase-date">2 Mar 2026</div>
+          </div>
+          <div class="purchase-amount">₹86,500</div>
+        </div>
+        <div class="purchase-row">
+          <div class="purchase-thumb">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:18px;height:18px;"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          </div>
+          <div style="flex:1;">
+            <div class="purchase-desc">Gold Bangles (pair)</div>
+            <div class="purchase-date">19 Nov 2025</div>
+          </div>
+          <div class="purchase-amount">₹68,200</div>
+        </div>
+        <div class="section-label" style="background: var(--canvas);">Active Order</div>
+        <div style="padding: 0 16px; background: var(--canvas);">
+          <div class="order-card" style="margin: 8px 0 0;">
+            <div class="order-thumb">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+            </div>
+            <div class="order-info">
+              <div class="order-code">NOR-038</div>
+              <div class="order-name">Gold Mangalsutra</div>
+              <div class="order-footer">
+                <span class="badge badge-active">In Workshop</span>
+                <span class="order-amount">₹72,000</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-tab">
+          <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+          <span class="nav-label">Home</span>
+        </div>
+        <div class="nav-tab active">
+          <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+          <span class="nav-label">Contacts</span>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
+          <span class="nav-label">Orders</span>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
+          <span class="nav-label">Quote</span>
+        </div>
+      </div>
+    </div>
+    <div class="screen-label">Customer Profile</div>
+  </div>
+
+  <!-- SCREEN 4: ORDERS -->
+  <div class="screen-wrap">
+    <div class="phone">
+      <div class="status-bar">
+        <span class="status-time">9:41</span>
+        <div class="status-icons">
+          <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="currentColor" stroke-opacity=".35"/><rect x="2" y="2" width="18" height="8" rx="2" fill="currentColor"/><path d="M23 4v4a2 2 0 0 0 0-4z" fill="currentColor" opacity=".4"/></svg>
+        </div>
+      </div>
+      <div class="screen-content">
+        <div class="screen-header">
+          <div class="screen-header-top">
+            <div>
+              <div class="screen-title">Orders</div>
+              <div class="screen-sub">14 active · 6 repairs</div>
+            </div>
+            <div class="header-action">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </div>
+          </div>
+        </div>
+        <div class="filter-pills">
+          <div class="pill active">All</div>
+          <div class="pill">Active</div>
+          <div class="pill">Repairs</div>
+          <div class="pill">Delivered</div>
+        </div>
+        <div style="padding: 10px 0; background: var(--canvas);">
+          <div class="order-card">
+            <div class="order-thumb" style="background: var(--gold-light);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color:var(--gold);"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+            </div>
+            <div class="order-info">
+              <div class="order-code">NOR-038 · Meena Kapoor</div>
+              <div class="order-name">Gold Mangalsutra</div>
+              <div class="order-footer">
+                <span class="badge badge-active"><span class="dot active"></span>In Workshop</span>
+                <span class="order-amount">₹72,000</span>
+              </div>
+            </div>
+          </div>
+          <div class="order-card">
+            <div class="order-thumb">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color:var(--muted);width:22px;height:22px;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            </div>
+            <div class="order-info">
+              <div class="order-code">NOR-037 · Priya Doshi</div>
+              <div class="order-name">Diamond Pendant Set</div>
+              <div class="order-footer">
+                <span class="badge badge-enquiry"><span class="dot gold"></span>Design Approved</span>
+                <span class="order-amount">₹1,14,000</span>
+              </div>
+            </div>
+          </div>
+          <div class="order-card">
+            <div class="order-thumb" style="background: var(--ok-light);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color:var(--ok);width:22px;height:22px;"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <div class="order-info">
+              <div class="order-code">NOR-036 · Riya Shah</div>
+              <div class="order-name">Antique Gold Earrings</div>
+              <div class="order-footer">
+                <span class="badge badge-delivered"><span class="dot ok"></span>Ready to Deliver</span>
+                <span class="order-amount">₹38,500</span>
+              </div>
+            </div>
+          </div>
+          <div class="order-card">
+            <div class="order-thumb">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color:var(--muted);"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            </div>
+            <div class="order-info">
+              <div class="order-code">REP-022 · Anita Joshi</div>
+              <div class="order-name">Ring Resize (size 14)</div>
+              <div class="order-footer">
+                <span class="badge badge-repair"><span class="dot" style="background:var(--muted);"></span>In Workshop</span>
+                <span class="order-amount">₹1,200</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-tab">
+          <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+          <span class="nav-label">Home</span>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+          <span class="nav-label">Contacts</span>
+        </div>
+        <div class="nav-tab active">
+          <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
+          <span class="nav-label">Orders</span>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
+          <span class="nav-label">Quote</span>
+        </div>
+      </div>
+    </div>
+    <div class="screen-label">Orders</div>
+  </div>
+
+  <!-- SCREEN 5: QUOTE CALCULATOR -->
+  <div class="screen-wrap">
+    <div class="phone">
+      <div class="status-bar">
+        <span class="status-time">9:41</span>
+        <div class="status-icons">
+          <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="currentColor" stroke-opacity=".35"/><rect x="2" y="2" width="12" height="8" rx="2" fill="currentColor"/><path d="M23 4v4a2 2 0 0 0 0-4z" fill="currentColor" opacity=".4"/></svg>
+        </div>
+      </div>
+      <div class="screen-content">
+        <div class="screen-header">
+          <div class="screen-header-top">
+            <div>
+              <div class="screen-title">Quote Calc</div>
+              <div class="screen-sub">22K Gold · 7,240/g today</div>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--gold);background:var(--gold-light);padding:4px 8px;border-radius:6px;font-weight:600;">22K</div>
+          </div>
+        </div>
+        <div class="quote-section" style="overflow-y: hidden;">
+          <div class="quote-label">Gold Rate</div>
+          <div class="quote-input-row active">
+            <span class="q-label">24K rate (₹/g)</span>
+            <span class="q-val">7,900</span>
+          </div>
+
+          <div class="quote-label" style="margin-top: 8px;">Item Details</div>
+          <div class="quote-input-row">
+            <span class="q-label">Net Weight (g)</span>
+            <span class="q-val">12.50</span>
+          </div>
+          <div class="quote-input-row">
+            <span class="q-label">Making Charges</span>
+            <span class="q-val">12%</span>
+          </div>
+          <div class="quote-input-row">
+            <span class="q-label">Wastage</span>
+            <span class="q-val">5%</span>
+          </div>
+          <div class="quote-input-row">
+            <span class="q-label">Stone / Other (₹)</span>
+            <span class="q-val">2,000</span>
+          </div>
+
+          <div class="quote-divider" style="margin-top: 12px;"></div>
+
+          <div style="padding: 4px 0 8px;">
+            <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px;">
+              <span style="color:var(--muted);">Metal Value</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:13px;">₹83,252</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px;">
+              <span style="color:var(--muted);">Making Charges</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:13px;">₹9,990</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px;">
+              <span style="color:var(--muted);">Wastage (5%)</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:13px;">₹4,163</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px;">
+              <span style="color:var(--muted);">Stone / Other</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:13px;">₹2,000</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px;">
+              <span style="color:var(--muted);">GST 3%</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:13px;">₹2,972</span>
+            </div>
+          </div>
+
+          <div class="quote-total-row">
+            <span class="quote-total-label">Total Quote</span>
+            <span class="quote-total-val">₹1,02,377</span>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <div class="action-btn" style="flex:2;margin:0;">Save Quote</div>
+            <div style="flex:1;border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;font-size:13px;font-weight:600;color:var(--muted);">Share</div>
+          </div>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-tab">
+          <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+          <span class="nav-label">Home</span>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+          <span class="nav-label">Contacts</span>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
+          <span class="nav-label">Orders</span>
+        </div>
+        <div class="nav-tab active">
+          <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
+          <span class="nav-label">Quote</span>
+        </div>
+      </div>
+    </div>
+    <div class="screen-label">Quote Calculator</div>
+  </div>
+
+</div>
+
+<div class="page-footer">
+  Nornament CRM · Design reference · All figures are sample data
+</div>
+
+</body>
+</html>

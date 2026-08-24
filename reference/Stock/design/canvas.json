@@ -1,0 +1,102 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 900,
+      "h": 420,
+      "title": "Piece \u2014 cost, current cost, sale"
+    },
+    {
+      "file": "BomBreakup.dc.html",
+      "x": 1000,
+      "y": 0,
+      "w": 1300,
+      "h": 720,
+      "title": "Product page \u2014 Sale BOM & breakup"
+    },
+    {
+      "file": "ScenarioMath.dc.html",
+      "x": 3500,
+      "y": 0,
+      "w": 1000,
+      "h": 900,
+      "title": "The percentage question"
+    },
+    {
+      "file": "Materials.dc.html",
+      "x": 0,
+      "y": 3320,
+      "w": 1080,
+      "h": 760,
+      "title": "Settings \u2014 Materials"
+    },
+    {
+      "file": "RateCharts.dc.html",
+      "x": 1400,
+      "y": 3320,
+      "w": 1000,
+      "h": 800,
+      "title": "Settings \u2014 Rate charts"
+    },
+    {
+      "file": "Scenarios.dc.html",
+      "x": 2500,
+      "y": 3320,
+      "w": 1000,
+      "h": 1060,
+      "title": "Settings \u2014 Pricing scenarios"
+    },
+    {
+      "file": "SalesView.dc.html",
+      "x": 1000,
+      "y": 820,
+      "w": 900,
+      "h": 700,
+      "title": "Product page \u2014 what Sales sees"
+    },
+    {
+      "file": "MetalRates.dc.html",
+      "x": 0,
+      "y": 1620,
+      "w": 1300,
+      "h": 1560,
+      "title": "Settings \u2014 Metal rates (gold + silver)"
+    },
+    {
+      "file": "PieceScenarios.dc.html",
+      "x": 2400,
+      "y": 820,
+      "w": 1000,
+      "h": 740,
+      "title": "Product page \u2014 Pricing (admin)"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "start-here",
+      "x": 0,
+      "y": -150,
+      "w": 620,
+      "text": "Start at the left.\n\nEvery number is real \u2014 piece 25P00084 as it stands in your database. The BOM tab now carries the columns you listed, with the share as a column rather than a diagram."
+    },
+    {
+      "id": "the-ask",
+      "x": 3500,
+      "y": -150,
+      "w": 620,
+      "text": "This board is a question, not a design.\n\nYour sentence about the straight % has two honest readings and they price the same piece at 2.64L and 2.10L. I need you to pick before I build."
+    },
+    {
+      "id": "silver",
+      "x": 0,
+      "y": 1470,
+      "w": 520,
+      "text": "The silver fix.\n\nA purity now belongs to a metal, and each metal carries its own live rate. 925 stops being a gold karat. Both factor columns are yours to edit \u2014 the fineness you could not change before."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

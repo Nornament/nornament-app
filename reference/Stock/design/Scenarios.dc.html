@@ -1,0 +1,168 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body{margin:0;background:#f9f9f7;color:#0b0b0b;
+         font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial}
+    a{color:#8a6d2f} a:hover{color:#6d5525}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;
+       color:#898781;font-weight:600;padding:8px 10px;border-bottom:1px solid #c3c2b7;white-space:nowrap}
+    td{padding:8px 10px;border-bottom:1px solid #e1e0d9;font-size:13.5px}
+    td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;
+              font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
+    .chip{display:inline-flex;align-items:center;font-size:11.5px;font-weight:600;
+          padding:2.5px 8px;border-radius:99px;border:1px solid #e1e0d9;background:#f2f1ec;color:#52514e}
+  </style>
+</helmet>
+
+<div style="padding:26px">
+  <div style="font-size:17px;font-weight:600;letter-spacing:-.01em">Pricing scenarios</div>
+  <div style="font-size:12.5px;color:#898781;margin-bottom:16px">
+    Users &amp; Settings · Pricing scenarios</div>
+
+  <div style="background:#fcfcfb;border:1px solid #e1e0d9;border-radius:11px;padding:18px 20px;margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px">
+      <div>
+        <h3 style="margin:0 0 3px;font-size:14.5px">Scenarios</h3>
+        <p style="color:#898781;font-size:12.5px;margin:0;max-width:76ch">
+          A scenario is a way of turning cost into an asking price. One is the default for the whole
+          catalogue; a single piece can be switched to another if you allow it. Gold always prices from the live rate and making always
+          from the figure on the line — a scenario cannot touch either.</p>
+      </div>
+      <button style="background:#8a6d2f;border:1px solid #8a6d2f;border-radius:8px;padding:7px 13px;
+                     font-size:13.5px;color:#fff;font-weight:500;white-space:nowrap;font-family:inherit">
+        + New scenario</button>
+    </div>
+
+    <table style="width:100%;border-collapse:collapse;margin-top:14px">
+      <thead><tr>
+        <th>Scenario</th><th>How it prices</th><th>Visible to</th>
+        <th class="n">25P00084</th><th class="n">Margin</th><th></th>
+      </tr></thead>
+      <tbody>
+        <tr style="background:#f4eee0">
+          <td><b>Retail</b> <span class="chip" style="background:#8a6d2f;color:#fff;border-color:#8a6d2f">default</span></td>
+          <td>Sale rates from <b>Standard 2026</b></td>
+          <td><span class="chip">Everyone</span></td>
+          <td class="n" style="font-weight:600">2,47,872</td>
+          <td class="n" style="color:#9c4a22">21.1%</td>
+          <td style="text-align:right"><a href="#" style="font-size:12.5px">edit</a></td></tr>
+        <tr>
+          <td><b>Bridal</b></td>
+          <td>Sale rates from <b>Bridal — premium stones</b></td>
+          <td><span class="chip">Admin</span> <span class="chip">Accounts</span></td>
+          <td class="n">2,91,410</td><td class="n" style="color:#006300">32.9%</td>
+          <td style="text-align:right"><a href="#" style="font-size:12.5px">edit</a></td></tr>
+        <tr>
+          <td><b>Target 35%</b></td>
+          <td>Current cost +35%, absorbed by stones</td>
+          <td><span class="chip">Admin</span></td>
+          <td class="n">2,63,990</td><td class="n" style="color:#006300">25.9%</td>
+          <td style="text-align:right"><a href="#" style="font-size:12.5px">edit</a></td></tr>
+        <tr>
+          <td><b>Wholesale</b></td>
+          <td>Current cost +18%, absorbed by stones</td>
+          <td><span class="chip">Admin</span> <span class="chip">Accounts</span></td>
+          <td class="n">2,30,747</td><td class="n" style="color:#9c4a22">15.3%</td>
+          <td style="text-align:right"><a href="#" style="font-size:12.5px">edit</a></td></tr>
+        <tr style="opacity:.6">
+          <td><b>Exhibition</b></td>
+          <td>Category multipliers on cost</td>
+          <td><span class="chip">Admin</span></td>
+          <td class="n">2,09,975</td><td class="n" style="color:#a32a2a">6.9%</td>
+          <td style="text-align:right"><a href="#" style="font-size:12.5px">edit</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- one scenario, open -->
+  <div style="background:#fcfcfb;border:1px solid #e1e0d9;border-radius:11px;padding:18px 20px">
+    <h3 style="margin:0 0 3px;font-size:14.5px">Target 35%</h3>
+    <p style="color:#898781;font-size:12.5px;margin:0 0 14px">
+      Editing a scenario never changes a stored price. It changes what the app asks for from now on.</p>
+
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 26px;max-width:760px">
+      <div>
+        <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+                    color:#52514e;margin-bottom:5px">Method</div>
+        <select style="width:100%;background:#fcfcfb;color:#0b0b0b;border:1px solid #c3c2b7;
+                       border-radius:7px;padding:6px 9px;font:inherit;font-size:13.5px">
+          <option>Rate chart — take the sale rate as written</option>
+          <option selected>Target margin — cost + % , absorbed by stones</option>
+          <option>Category multipliers — a factor per material category</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+                    color:#52514e;margin-bottom:5px">Percentage over current cost</div>
+        <input value="35" style="width:100%;background:#fcfcfb;color:#0b0b0b;border:1px solid #c3c2b7;
+                       border-radius:7px;padding:6px 9px;font:inherit;font-size:13.5px;
+                       font-family:ui-monospace,Menlo,monospace">
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+                    color:#52514e;margin-bottom:5px">Spread the remainder across</div>
+        <select style="width:100%;background:#fcfcfb;color:#0b0b0b;border:1px solid #c3c2b7;
+                       border-radius:7px;padding:6px 9px;font:inherit;font-size:13.5px">
+          <option selected>Diamond, Diamond Polki, Setting Stones, Purai Stones</option>
+          <option>Diamond and Diamond Polki only</option>
+          <option>Setting Stones and Purai Stones only</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+                    color:#52514e;margin-bottom:5px">In proportion to</div>
+        <select style="width:100%;background:#fcfcfb;color:#0b0b0b;border:1px solid #c3c2b7;
+                       border-radius:7px;padding:6px 9px;font:inherit;font-size:13.5px">
+          <option selected>Their cost</option><option>Their carat weight</option>
+          <option>Their rate-chart sale value</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+                color:#52514e;margin:18px 0 7px">Who may price with this</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13.5px">
+      <label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" checked> Admin</label>
+      <label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox"> Accounts</label>
+      <label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox"> Sales / Showroom</label>
+      <label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" disabled>
+        <span style="color:#898781">Graphic — sees no prices at all</span></label>
+      <label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" disabled>
+        <span style="color:#898781">Production — sees no prices at all</span></label>
+    </div>
+
+    <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+                color:#52514e;margin:20px 0 7px">Switching scenario on a piece</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13.5px">
+      <label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" checked>
+        Admin may switch on the piece</label>
+      <label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" checked>
+        Accounts may switch on the piece</label>
+      <label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox">
+        Sales may switch on the piece</label>
+    </div>
+    <div style="font-size:12.5px;color:#898781;margin-top:7px;max-width:96ch;line-height:1.55">
+      Switching on the piece changes what that one piece is quoted at, for everyone, and is written
+      to the audit log with who and when. It is not a private preview — someone who can switch can
+      discount, which is why Sales is unticked by default.
+    </div>
+
+    <div style="border-left:3px solid #8a6d2f;padding:2px 0 2px 14px;margin-top:16px;
+                font-size:13px;color:#52514e;max-width:96ch">
+      A showroom given only <b>Retail</b> sees one price and cannot discover the wholesale one —
+      the scenario is applied in the database, not chosen in the browser, so switching role in the
+      page cannot reveal it.
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

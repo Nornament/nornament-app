@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body{margin:0;background:#f9f9f7;color:#0b0b0b;
+         font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial}
+    a{color:#8a6d2f} a:hover{color:#6d5525}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;
+       color:#898781;font-weight:600;padding:8px 10px;border-bottom:1px solid #c3c2b7;white-space:nowrap}
+    td{padding:8px 10px;border-bottom:1px solid #e1e0d9;font-size:13.5px}
+    td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;
+              font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
+    .tab{background:none;border:0;border-bottom:2px solid transparent;padding:9px 13px;
+         color:#52514e;font-size:13.5px;margin-bottom:-1px;font-family:inherit}
+    .tab.on{color:#8a6d2f;border-bottom-color:#8a6d2f;font-weight:600}
+    .chip{display:inline-flex;align-items:center;font-size:11.5px;font-weight:600;
+          padding:2.5px 8px;border-radius:99px;border:1px solid #e1e0d9;background:#f2f1ec;color:#52514e}
+    .in{background:#fcfcfb;border:1px solid #c3c2b7;border-radius:6px;padding:3px 7px;
+        font-size:12.5px;width:100%;font-family:inherit;color:#0b0b0b}
+    .lock{color:#898781;font-size:10px}
+  </style>
+</helmet>
+
+<div style="padding:26px">
+  <div style="font-size:17px;font-weight:600;letter-spacing:-.01em;margin-bottom:14px">Users &amp; Settings</div>
+  <div style="display:flex;gap:2px;border-bottom:1px solid #e1e0d9;margin-bottom:16px">
+    <button class="tab">Categories</button><button class="tab">Locations</button>
+    <button class="tab on">Materials</button><button class="tab">Rate charts</button>
+    <button class="tab">Pricing scenarios</button><button class="tab">Users</button>
+    <button class="tab">Location access</button><button class="tab">Permissions</button>
+  </div>
+
+  <div style="background:#fcfcfb;border:1px solid #e1e0d9;border-radius:11px;padding:18px 20px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:4px">
+      <div>
+        <h3 style="margin:0 0 3px;font-size:14.5px">Materials</h3>
+        <p style="color:#898781;font-size:12.5px;margin:0;max-width:70ch">
+          Every item code that has ever appeared on a bill of materials is here. A code that arrives
+          from a Gati import lands as <b>Other Materials</b> and waits for you to classify it —
+          nothing is guessed.</p>
+      </div>
+      <button style="background:#8a6d2f;border:1px solid #8a6d2f;border-radius:8px;padding:7px 13px;
+                     font-size:13.5px;color:#fff;font-weight:500;white-space:nowrap;font-family:inherit">
+        + Add material</button>
+    </div>
+
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin:14px 0 4px">
+      <span class="chip" style="background:#8a6d2f;color:#fff;border-color:#8a6d2f">All 106</span>
+      <span class="chip">Metal 7</span><span class="chip">Diamond 27</span>
+      <span class="chip">Diamond Polki 1</span><span class="chip">Setting Stones 70</span>
+      <span class="chip">Purai Stones 0</span>
+      <span class="chip" style="background:#fdf3e0;border-color:#f0d9a8;color:#7a5600">
+        Other Materials 1 &#9679;</span>
+    </div>
+
+    <table style="width:100%;border-collapse:collapse;margin-top:10px">
+      <thead><tr>
+        <th style="width:118px">Code <span class="lock">&#128274; admin</span></th>
+        <th>Description</th><th style="width:120px">Size</th>
+        <th style="width:168px">Material category</th>
+        <th style="width:74px">UOM</th><th class="n" style="width:76px">Used on</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td class="mono" style="font-weight:600">G18K</td>
+          <td>Gold 18K</td><td style="color:#898781">—</td>
+          <td><span class="chip" style="background:#f6efdc;border-color:#e3d3a8;color:#6d5525">Metal</span></td>
+          <td class="mono" style="font-size:12.5px">GM</td><td class="n">102</td></tr>
+        <tr style="background:#fdf6f6">
+          <td class="mono" style="font-weight:600">S925</td>
+          <td>Silver 925</td><td style="color:#898781">—</td>
+          <td><span class="chip" style="background:#f6efdc;border-color:#e3d3a8;color:#6d5525">Metal</span></td>
+          <td class="mono" style="font-size:12.5px">GM</td><td class="n">35</td></tr>
+        <tr>
+          <td colspan="6" style="background:#fdf6f6;padding:0 10px 10px">
+            <div style="border-left:3px solid #d03b3b;padding:2px 0 2px 12px;font-size:12.5px;color:#a32a2a">
+              <b>Silver has no rate of its own.</b> Its sale rate was imported as ₹14,320/g — the
+              pure <em>gold</em> rate × 0.925. A Metal material now declares how it is priced:
+              from the gold rate by karat, from its own live rate, or from a rate chart.
+              Silver needs the second, and nobody but you can supply the number.
+            </div></td></tr>
+        <tr>
+          <td class="mono" style="font-weight:600">FPL</td>
+          <td>Foil Polki</td><td class="mono" style="font-size:12.5px">+36-44</td>
+          <td><span class="chip" style="background:#eef1f6;border-color:#ccd6e5;color:#3f5a8a">Diamond Polki</span></td>
+          <td class="mono" style="font-size:12.5px">CT</td><td class="n">61</td></tr>
+        <tr>
+          <td class="mono" style="font-weight:600">DRKL SI-I</td>
+          <td>Diamond RKL SI-I</td><td class="mono" style="font-size:12.5px">+2</td>
+          <td><span class="chip" style="background:#f0edf6;border-color:#d8cfe8;color:#5b4a7a">Diamond</span></td>
+          <td class="mono" style="font-size:12.5px">CT</td><td class="n">44</td></tr>
+        <tr>
+          <td class="mono" style="font-weight:600">SP156G</td>
+          <td><input class="in" value="Emerald green round"></td>
+          <td><input class="in" value="3.5 mm"></td>
+          <td><select class="in" style="padding:3px 5px">
+            <option>Metal</option><option>Diamond</option><option>Diamond Polki</option>
+            <option selected>Setting Stones</option><option>Purai Stones</option>
+            <option>Other Materials</option></select></td>
+          <td class="mono" style="font-size:12.5px">CT</td><td class="n">18</td></tr>
+        <tr style="background:#fdf9ef">
+          <td class="mono" style="font-weight:600">CCS</td>
+          <td style="color:#898781"><i>Customer Color Stone</i> — from Gati</td>
+          <td style="color:#898781">—</td>
+          <td><span class="chip" style="background:#fdf3e0;border-color:#f0d9a8;color:#7a5600">
+            Other Materials &#9679;</span></td>
+          <td class="mono" style="font-size:12.5px">CT</td><td class="n">7</td></tr>
+      </tbody>
+    </table>
+
+    <div style="border-left:3px solid #8a6d2f;padding:2px 0 2px 14px;margin-top:16px;
+                font-size:13px;color:#52514e">
+      The <b>code</b> is the identity a bill of materials points at, so only an admin may change it
+      and doing so renames it everywhere. Description and size are free text — anyone with rate
+      access can correct them.
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

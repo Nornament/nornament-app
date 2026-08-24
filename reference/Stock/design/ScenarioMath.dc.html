@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body{margin:0;background:#f9f9f7;color:#0b0b0b;
+         font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial}
+    a{color:#8a6d2f} a:hover{color:#6d5525}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;
+       color:#898781;font-weight:600;padding:8px 10px;border-bottom:1px solid #c3c2b7;white-space:nowrap}
+    td{padding:8px 10px;border-bottom:1px solid #e1e0d9;font-size:13.5px}
+    td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;
+              font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
+    .lockrow{background:#f6f6f3}
+  </style>
+</helmet>
+
+<div style="padding:26px">
+  <div style="font-size:17px;font-weight:600;letter-spacing:-.01em">How a percentage lands on a piece</div>
+  <div style="font-size:12.5px;color:#898781;margin-bottom:4px">
+    25P00084 · current cost ₹1,95,548 · two readings of “straight %”</div>
+
+  <div style="border-left:3px solid #ec835a;padding:2px 0 2px 14px;margin:14px 0 18px;
+              font-size:13px;color:#52514e;max-width:92ch">
+    You said gold cannot be marked up and making is whatever you set, so the percentage has to be
+    absorbed by the stones. That sentence has two possible meanings and they give very different
+    prices. Pick one — or keep both as separate scenario types.
+  </div>
+
+  <div style="display:flex;gap:16px;align-items:stretch;flex-wrap:wrap">
+
+    <!-- READING A -->
+    <div style="flex:1;min-width:430px;background:#fcfcfb;border:2px solid #8a6d2f;
+                border-radius:11px;padding:18px 20px">
+      <div style="display:flex;align-items:baseline;gap:9px">
+        <h3 style="margin:0;font-size:14.5px">A · Target the whole piece</h3>
+        <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+                     color:#fff;background:#8a6d2f;border-radius:4px;padding:2px 7px">likely what you mean</span>
+      </div>
+      <p style="color:#898781;font-size:12.5px;margin:6px 0 0">
+        Sale = current cost + 35%. Gold and making are held. Whatever is left over becomes the
+        stones' price.</p>
+
+      <table style="width:100%;border-collapse:collapse;margin-top:14px">
+        <thead><tr><th>Category</th><th class="n">Cost</th><th class="n">Sale</th><th class="n">On</th></tr></thead>
+        <tbody>
+          <tr class="lockrow"><td><b>Metal</b> 🔒<div style="font-size:11.5px;color:#898781">
+            live rate, cannot be raised</div></td>
+            <td class="n">1,66,850</td><td class="n">1,69,077</td><td class="n" style="color:#898781">held</td></tr>
+          <tr class="lockrow"><td><b>Making</b> 🔒<div style="font-size:11.5px;color:#898781">
+            ₹1,500/g as you set it</div></td>
+            <td class="n">14,370</td><td class="n">21,555</td><td class="n" style="color:#898781">held</td></tr>
+          <tr><td><b>Diamond Polki</b></td><td class="n">11,520</td>
+            <td class="n" style="font-weight:600">58,984</td><td class="n">5.12×</td></tr>
+          <tr><td><b>Setting Stones</b></td><td class="n">2,808</td>
+            <td class="n" style="font-weight:600">14,374</td><td class="n">5.12×</td></tr>
+        </tbody>
+        <tfoot><tr>
+          <td style="font-weight:600;border-bottom:0;padding-top:11px">Total</td>
+          <td class="n" style="border-bottom:0;padding-top:11px">1,95,548</td>
+          <td class="n" style="border-bottom:0;padding-top:11px;font-weight:600;font-size:14px">2,63,990</td>
+          <td class="n" style="border-bottom:0;padding-top:11px;color:#006300;font-weight:600">+35.0%</td>
+        </tr></tfoot>
+      </table>
+
+      <div style="background:#f2f1ec;border-radius:8px;padding:11px 13px;margin-top:14px;
+                  font-size:12.5px;color:#52514e;line-height:1.6">
+        <b>₹2,63,990 − ₹1,69,077 − ₹21,555 = ₹73,358</b> to be found from stones that
+        cost ₹14,328. Split in proportion to their cost, both land on 5.12×.
+      </div>
+
+      <div style="border-left:3px solid #d03b3b;padding:2px 0 2px 12px;margin-top:14px;
+                  font-size:12.5px;color:#a32a2a">
+        <b>The trap.</b> On a heavy gold piece with two small stones, gold and making can already
+        exceed the target. The remainder goes negative and the stones would be priced below zero.
+        The scenario has to refuse that and tell you the lowest percentage that piece can carry.
+      </div>
+    </div>
+
+    <!-- READING B -->
+    
+  </div>
+
+  
+</div>
+</x-dc>
+</body>
+</html>

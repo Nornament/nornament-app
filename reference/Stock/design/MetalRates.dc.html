@@ -1,0 +1,247 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body{margin:0;background:#f9f9f7;color:#0b0b0b;
+         font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial}
+    a{color:#8a6d2f} a:hover{color:#6d5525}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;
+       color:#898781;font-weight:600;padding:8px 9px;border-bottom:1px solid #c3c2b7;white-space:nowrap}
+    td{padding:7px 9px;border-bottom:1px solid #e1e0d9;font-size:13.5px}
+    td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;
+              font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
+    .in{background:#fcfcfb;border:1px solid #c3c2b7;border-radius:6px;padding:3px 7px;
+        font-size:12.5px;font-family:ui-monospace,Menlo,monospace;text-align:right;width:78px;color:#0b0b0b}
+    .big{font-size:19px;width:118px;padding:6px 9px;font-weight:600}
+    .tab{background:none;border:0;border-bottom:2px solid transparent;padding:9px 13px;
+         color:#52514e;font-size:13.5px;margin-bottom:-1px;font-family:inherit}
+    .tab.on{color:#8a6d2f;border-bottom-color:#8a6d2f;font-weight:600}
+  </style>
+</helmet>
+
+<div style="padding:26px">
+  <div style="font-size:17px;font-weight:600;letter-spacing:-.01em;margin-bottom:14px">Users &amp; Settings</div>
+  <div style="display:flex;gap:2px;border-bottom:1px solid #e1e0d9;margin-bottom:16px">
+    <button class="tab">Categories</button><button class="tab">Locations</button>
+    <button class="tab">Materials</button><button class="tab on">Metal rates</button>
+    <button class="tab">Rate charts</button><button class="tab">Pricing scenarios</button>
+    <button class="tab">Users</button>
+  </div>
+
+  <div style="display:flex;gap:16px;align-items:stretch;flex-wrap:wrap">
+
+    <!-- GOLD -->
+    <div style="flex:1;min-width:430px;background:#fcfcfb;border:1px solid #e1e0d9;
+                border-radius:11px;padding:18px 20px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div>
+          <h3 style="margin:0 0 3px;font-size:14.5px">Gold</h3>
+          <p style="color:#898781;font-size:12.5px;margin:0">One rate in. Every karat derived from it.</p>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:#52514e;font-weight:600;text-transform:uppercase;
+                      letter-spacing:.06em;margin-bottom:4px">Pure 24K, per gram</div>
+          <input class="in big" value="15481">
+          <div style="font-size:11px;color:#898781;margin-top:4px">999, incl. GST · 12 Aug 10:00</div>
+        </div>
+      </div>
+
+      <table style="width:100%;border-collapse:collapse;margin-top:14px">
+        <thead><tr>
+          <th>Purity</th>
+          <th class="n" style="width:96px">Sale factor</th>
+          <th class="n" style="width:96px">True fineness</th>
+          <th class="n" style="width:80px">Spread</th>
+          <th class="n" style="width:92px">Cost /g</th>
+          <th class="n" style="width:92px">Sale /g</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="mono" style="font-weight:600">24K</td>
+            <td class="n"><input class="in" value="1.0000"></td>
+            <td class="n"><input class="in" value="1.0000"></td>
+            <td class="n" style="color:#898781">—</td>
+            <td class="n">15,481</td><td class="n">15,481</td></tr>
+          <tr><td class="mono" style="font-weight:600">22K</td>
+            <td class="n"><input class="in" value="0.9250"></td>
+            <td class="n"><input class="in" value="0.9167"></td>
+            <td class="n" style="color:#006300">+0.83</td>
+            <td class="n">14,191</td><td class="n">14,320</td></tr>
+          <tr><td class="mono" style="font-weight:600">18K</td>
+            <td class="n"><input class="in" value="0.7600"></td>
+            <td class="n"><input class="in" value="0.7500"></td>
+            <td class="n" style="color:#006300">+1.00</td>
+            <td class="n">11,611</td><td class="n">11,766</td></tr>
+          <tr><td class="mono" style="font-weight:600">14K</td>
+            <td class="n"><input class="in" value="0.5900"></td>
+            <td class="n"><input class="in" value="0.5833"></td>
+            <td class="n" style="color:#006300">+0.67</td>
+            <td class="n">9,030</td><td class="n">9,134</td></tr>
+          <tr><td colspan="6" style="border-bottom:0;padding-top:9px">
+            <button style="background:#fcfcfb;border:1px solid #c3c2b7;border-radius:8px;
+                    padding:4px 9px;font-size:12.5px;font-family:inherit;color:#0b0b0b">+ Add a purity</button>
+          </td></tr>
+        </tbody>
+      </table>
+
+      <div style="border-left:3px solid #8a6d2f;padding:2px 0 2px 13px;margin-top:14px;
+                  font-size:12.5px;color:#52514e">
+        Both columns are yours to set. <b>True fineness</b> is what the metal actually is and drives
+        cost; <b>sale factor</b> is what you charge on. The gap between them is margin you were
+        previously unable to touch.
+      </div>
+    </div>
+
+    <!-- SILVER -->
+    <div style="flex:1;min-width:430px;background:#fcfcfb;border:2px solid #8a6d2f;
+                border-radius:11px;padding:18px 20px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div>
+          <div style="display:flex;align-items:baseline;gap:8px">
+            <h3 style="margin:0;font-size:14.5px">Silver</h3>
+            <span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+                         color:#fff;background:#8a6d2f;border-radius:4px;padding:2px 6px">new</span>
+          </div>
+          <p style="color:#898781;font-size:12.5px;margin:4px 0 0">Its own rate. Nothing to do with gold.</p>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:#52514e;font-weight:600;text-transform:uppercase;
+                      letter-spacing:.06em;margin-bottom:4px">Pure 999, per gram</div>
+          <input class="in big" value="260">
+          <div style="font-size:11px;color:#898781;margin-top:4px">999, incl. GST</div>
+        </div>
+      </div>
+
+      <table style="width:100%;border-collapse:collapse;margin-top:14px">
+        <thead><tr>
+          <th>Purity</th>
+          <th class="n" style="width:96px">Sale factor</th>
+          <th class="n" style="width:96px">True fineness</th>
+          <th class="n" style="width:80px">Spread</th>
+          <th class="n" style="width:92px">Cost /g</th>
+          <th class="n" style="width:92px">Sale /g</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="mono" style="font-weight:600">999</td>
+            <td class="n"><input class="in" value="1.0000"></td>
+            <td class="n"><input class="in" value="1.0000"></td>
+            <td class="n" style="color:#898781">—</td>
+            <td class="n">260</td><td class="n">260</td></tr>
+          <tr><td class="mono" style="font-weight:600">925</td>
+            <td class="n"><input class="in" value="1.0000"></td>
+            <td class="n"><input class="in" value="0.9250"></td>
+            <td class="n" style="color:#006300">+7.50</td>
+            <td class="n">240</td><td class="n">260</td></tr>
+          <tr><td colspan="6" style="border-bottom:0;padding-top:9px">
+            <button style="background:#fcfcfb;border:1px solid #c3c2b7;border-radius:8px;
+                    padding:4px 9px;font-size:12.5px;font-family:inherit;color:#0b0b0b">+ Add a purity</button>
+          </td></tr>
+        </tbody>
+      </table>
+
+      <div style="border-left:3px solid #0ca30c;padding:2px 0 2px 13px;margin-top:14px;
+                  font-size:12.5px;color:#52514e">
+        <b>A 7.5 point spread.</b> Sale factor 1.0 charges the full 999 rate for metal that is 92.5%
+        silver; cost uses the true 0.925. On 501 g that is the difference between ₹1,30,367 and
+        ₹1,20,589 — and it is a deliberate choice, not a rounding.
+      </div>
+      <div style="border-left:3px solid #8a6d2f;padding:2px 0 2px 13px;margin-top:10px;
+                  font-size:12.5px;color:#52514e">
+        At ₹260 the 35 silver pieces come to <b>₹20,21,546</b>, against ₹90,71,314 today and
+        ₹25,36,748 in Gati. The remaining gap is stone rates, not metal.
+      </div>
+    </div>
+  </div>
+
+
+  <div style="background:#fcfcfb;border:1px solid #e1e0d9;border-radius:11px;padding:18px 20px;margin-top:16px">
+    <h3 style="margin:0 0 3px;font-size:14.5px">Where the rate comes from</h3>
+    <p style="color:#898781;font-size:12.5px;margin:0 0 14px">
+      The number in each card above is what pricing uses. This is how it gets there.</p>
+
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr>
+        <th>Metal</th><th class="n" style="width:110px">Fetched 999</th>
+        <th class="n" style="width:96px">GST</th><th class="n" style="width:104px">Buffer /g</th>
+        <th class="n" style="width:118px">Rate used</th><th style="width:150px">Buffer is</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td><b>Gold</b></td>
+          <td class="n">15,030</td>
+          <td class="n"><input class="in" value="3.0" style="width:54px">%</td>
+          <td class="n"><input class="in" value="100" style="width:62px"></td>
+          <td class="n" style="font-weight:600">15,481</td>
+          <td style="font-size:12px;color:#006300">+0.6% of the rate</td></tr>
+        <tr style="background:#fdf9ef">
+          <td><b>Silver</b></td>
+          <td class="n">252</td>
+          <td class="n"><input class="in" value="3.0" style="width:54px">%</td>
+          <td class="n"><input class="in" value="100" style="width:62px"
+                style="border-color:#fab219;background:#fdf7e8"></td>
+          <td class="n" style="font-weight:600">360</td>
+          <td style="font-size:12px;color:#7a5600;font-weight:600">+38.5% of the rate</td></tr>
+      </tbody>
+    </table>
+
+    <div style="border-left:3px solid #fab219;padding:2px 0 2px 14px;margin-top:14px;
+                font-size:13px;color:#7a5600;max-width:104ch">
+      <b>The same ₹100 does very different things.</b> On gold it is a rounding. On silver it is
+      more than a third of the price, and it would take your 501 g from ₹1,30,367 to ₹1,80,508.
+      If you meant a buffer per <em>kilo</em> on silver, or a percentage rather than a rupee figure,
+      say which — I have drawn it literally as you described it, which is why it looks wrong.
+    </div>
+  </div>
+
+  <div style="background:#fcfcfb;border:1px solid #e1e0d9;border-radius:11px;padding:18px 20px;margin-top:16px">
+    <h3 style="margin:0 0 3px;font-size:14.5px">Fetching from smbullion.in</h3>
+    <p style="color:#898781;font-size:12.5px;margin:0 0 12px">I looked. It is not a page with numbers on it.</p>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+      <div style="border:1px solid #e1e0d9;border-radius:9px;padding:12px 13px">
+        <div style="font-size:12px;font-weight:600;margin-bottom:4px">No rates in the HTML</div>
+        <div style="font-size:12px;color:#898781;line-height:1.5">
+          The page is 2.5 KB and carries no prices. Rates arrive over a socket.io stream,
+          zlib-compressed, as symbols <span class="mono">gold</span>,
+          <span class="mono">silver</span>, <span class="mono">xauusd</span> with bid and ask.</div>
+      </div>
+      <div style="border:1px solid #e1e0d9;border-radius:9px;padding:12px 13px">
+        <div style="font-size:12px;font-weight:600;margin-bottom:4px">Nothing here can hold a socket</div>
+        <div style="font-size:12px;color:#898781;line-height:1.5">
+          A Supabase function answers one request and stops. A live feed needs something that stays
+          connected, or a job that dials in, takes one tick and hangs up.</div>
+      </div>
+      <div style="border:1px solid #fab219;border-radius:9px;padding:12px 13px;background:#fdf9ef">
+        <div style="font-size:12px;font-weight:600;margin-bottom:4px;color:#7a5600">It is their feed</div>
+        <div style="font-size:12px;color:#7a5600;line-height:1.5">
+          That stream is SM Bullion's commercial product, undocumented and unauthenticated by
+          accident rather than invitation. Reading it on a schedule is taking it.</div>
+      </div>
+    </div>
+    <div style="border-left:3px solid #8a6d2f;padding:2px 0 2px 14px;margin-top:14px;
+                font-size:13px;color:#52514e;max-width:104ch">
+      <b>What I would build instead.</b> The rate box stays typed, with the date-stamp it already
+      has and an audit entry for every change — ten seconds each morning, which is what the ticker
+      at the top of the app was always for. If you want it automatic, ask SM Bullion for a feed;
+      most dealers will give a customer one, and then it is a supported integration rather than
+      something that breaks the first time they change a field name.
+    </div>
+  </div>
+
+  <div style="background:#fcfcfb;border:1px solid #e1e0d9;border-radius:11px;padding:16px 20px;margin-top:16px">
+    <div style="font-size:13px;color:#52514e;line-height:1.65;max-width:104ch">
+      <b>What changes underneath.</b> A purity now belongs to a metal, and a metal has its own live
+      rate. A material in the Metal category points at one of them. Platinum or palladium later is
+      a third card on this screen and no code change. Changing a factor moves every <em>sale</em>
+      price that derives from it immediately, and moves no frozen cost at all.
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+"""
+Turn the filled nornament_bulk_upload.xlsx into one SQL statement you can
+paste into the Supabase SQL editor.
+
+    pip install openpyxl
+    python make_import_sql.py nornament_bulk_upload.xlsx
+
+It writes import.sql next to the workbook and prints a pre-flight check.
+It does NOT touch the database. Nothing is imported until you paste the SQL.
+
+Rows are skipped if the jewel_code cell is blank or the row is the example
+row (remarks containing "delete me"). Everything else is sent as-is and the
+database does the real validation, piece by piece.
+"""
+import json, sys, os
+from decimal import Decimal
+from datetime import date, datetime
+
+try:
+    import openpyxl
+except ImportError:
+    sys.exit("openpyxl is not installed.  Run:  pip install openpyxl")
+
+MATERIALS = None  # filled from the Reference sheet
+
+
+def clean(v):
+    """Excel gives back dates, Decimals and stray whitespace. JSON does not."""
+    if v is None:
+        return None
+    if isinstance(v, (datetime, date)):
+        return v.strftime("%Y-%m-%d")
+    if isinstance(v, Decimal):
+        return float(v)
+    if isinstance(v, str):
+        v = v.strip()
+        return v or None
+    return v
+
+
+def header_row(ws, want):
+    """Find the row holding the column names - the layout has a title block above it."""
+    for r in range(1, 12):
+        vals = [str(c.value).strip().lower() if c.value else "" for c in ws[r]]
+        if want in vals:
+            return r, {v: i for i, v in enumerate(vals) if v}
+    sys.exit(f"Could not find the header row on sheet '{ws.title}'.")
+
+
+def read_sheet(ws, key):
+    hr, cols = header_row(ws, key)
+    out = []
+    for row in ws.iter_rows(min_row=hr + 1, values_only=True):
+        rec = {name: clean(row[i]) if i < len(row) else None for name, i in cols.items()}
+        if not rec.get(key):
+            continue
+        if str(rec.get("remarks") or "").lower().startswith("example row"):
+            continue
+        rec[key] = str(rec[key]).strip().upper()
+        out.append(rec)
+    return out
+
+
+def main(path):
+    wb = openpyxl.load_workbook(path, data_only=True)
+    pieces = read_sheet(wb["1 Pieces"], "jewel_code")
+    lines = read_sheet(wb["2 BOM lines"], "jewel_code")
+
+    ref = wb["Reference"]
+    hr, cols = header_row(ref, "material code")
+    mats = {str(r[cols["material code"]]).strip().upper()
+            for r in ref.iter_rows(min_row=hr + 1, values_only=True)
+            if r[cols["material code"]]}
+
+    by_piece = {}
+    for l in lines:
+        by_piece.setdefault(l["jewel_code"], []).append(l)
+
+    problems = []
+    seen = set()
+    for p in pieces:
+        jc = p["jewel_code"]
+        if jc in seen:
+            problems.append(f"{jc}: listed twice on sheet 1. One jewel code is one piece.")
+        seen.add(jc)
+        if jc not in by_piece:
+            problems.append(f"{jc}: no BOM lines on sheet 2, so it has no cost and no price.")
+        for l in by_piece.get(jc, []):
+            mc = str(l.get("material_code") or "").strip().upper()
+            if mc and mc not in mats:
+                problems.append(f"{jc} line {l.get('line_no')}: material '{mc}' is not in the "
+                                f"material master.")
+    for jc in by_piece:
+        if jc not in seen:
+            problems.append(f"{jc}: has BOM lines on sheet 2 but no piece row on sheet 1.")
+
+    payload = []
+    for p in pieces:
+        jc = p["jewel_code"]
+        rows = sorted(by_piece.get(jc, []), key=lambda r: r.get("line_no") or 0)
+        payload.append({k: v for k, v in {
+            "jewel_code":   jc,
+            "style_code":   p.get("style_code"),
+            "design_name":  p.get("design_name"),
+            "category":     p.get("category"),
+            "karat":        p.get("karat"),
+            "colour":       p.get("metal_colour"),
+            "quality":      p.get("diamond_quality"),
+            "gross_wt":     p.get("gross_wt_gm"),
+            "location":     p.get("location"),
+            "received_on":  p.get("received_on"),
+            "huid":         p.get("huid"),
+            "length_mm":    p.get("length_mm"),
+            "breadth_mm":   p.get("breadth_mm"),
+            "height_mm":    p.get("height_mm"),
+            "remarks":      p.get("remarks"),
+            "lines": [{k2: v2 for k2, v2 in {
+                "material":  l.get("material_code"),
+                "size_band": l.get("size_band"),
+                "pcs":       l.get("pcs"),
+                "qty":       l.get("qty"),
+                "uom":       l.get("uom"),
+                "basis":     l.get("basis"),
+                "cost_rate": l.get("cost_rate"),
+                "remarks":   l.get("remarks"),
+            }.items() if v2 is not None} for l in rows],
+        }.items() if v is not None})
+
+    body = json.dumps(payload, indent=1, ensure_ascii=False).replace("'", "''")
+    out = os.path.join(os.path.dirname(os.path.abspath(path)), "import.sql")
+    with open(out, "w", encoding="utf-8") as f:
+        f.write("-- Generated by make_import_sql.py. Paste this whole thing into\n"
+                "-- Supabase -> SQL Editor -> Run. It reports every row it rejects.\n"
+                "-- Safe to re-run: a jewel code that already exists is refused,\n"
+                "-- never duplicated or overwritten.\n"
+                "select jsonb_pretty(app.import_pieces('\n" + body + "\n'::jsonb));\n")
+
+    print(f"pieces read      : {len(pieces)}")
+    print(f"BOM lines read   : {len(lines)}")
+    print(f"written          : {out}")
+    if problems:
+        print(f"\n{len(problems)} thing(s) to fix first — the database will reject these rows:")
+        for p in problems:
+            print("  -", p)
+    else:
+        print("\nPre-flight check: nothing obviously wrong.")
+
+
+if __name__ == "__main__":
+    main(sys.argv[1] if len(sys.argv) > 1 else "nornament_bulk_upload.xlsx")

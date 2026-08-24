@@ -1,0 +1,138 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body{margin:0;background:#f9f9f7;color:#0b0b0b;
+         font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial}
+    a{color:#8a6d2f} a:hover{color:#6d5525}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;
+       color:#898781;font-weight:600;padding:8px 10px;border-bottom:1px solid #c3c2b7;white-space:nowrap}
+    td{padding:10px;border-bottom:1px solid #e1e0d9;font-size:13.5px}
+    td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;
+              font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
+    .tab{background:none;border:0;border-bottom:2px solid transparent;padding:9px 13px;
+         color:#52514e;font-size:13.5px;margin-bottom:-1px;font-family:inherit}
+    .tab.on{color:#8a6d2f;border-bottom-color:#8a6d2f;font-weight:600}
+    .chip{display:inline-flex;align-items:center;font-size:11px;font-weight:600;
+          padding:2px 7px;border-radius:99px;border:1px solid #e1e0d9;background:#f2f1ec;color:#52514e}
+  </style>
+</helmet>
+
+<div style="padding:24px 26px 30px">
+
+  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex-wrap:wrap">
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <div class="mono" style="font-size:20px;font-weight:600;letter-spacing:-.02em">25P00084</div>
+      <div style="font-size:12.5px;color:#898781">Polki drop earring · 18K Yellow</div>
+    </div>
+    <div style="font-size:11.5px;color:#898781;border:1px solid #e1e0d9;border-radius:99px;
+                padding:3px 11px;background:#f2f1ec">signed in as <b style="color:#52514e">Admin / Owner</b></div>
+  </div>
+
+  <div style="display:flex;gap:2px;border-bottom:1px solid #e1e0d9;margin:12px 0 16px">
+    <button class="tab">Overview</button>
+    <button class="tab">Sale BOM &amp; breakup</button>
+    <button class="tab on">Pricing</button>
+    <button class="tab">Media</button><button class="tab">Similar</button>
+    <button class="tab">Marketing</button><button class="tab">History</button>
+  </div>
+
+  <div style="background:#fcfcfb;border:1px solid #e1e0d9;border-radius:11px;padding:18px 20px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px">
+      <div>
+        <h3 style="margin:0 0 3px;font-size:14.5px">This piece under every scenario</h3>
+        <p style="color:#898781;font-size:12.5px;margin:0;max-width:80ch">
+          The scenarios you keep in Settings, priced against this piece as it stands this morning.
+          Nothing here is stored until you set one.</p>
+      </div>
+      <div style="text-align:right;white-space:nowrap">
+        <div style="font-size:11px;color:#898781;text-transform:uppercase;letter-spacing:.07em;
+                    font-weight:600">Cost today</div>
+        <div class="mono" style="font-size:19px;font-weight:600;color:#6d5525">₹1,95,548</div>
+      </div>
+    </div>
+
+    <table style="width:100%;border-collapse:collapse;margin-top:14px">
+      <thead><tr>
+        <th style="width:26px"></th>
+        <th>Scenario</th>
+        <th class="n" style="width:112px">Gold</th>
+        <th class="n" style="width:104px">Stones</th>
+        <th class="n" style="width:104px">Making</th>
+        <th class="n" style="width:118px">Price</th>
+        <th class="n" style="width:96px">Margin</th>
+        <th class="n" style="width:104px">vs Retail</th>
+      </tr></thead>
+      <tbody>
+        <tr style="background:#f4eee0">
+          <td><input type="radio" checked></td>
+          <td><b>Retail</b> <span class="chip" style="background:#8a6d2f;color:#fff;border-color:#8a6d2f">in use</span>
+            <div style="font-size:11.5px;color:#898781">Standard 2026 sale rates</div></td>
+          <td class="n">1,69,077</td><td class="n">57,240</td><td class="n">21,555</td>
+          <td class="n" style="font-weight:600;font-size:13.5px">2,47,872</td>
+          <td class="n" style="color:#9c4a22">21.1%</td>
+          <td class="n" style="color:#898781">—</td></tr>
+        <tr>
+          <td><input type="radio"></td>
+          <td><b>Bridal</b><div style="font-size:11.5px;color:#898781">premium stone chart</div></td>
+          <td class="n">1,69,077</td><td class="n">78,660</td><td class="n">21,555</td>
+          <td class="n" style="font-weight:600;font-size:13.5px">2,69,292</td>
+          <td class="n" style="color:#006300">27.4%</td>
+          <td class="n" style="color:#006300">+21,420</td></tr>
+        <tr>
+          <td><input type="radio"></td>
+          <td><b>Target 35%</b><div style="font-size:11.5px;color:#898781">cost +35%, absorbed by stones</div></td>
+          <td class="n">1,69,077</td><td class="n">73,358</td><td class="n">21,555</td>
+          <td class="n" style="font-weight:600;font-size:13.5px">2,63,990</td>
+          <td class="n" style="color:#006300">25.9%</td>
+          <td class="n" style="color:#006300">+16,118</td></tr>
+        <tr>
+          <td><input type="radio"></td>
+          <td><b>Wholesale</b><div style="font-size:11.5px;color:#898781">cost +18%, absorbed by stones</div></td>
+          <td class="n">1,69,077</td><td class="n">40,115</td><td class="n">21,555</td>
+          <td class="n" style="font-weight:600;font-size:13.5px">2,30,747</td>
+          <td class="n" style="color:#9c4a22">15.3%</td>
+          <td class="n" style="color:#a32a2a">−17,125</td></tr>
+        <tr style="opacity:.75">
+          <td><input type="radio" disabled></td>
+          <td><b>Exhibition</b>
+            <span class="chip" style="background:#fdf0f0;border-color:#e8c3c3;color:#a32a2a">below floor</span>
+            <div style="font-size:11.5px;color:#898781">category multipliers on cost</div></td>
+          <td class="n">1,69,077</td><td class="n">19,343</td><td class="n">21,555</td>
+          <td class="n" style="font-weight:600;font-size:13.5px">2,09,975</td>
+          <td class="n" style="color:#a32a2a">6.9%</td>
+          <td class="n" style="color:#a32a2a">−37,897</td></tr>
+      </tbody>
+    </table>
+
+    <div style="display:flex;gap:9px;margin-top:14px;flex-wrap:wrap">
+      <button style="background:#8a6d2f;border:1px solid #8a6d2f;border-radius:8px;padding:7px 13px;
+                     font-size:13.5px;color:#fff;font-weight:500;font-family:inherit">
+        Set this piece to Bridal</button>
+      <button style="background:#fcfcfb;border:1px solid #c3c2b7;border-radius:8px;padding:7px 13px;
+                     font-size:13.5px;font-family:inherit;color:#0b0b0b">Compare across the design</button>
+    </div>
+
+    <div style="border-left:3px solid #8a6d2f;padding:2px 0 2px 14px;margin-top:16px;
+                font-size:13px;color:#52514e;max-width:104ch">
+      Gold and making are identical down every row — they are held by definition, and seeing them
+      repeat is the point. All the movement is in one column.
+    </div>
+    <div style="border-left:3px solid #ec835a;padding:2px 0 2px 14px;margin-top:10px;
+                font-size:13px;color:#9c4a22;max-width:104ch">
+      <b>Exhibition is greyed because it cannot be applied here.</b> Its stone multipliers land the
+      piece at 6.9%, under the floor you set for Earrings. The scenario is not broken — it is wrong
+      for a gold-heavy piece, and the list says so rather than letting someone quote it.
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
