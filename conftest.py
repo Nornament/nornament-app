@@ -31,8 +31,18 @@ from stock.models import (
 
 
 @pytest.fixture(autouse=True)
-def _plain_static_storage(settings):
-    """Tests render templates without a collectstatic run behind them."""
+def _deployment_settings_off(settings):
+    """Pin the two settings that describe a deployment, not the code.
+
+    Both default to production values, which is right for a server and wrong
+    for a test client: ``SECURE_SSL_REDIRECT`` turns every request into a 301
+    to https before a view ever runs, and the manifest static storage expects a
+    collectstatic run behind it. Pinning them here makes the suite give the
+    same answer on a laptop, in CI, and wherever DJANGO_DEBUG happens to be
+    set — which is exactly what a suite that passed locally and failed in CI
+    was not doing.
+    """
+    settings.SECURE_SSL_REDIRECT = False
     settings.STORAGES = {
         **settings.STORAGES,
         "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
