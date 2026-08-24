@@ -7,6 +7,7 @@ deployed to a VPS with Dokploy.
 ## Read this first
 
 **[`PLAN.md`](PLAN.md)** — what is being built and why.
+**[`docs/DEPLOY-DOKPLOY.md`](docs/DEPLOY-DOKPLOY.md)** — getting it onto a VPS.
 **[`docs/RUNBOOK.md`](docs/RUNBOOK.md)** — how to run it, migrate onto it, and
 operate it.
 

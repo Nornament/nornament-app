@@ -30,7 +30,13 @@ def env_list(key, default=""):
 
 SECRET_KEY = env("DJANGO_SECRET_KEY", "insecure-development-key-do-not-deploy")
 DEBUG = env_bool("DJANGO_DEBUG", False)
+# The public hostname(s), plus loopback — the container healthcheck reaches
+# gunicorn directly on 127.0.0.1 and Django would otherwise reject it as a
+# DisallowedHost, leaving the container permanently unhealthy and unrouted.
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
+for loopback in ("localhost", "127.0.0.1"):
+    if loopback not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(loopback)
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS")
 
 INSTALLED_APPS = [
@@ -156,6 +162,9 @@ X_FRAME_OPTIONS = "DENY"
 # Traefik terminates TLS and forwards X-Forwarded-Proto; this makes the app
 # insist on it rather than trusting that nothing ever reaches it over http.
 SECURE_SSL_REDIRECT = env_bool("DJANGO_SSL_REDIRECT", not DEBUG)
+# ...except the health endpoint, which is hit over plain HTTP from inside the
+# container. Redirecting it to https makes every healthcheck fail.
+SECURE_REDIRECT_EXEMPT = [r"^healthz$"]
 if not DEBUG:
     SECURE_HSTS_SECONDS = int(env("DJANGO_HSTS_SECONDS", "31536000"))
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True

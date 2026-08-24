@@ -3,7 +3,9 @@
 Everything an operator needs after the code is written: how to run it, how to
 migrate onto it, what to check, and what to do when something breaks.
 
-The plan is in [`PLAN.md`](../PLAN.md). This file is the operational half.
+The plan is in [`PLAN.md`](../PLAN.md). Getting it onto a VPS in the first
+place is [`DEPLOY-DOKPLOY.md`](DEPLOY-DOKPLOY.md). This file is the operational
+half.
 
 ---
 
