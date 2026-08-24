@@ -1,0 +1,139 @@
+"""Presign, confirm, serve. Nothing here holds a file for longer than a request.
+
+The browser PUTs straight to Contabo when ``MEDIA_DIRECT_UPLOAD`` is on. If the
+Phase 0 CORS smoke test fails, the flag flips and :func:`proxy_upload` takes the
+bytes through Django instead — a view change, not a redesign.
+"""
+import json
+
+from django.conf import settings
+from django.contrib.auth.decorators import login_required, permission_required
+from django.http import HttpResponseBadRequest, JsonResponse
+from django.shortcuts import get_object_or_404, redirect
+from django.utils import timezone
+from django.views.decorators.http import require_POST
+
+from stock.models import Piece, Style
+from . import storage
+from .models import MediaAsset
+
+CRM_SCOPES = {"customer", "order", "enquiry", "repair", "client_material"}
+
+
+def _resolve_owner(scope, entity_id):
+    if scope == "piece":
+        return {"piece": get_object_or_404(Piece, pk=entity_id)}
+    if scope == "style":
+        return {"style": get_object_or_404(Style, pk=entity_id)}
+    if scope in CRM_SCOPES:
+        return {"scope": scope, "scope_id": str(entity_id)}
+    raise ValueError(f"unknown media scope {scope!r}")
+
+
+def _next_media_ref():
+    last = MediaAsset.objects.exclude(media_ref=None).order_by("-media_id").values_list("media_ref", flat=True).first()
+    number = int(last[1:]) + 1 if last and last[1:].isdigit() else 1
+    return f"M{number:06d}"
+
+
+@login_required
+@require_POST
+def presign(request):
+    """Reserve a row and hand back a one-shot upload URL.
+
+    The row exists before the object does, unconfirmed. A reservation nobody
+    completes is a row with no ``confirmed_at`` — visible, sweepable, and never
+    mistaken for a photo that is there.
+    """
+    payload = json.loads(request.body or "{}")
+    try:
+        owner = _resolve_owner(payload.get("scope"), payload.get("entity_id"))
+    except ValueError as error:
+        return HttpResponseBadRequest(str(error))
+    file_name = payload.get("file_name") or "upload.bin"
+    content_type = payload.get("mime_type") or storage.guess_mime(file_name)
+    key = storage.build_key(payload["scope"], payload["entity_id"], file_name)
+
+    asset = MediaAsset.objects.create(
+        media_ref=_next_media_ref(),
+        kind=payload.get("kind", "PHOTO"),
+        storage_key=key,
+        file_name=file_name,
+        mime_type=content_type,
+        bytes=payload.get("bytes"),
+        caption=payload.get("caption"),
+        uploaded_by=request.user,
+        **owner,
+    )
+    body = {"media_id": asset.pk, "media_ref": asset.media_ref, "key": key, "direct": settings.MEDIA_DIRECT_UPLOAD}
+    if settings.MEDIA_DIRECT_UPLOAD:
+        try:
+            body["url"] = storage.presign_put(key, content_type)
+        except storage.StorageNotConfigured as error:
+            return JsonResponse({"error": str(error)}, status=503)
+    else:
+        body["url"] = f"/media/upload/?media_id={asset.pk}"
+    return JsonResponse(body)
+
+
+@login_required
+@require_POST
+def confirm(request):
+    """The browser says the PUT succeeded; we check the object is really there."""
+    payload = json.loads(request.body or "{}")
+    asset = get_object_or_404(MediaAsset, pk=payload.get("media_id"))
+    try:
+        head = storage.head(asset.storage_key)
+    except storage.StorageNotConfigured as error:
+        return JsonResponse({"error": str(error)}, status=503)
+    except Exception:
+        return JsonResponse({"error": "The object is not in the bucket."}, status=409)
+    asset.bytes = head.get("ContentLength", asset.bytes)
+    asset.file_size_kb = int((asset.bytes or 0) / 1024) or None
+    asset.sha256 = payload.get("sha256", asset.sha256)
+    asset.confirmed_at = timezone.now()
+    asset.save(update_fields=["bytes", "file_size_kb", "sha256", "confirmed_at"])
+    return JsonResponse({"ok": True, "media_id": asset.pk, "media_ref": asset.media_ref})
+
+
+@login_required
+@require_POST
+def proxy_upload(request):
+    """The fallback path: bytes through Django, same row, same key."""
+    asset = get_object_or_404(MediaAsset, pk=request.GET.get("media_id"))
+    upload = request.FILES.get("file")
+    if upload is None:
+        return HttpResponseBadRequest("no file")
+    data = upload.read()
+    try:
+        storage.put_bytes(asset.storage_key, data, asset.mime_type or storage.guess_mime(asset.file_name))
+    except storage.StorageNotConfigured as error:
+        return JsonResponse({"error": str(error)}, status=503)
+    asset.bytes = len(data)
+    asset.file_size_kb = int(len(data) / 1024) or None
+    asset.sha256 = storage.sha256_of(data)
+    asset.confirmed_at = timezone.now()
+    asset.save(update_fields=["bytes", "file_size_kb", "sha256", "confirmed_at"])
+    return JsonResponse({"ok": True, "media_id": asset.pk})
+
+
+@login_required
+def media_redirect(request, media_id):
+    """A short-lived GET URL. ``ResponseContentType`` so a HEIC renders as JPEG."""
+    asset = get_object_or_404(MediaAsset, pk=media_id, is_archived=False)
+    try:
+        url = storage.presign_get(asset.storage_key, asset.mime_type, asset.file_name)
+    except storage.StorageNotConfigured:
+        return JsonResponse({"error": "media storage is not configured"}, status=503)
+    return redirect(url)
+
+
+@login_required
+@permission_required("accounts.edit_bom", raise_exception=True)
+@require_POST
+def detach(request, media_id):
+    """Archive, never delete: the object stays in the bucket, the row stops showing."""
+    asset = get_object_or_404(MediaAsset, pk=media_id)
+    asset.is_archived = True
+    asset.save(update_fields=["is_archived"])
+    return JsonResponse({"ok": True})

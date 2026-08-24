@@ -1,0 +1,20 @@
+<div class="card">
+<table>
+  <tr><th>Code</th><th>Name</th><th>Phone</th><th>Location</th><th>Type</th><th>FoN</th></tr>
+  {% for customer in page %}
+  <tr>
+    <td class="mono"><a href="{% url 'crm:customer_detail' customer.pk %}">{{ customer.customer_code }}</a></td>
+    <td>{{ customer.name }}</td>
+    <td class="mono small">{{ customer.phone|default:"—" }}</td>
+    <td>{{ customer.location|default:"—" }}</td>
+    <td class="small">{{ customer.customer_type }}</td>
+    <td>{% if customer.is_fon %}<span class="badge RESERVED">Level {{ customer.fon_level }}</span>{% endif %}</td>
+  </tr>
+  {% empty %}<tr><td colspan="6" class="empty">No customers match.</td></tr>{% endfor %}
+</table>
+</div>
+{% if page.has_other_pages %}
+<p class="small muted">Page {{ page.number }} of {{ page.paginator.num_pages }} ·
+  {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">Previous</a>{% endif %}
+  {% if page.has_next %}<a href="?page={{ page.next_page_number }}">Next</a>{% endif %}</p>
+{% endif %}

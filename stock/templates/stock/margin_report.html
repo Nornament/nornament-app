@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Margin · Nornament{% endblock %}
+{% block content %}
+<h1>Margin</h1>
+<p class="muted small">Stock-sourced sales only — a CRM purchase carries no cost, so a margin for it would be invented.</p>
+<div class="grid cols-4">
+  <div class="card stat"><div class="value">₹{{ totals.revenue|default:0|floatformat:0 }}</div><div class="label">Revenue (stock)</div></div>
+  <div class="card stat"><div class="value">₹{{ totals.cost|default:0|floatformat:0 }}</div><div class="label">Cost at sale</div></div>
+  <div class="card stat"><div class="value" style="color:var(--ok)">₹{{ totals.margin|default:0|floatformat:0 }}</div><div class="label">Margin</div></div>
+  <div class="card stat"><div class="value">₹{{ crm_revenue|floatformat:0 }}</div><div class="label">Revenue (CRM, no cost)</div></div>
+</div>
+<div class="card">
+<table>
+  <tr><th>Date</th><th>Piece</th><th class="num">Sold</th><th class="num">Cost</th><th class="num">Margin</th></tr>
+  {% for sale in sales %}
+  <tr><td class="small">{{ sale.sold_on }}</td>
+      <td class="mono">{{ sale.piece.jewel_code|default:"—" }}</td>
+      <td class="num mono">{{ sale.sold_price|floatformat:0 }}</td>
+      <td class="num mono">{{ sale.cost_at_sale|default_if_none:"—"|floatformat:0 }}</td>
+      <td class="num mono">{{ sale.margin_amt|default_if_none:"—"|floatformat:0 }}</td></tr>
+  {% empty %}<tr><td colspan="5" class="empty">No sales yet.</td></tr>{% endfor %}
+</table>
+</div>
+{% endblock %}

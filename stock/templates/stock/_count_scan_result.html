@@ -1,0 +1,19 @@
+{% comment %}What a scan POST returns: the verdict line plus the whole state block,
+swapped in place of #count-state so the counter never loses their place.{% endcomment %}
+<div id="count-state">
+  {% if result %}
+  <div class="card">
+    <p><span class="badge {{ result.verdict }}">{{ result.verdict }}</span>
+       <span class="mono">{{ result.code }}</span>
+       <span class="muted small">{{ result.note|default:"" }}</span></p>
+    {% if result.code and count.status == 'OPEN' %}
+    <form hx-post="{% url 'stock:count_unscan' count.pk %}" hx-target="#count-state" hx-swap="outerHTML"
+          method="post" action="{% url 'stock:count_unscan' count.pk %}" class="inline">
+      {% csrf_token %}<input type="hidden" name="code" value="{{ result.code }}">
+      <button class="link small">Undo this scan</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% include "stock/_count_state.html" %}
+</div>

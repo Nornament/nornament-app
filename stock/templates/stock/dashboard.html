@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Nornament{% endblock %}
+{% block content %}
+<h1>Stock</h1>
+<div class="grid cols-4">
+  <div class="card stat"><div class="value">{{ live_count }}</div><div class="label">Live pieces</div></div>
+  {% if month_sales %}
+  <div class="card stat"><div class="value">{{ month_sales.pieces|default:0 }}</div><div class="label">Sold this month</div></div>
+  {% if caps.view_sale %}<div class="card stat"><div class="value">₹{{ month_sales.revenue|default:0|floatformat:0 }}</div><div class="label">Month revenue</div></div>{% endif %}
+  {% endif %}
+  <div class="card stat"><div class="value">{{ open_counts|length }}</div><div class="label">Open counts</div></div>
+</div>
+
+<div class="grid cols-3">
+  <div class="card">
+    <h2>By location</h2>
+    <table>
+      <tr><th>Location</th><th class="num">Pieces</th></tr>
+      {% for row in by_location %}
+      <tr><td>{{ row.location__name|default:"—" }}</td><td class="num">{{ row.pieces }}</td></tr>
+      {% empty %}<tr><td colspan="2" class="muted">Nothing in stock.</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div class="card">
+    <h2>By state</h2>
+    <table>
+      <tr><th>State</th><th class="num">Pieces</th></tr>
+      {% for row in by_state %}
+      <tr><td><span class="badge {{ row.stock_state }}">{{ row.stock_state }}</span></td><td class="num">{{ row.pieces }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% if caps.view_sale or caps.view_cost %}
+  <div class="card">
+    <h2>Metal rates</h2>
+    <table>
+      <tr><th>Metal</th><th class="num">Pure rate / g</th><th>As on</th></tr>
+      {% for metal in metals %}
+      <tr><td>{{ metal.name }}</td><td class="num mono">{{ metal.pure_rate|floatformat:0 }}</td><td class="small muted">{{ metal.rate_as_on|date:"d M Y H:i" }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<div class="grid cols-3">
+  {% if open_counts %}
+  <div class="card">
+    <h2>Counts in progress</h2>
+    {% for count in open_counts %}
+    <p><a href="{% url 'stock:count_detail' count.pk %}">{{ count.count_ref }}</a> <span class="muted small">{{ count.location.name }}</span></p>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if open_repairs %}
+  <div class="card">
+    <h2>Repairs open</h2>
+    {% for job in open_repairs %}
+    <p>{{ job.job_no }} <span class="muted small">{{ job.piece.jewel_code }} · {{ job.status }}</span></p>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if should_make %}
+  <div class="card">
+    <h2>Below minimum</h2>
+    <table>
+      <tr><th>Style</th><th class="num">Live</th><th class="num">Short</th></tr>
+      {% for row in should_make %}
+      <tr><td>{{ row.style_code }}</td><td class="num">{{ row.live_pieces }}</td><td class="num">{{ row.shortfall }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

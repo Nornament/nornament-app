@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Stock counts · Nornament{% endblock %}
+{% block content %}
+<h1>Stock counts</h1>
+<form class="card row" method="post" action="{% url 'stock:count_open' %}">{% csrf_token %}
+  <div>
+    <label for="location">Count a location</label>
+    <select id="location" name="location">
+      {% for location in locations %}<option value="{{ location.code }}">{{ location.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="tight"><button class="primary">Open or resume</button></div>
+</form>
+<div class="card">
+<table>
+  <tr><th>Ref</th><th>Location</th><th>Status</th><th>Started</th><th>Closed</th><th>By</th><th class="num">Scans</th></tr>
+  {% for count in counts %}
+  <tr>
+    <td><a class="mono" href="{% url 'stock:count_detail' count.pk %}">{{ count.count_ref }}</a></td>
+    <td>{{ count.location.name }}</td>
+    <td><span class="badge {% if count.status == 'OPEN' %}RESERVED{% else %}ok{% endif %}">{{ count.status }}</span></td>
+    <td class="small">{{ count.started_at|date:"d M Y H:i" }}</td>
+    <td class="small">{{ count.closed_at|date:"d M Y H:i"|default:"—" }}</td>
+    <td class="small muted">{{ count.counted_by|default:"—" }}</td>
+    <td class="num">{{ count.scans.count }}</td>
+  </tr>
+  {% empty %}<tr><td colspan="7" class="empty">No counts yet.</td></tr>{% endfor %}
+</table>
+</div>
+{% endblock %}

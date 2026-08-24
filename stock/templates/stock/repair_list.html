@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Repairs · Nornament{% endblock %}
+{% block content %}
+<h1>Repairs</h1>
+<div class="card">
+<table>
+  <tr><th>Job</th><th>Piece</th><th>Status</th><th>Opened</th><th>Closed</th><th>TAT</th><th>Vendor</th><th></th></tr>
+  {% for job in jobs %}
+  <tr>
+    <td class="mono">{{ job.job_no }}</td>
+    <td><a class="mono" href="{% url 'stock:piece_detail' job.piece.jewel_code %}">{{ job.piece.jewel_code }}</a></td>
+    <td><span class="badge {% if job.status == 'DONE' %}ok{% else %}RESERVED{% endif %}">{{ job.status }}</span></td>
+    <td class="small">{{ job.opened_on }}</td>
+    <td class="small">{{ job.closed_on|default:"—" }}</td>
+    <td class="num">{{ job.tat_days|default_if_none:"—" }}</td>
+    <td>{{ job.vendor.name|default:"—" }}</td>
+    <td>{% if caps.edit_bom and job.status != 'DONE' %}
+      <form method="post" action="{% url 'stock:repair_complete' job.pk %}" class="inline">{% csrf_token %}
+        <button class="small">Complete</button></form>{% endif %}</td>
+  </tr>
+  {% empty %}<tr><td colspan="8" class="empty">No repair jobs.</td></tr>{% endfor %}
+</table>
+</div>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Orders · Nornament{% endblock %}
+{% block content %}
+<h1>Orders</h1>
+{% if totals %}
+<div class="grid cols-3">
+  <div class="card stat"><div class="value">₹{{ totals.billed|default:0|floatformat:0 }}</div><div class="label">Billed</div></div>
+  <div class="card stat"><div class="value">₹{{ totals.advance|default:0|floatformat:0 }}</div><div class="label">Advance received</div></div>
+</div>
+{% endif %}
+{% include "crm/_pipeline_filter.html" %}
+<div class="card">
+<table>
+  <tr><th>Code</th><th>Customer</th><th>Item</th><th class="num">Total</th><th class="num">Advance</th><th class="num">Balance</th><th>Status</th><th>Due</th><th></th></tr>
+  {% for row in rows %}
+  <tr>
+    <td class="mono">{{ row.order_code }}</td>
+    <td>{% if row.customer %}<a href="{% url 'crm:customer_detail' row.customer.pk %}">{{ row.customer.name }}</a>{% else %}<span class="muted">unlinked</span>{% endif %}</td>
+    <td>{{ row.item_description|truncatechars:48 }}</td>
+    <td class="num mono">{{ row.total_amount|default_if_none:"—"|floatformat:0 }}</td>
+    <td class="num mono">{{ row.advance_paid|default_if_none:"—"|floatformat:0 }}</td>
+    <td class="num mono">{{ row.balance_due|floatformat:0 }}</td>
+    <td class="small">{{ row.status }}</td>
+    <td class="small muted">{{ row.expected_delivery|default:"—" }}</td>
+    <td>
+      <form method="post" action="{% url 'crm:order_status' row.pk %}" class="inline">{% csrf_token %}
+        <select name="status">{% for status in statuses %}<option value="{{ status }}" {% if status == row.status %}selected{% endif %}>{{ status }}</option>{% endfor %}</select>
+        <button class="small">Set</button>
+      </form>
+    </td>
+  </tr>
+  {% empty %}<tr><td colspan="9" class="empty">No orders.</td></tr>{% endfor %}
+</table>
+</div>
+{% endblock %}

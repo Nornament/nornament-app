@@ -1,0 +1,17 @@
+<div class="card">
+<table>
+  <tr><th>Code</th><th>Name</th><th>Category</th><th>Class</th><th>UOM</th><th>Metal</th><th class="num">Used on</th><th></th></tr>
+  {% for material in materials %}
+  <tr>
+    <td class="mono">{{ material.item_code }}</td>
+    <td>{{ material.item_name }}<div class="muted small">{{ material.description|default:"" }}</div></td>
+    <td>{{ material.category.name }}</td>
+    <td class="small muted">{{ material.mat_class }}</td>
+    <td>{{ material.default_uom }}</td>
+    <td>{{ material.metal_id|default:"—" }}</td>
+    <td class="num">{{ material.used_on_lines }}</td>
+    <td>{% if material.needs_review %}<span class="badge RESERVED">review</span>{% endif %}</td>
+  </tr>
+  {% empty %}<tr><td colspan="8" class="empty">No materials match.</td></tr>{% endfor %}
+</table>
+</div>
