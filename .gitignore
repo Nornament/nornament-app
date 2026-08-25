@@ -1,20 +1,23 @@
-# secrets — never commit
+# Secrets and data — the real defence is not putting them in a file
 .env
 .env.*
-*.pem
-*.key
-logins.csv
+!.env.example
 *.dump
 *.sql.gz
+logins.csv
+backups/
+golden/
 
-# local
-.DS_Store
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
 .venv/
-node_modules/
+venv/
+*.egg-info/
+.pytest_cache/
 
-Nornament_Inventory_2026-08-07.zip
-Nornament_Inventory/
-Stock/
-CRM/
+# Django
+staticfiles/
+media/
+static/vendor/htmx.min.js
+db.sqlite3

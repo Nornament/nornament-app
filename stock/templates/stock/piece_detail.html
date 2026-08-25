@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}{{ piece.jewel_code }} · Nornament{% endblock %}
+{% block content %}
+<h1 class="mono">{{ piece.jewel_code }}</h1>
+<p class="muted">{{ piece.style.style_code }} · {{ row.design_name|default:"" }} · <span class="badge {{ piece.stock_state }}">{{ row.stock_state_display }}</span></p>
+{% if gaps %}<div class="gaps">{% for gap in gaps %}<span class="gap">{{ gap }}</span>{% endfor %}</div>{% endif %}
+
+<div class="grid cols-3">
+  <div class="card">
+    <h2>Piece</h2>
+    <table>
+      <tr><td>Karat</td><td>{{ row.karat|default:"—" }}</td></tr>
+      <tr><td>Colour</td><td>{{ row.metal_colour|default:"—" }}</td></tr>
+      <tr><td>Size</td><td>{{ row.size_label|default:"—" }}</td></tr>
+      <tr><td>Gross weight</td><td class="mono">{{ row.measured_gross_wt_gm|default_if_none:"—" }} g</td></tr>
+      <tr><td>BOM weight</td><td class="mono">{{ row.bom_weight_gm|default_if_none:"—" }} g</td></tr>
+      <tr><td>Net metal</td><td class="mono">{{ row.net_metal_wt_gm|default_if_none:"—" }} g</td></tr>
+      <tr><td>HUID</td><td class="mono">{{ row.huid|default:"—" }}</td></tr>
+      <tr><td>Location</td><td>{{ row.location|default:"—" }}</td></tr>
+      <tr><td>Received</td><td>{{ row.received_on|default:"—" }}</td></tr>
+      {% if caps.view_vendor %}<tr><td>Vendor</td><td>{{ row.vendor_name|default:"—" }}</td></tr>{% endif %}
+    </table>
+    {% if reconciliation and reconciliation.out_of_tolerance %}
+    <p class="small" style="color:var(--warn)">Weight is {{ reconciliation.diff_gm }} g off the BOM — outside tolerance.</p>
+    {% endif %}
+  </div>
+
+  {% if caps.view_sale or caps.view_cost %}
+  <div class="card">
+    <h2>Pricing</h2>
+    <table>
+      {% if caps.view_sale %}<tr><td>Sale price</td><td class="num mono">{{ row.sale_price|default_if_none:"—"|floatformat:0 }}</td></tr>
+      <tr><td>Metal rate used</td><td class="num mono">{{ row.gold_rate_used|default_if_none:"—"|floatformat:0 }}</td></tr>{% endif %}
+      {% if caps.view_cost %}<tr><td>Cost (frozen)</td><td class="num mono">{{ row.cost_price|default_if_none:"—"|floatformat:0 }}</td></tr>
+      <tr><td>Cost today</td><td class="num mono">{{ row.current_cost|default_if_none:"—"|floatformat:0 }}</td></tr>{% endif %}
+      {% if caps.view_margin %}<tr><td>Margin</td><td class="num mono">{{ row.margin|default_if_none:"—"|floatformat:0 }}</td></tr>
+      <tr><td>Margin at today's cost</td><td class="num mono">{{ row.current_margin|default_if_none:"—"|floatformat:0 }}</td></tr>{% endif %}
+    </table>
+    <p class="small"><a href="{% url 'stock:piece_scenarios' piece.jewel_code %}">Scenarios</a>
+      {% if caps.manage_materials %}· <a href="{% url 'stock:piece_bom' piece.jewel_code %}">Material breakup</a>{% endif %}</p>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h2>Move</h2>
+    {% if caps.adjust_stock or caps.edit_bom %}
+    <form method="post" action="{% url 'stock:move_piece' piece.jewel_code %}">{% csrf_token %}
+      <label for="location">Location</label>
+      <select id="location" name="location">
+        {% for location in locations %}<option value="{{ location.code }}" {% if location.pk == piece.location_id %}selected{% endif %}>{{ location.name }}</option>{% endfor %}
+      </select>
+      <div class="row" style="margin-top:10px">
+        <button class="tight" name="action" value="receive">Receive</button>
+        <button class="tight" name="action" value="transfer">Transfer</button>
+        <button class="tight" name="action" value="reserve">Reserve</button>
+        <button class="tight" name="action" value="unreserve">Unreserve</button>
+      </div>
+    </form>
+    {% else %}<p class="muted small">You can see this piece but not move it.</p>{% endif %}
+
+    {% if caps.adjust_stock and not piece.is_terminal %}
+    <h3 style="margin-top:16px">Sell</h3>
+    <form method="post" action="{% url 'stock:sell_piece' piece.jewel_code %}">{% csrf_token %}
+      <div class="row">
+        <div><label for="sold_price">Sold price</label><input id="sold_price" name="sold_price" required inputmode="decimal"></div>
+        <div><label for="discount_amt">Discount</label><input id="discount_amt" name="discount_amt" value="0" inputmode="decimal"></div>
+      </div>
+      <div class="row"><div><label for="customer_name">Customer</label><input id="customer_name" name="customer_name"></div></div>
+      <button class="primary" style="margin-top:10px">Record sale</button>
+    </form>
+    {% endif %}
+
+    {% if caps.melt and not piece.is_terminal %}
+    <h3 style="margin-top:16px">Melt</h3>
+    <form method="post" action="{% url 'stock:melt_piece' piece.jewel_code %}">{% csrf_token %}
+      <label for="reason">Reason (at least 10 characters)</label>
+      <textarea id="reason" name="reason" rows="2" required minlength="10"></textarea>
+      <button class="danger" style="margin-top:8px">Melt this piece</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if sale %}
+<div class="card">
+  <h2>Sale</h2>
+  <p>Sold on {{ sale.sold_on }} for <span class="mono">{{ sale.sold_price|floatformat:0 }}</span>
+     {% if caps.view_margin %}· margin <span class="mono">{{ sale.margin_amt|default_if_none:"—"|floatformat:0 }}</span>{% endif %}</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Movements</h2>
+  <table>
+    <tr><th>When</th><th>Type</th><th>From</th><th>To</th><th>State</th><th>Who</th><th>Reason</th></tr>
+    {% for movement in movements %}
+    <tr>
+      <td class="small">{{ movement.moved_at|date:"d M Y H:i" }}</td>
+      <td>{{ movement.move_type }}</td>
+      <td>{{ movement.from_location.code|default:"—" }}</td>
+      <td>{{ movement.to_location.code|default:"—" }}</td>
+      <td><span class="badge {{ movement.resulting_state }}">{{ movement.resulting_state }}</span></td>
+      <td class="small muted">{{ movement.user|default:"—" }}</td>
+      <td class="small muted">{{ movement.reason|default:"" }}</td>
+    </tr>
+    {% empty %}<tr><td colspan="7" class="muted">Never moved.</td></tr>{% endfor %}
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,57 @@
+/* Restrained, legible, and deliberately close to the two apps it replaces.
+   The visual refresh is post-cutover work; this is a port. */
+:root{--bg:#F7F6F3;--surface:#FFFFFF;--ink:#111111;--muted:#787774;--border:#E8E8E4;
+      --gold:#B08C3C;--ok:#2D6E3E;--warn:#C0392B;--radius:10px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 "Outfit",-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+a{color:inherit;text-decoration:none}
+a:hover{color:var(--gold)}
+h1,h2,h3{font-family:"Newsreader",Georgia,serif;font-weight:600;letter-spacing:-.02em;margin:0 0 12px}
+h1{font-size:22px}h2{font-size:17px}h3{font-size:15px}
+.nav{display:flex;gap:14px;align-items:center;padding:10px 18px;background:var(--surface);border-bottom:1px solid var(--border);font-size:13px;flex-wrap:wrap}
+.nav .brand{font-family:"Cinzel",serif;font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:12px}
+.nav .spacer{flex:1}
+.nav .sep{color:var(--border)}
+.nav .who{color:var(--muted)}
+main{padding:20px;max-width:1400px;margin:0 auto}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px}
+.card.narrow{max-width:380px;margin:60px auto}
+.grid{display:grid;gap:16px}
+.grid.cols-3{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.grid.cols-4{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.stat .value{font-family:"Newsreader",Georgia,serif;font-size:26px;line-height:1}
+.stat .label{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:4px}
+table{width:100%;border-collapse:collapse;background:var(--surface)}
+th{text-align:left;padding:9px 12px;font-size:10.5px;font-weight:600;color:var(--muted);background:var(--bg);
+   border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.07em;white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13.5px}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.badge{display:inline-flex;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.badge.IN_STOCK,.badge.FOUND,.badge.ok{background:#E8F3EC;color:var(--ok)}
+.badge.RESERVED,.badge.ALREADY{background:#FAF4E8;color:var(--gold)}
+.badge.SOLD,.badge.MELTED,.badge.LOST,.badge.MISSING,.badge.ERROR,.badge.UNKNOWN{background:#FBEAE8;color:var(--warn)}
+.badge.ELSEWHERE,.badge.NOT_STOCK,.badge.UNEXPECTED{background:#F0EFED;color:var(--muted)}
+label{display:block;font-size:10.5px;font-weight:600;color:var(--muted);margin-bottom:4px;
+      text-transform:uppercase;letter-spacing:.07em}
+input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;
+      font:inherit;font-size:13px;background:#FAFAF8;color:var(--ink)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold)}
+button{font:inherit;font-size:13px;padding:8px 14px;border-radius:6px;border:1px solid var(--border);
+       background:var(--surface);color:var(--ink);cursor:pointer}
+button.primary{background:var(--ink);color:#fff;border-color:var(--ink);font-weight:600}
+button.link{border:none;background:none;color:var(--muted);padding:0}
+button.danger{border-color:var(--warn);color:var(--warn)}
+form.inline{display:inline}
+.row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.row > *{flex:1;min-width:140px}
+.row > .tight{flex:0 0 auto;min-width:0}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.messages{list-style:none;padding:0;margin:0 0 16px}
+.messages li{padding:10px 13px;border-radius:6px;margin-bottom:8px;background:#FAF4E8;color:#8a6800}
+.messages li.success{background:#E8F3EC;color:var(--ok)}
+.messages li.error{background:#FBEAE8;color:var(--warn)}
+.gaps{display:flex;gap:6px;flex-wrap:wrap}
+.gaps .gap{background:#FBF3DB;color:#8b6000;border:1px solid #F0DC99;border-radius:999px;padding:2px 8px;font-size:10.5px;font-weight:600}
+.empty{text-align:center;padding:40px;color:var(--muted)}

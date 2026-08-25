@@ -1,0 +1,89 @@
+# Dokploy: one public service (web), Domain tab only — no hand-written Traefik
+# labels. Environment comes from Dokploy's Environment tab; never bind-mount a
+# .env file, Docker will create it as a directory and the app will boot without
+# its settings.
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nornament}
+      POSTGRES_USER: ${POSTGRES_USER:-nornament}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      # A named volume. A bind mount here is how a database disappears.
+      - nornament-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nornament} -d ${POSTGRES_DB:-nornament}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS}
+      POSTGRES_HOST: db
+      POSTGRES_DB: ${POSTGRES_DB:-nornament}
+      POSTGRES_USER: ${POSTGRES_USER:-nornament}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      MEDIA_BUCKET: ${MEDIA_BUCKET}
+      MEDIA_ENDPOINT_URL: ${MEDIA_ENDPOINT_URL}
+      MEDIA_ACCESS_KEY: ${MEDIA_ACCESS_KEY}
+      MEDIA_SECRET_KEY: ${MEDIA_SECRET_KEY}
+      MEDIA_DIRECT_UPLOAD: ${MEDIA_DIRECT_UPLOAD:-true}
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/healthz')\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+      - dokploy-network
+
+  backup:
+    # Nightly pg_dump to Contabo, 14 days kept, and a dead-man ping so a
+    # backup that silently stops running pages somebody.
+    image: postgres:17-alpine
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGDATABASE: ${POSTGRES_DB:-nornament}
+      PGUSER: ${POSTGRES_USER:-nornament}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_BUCKET: ${BACKUP_BUCKET}
+      BACKUP_ENDPOINT_URL: ${MEDIA_ENDPOINT_URL}
+      AWS_ACCESS_KEY_ID: ${MEDIA_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${MEDIA_SECRET_KEY}
+      HEALTHCHECK_PING_URL: ${HEALTHCHECK_PING_URL}
+      BACKUP_AT: ${BACKUP_AT:-02:30}
+    volumes:
+      - ./backup.sh:/usr/local/bin/backup.sh:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "apk add --no-cache aws-cli curl >/dev/null &&
+       while true; do
+         now=$$(date +%H:%M);
+         if [ \"$$now\" = \"$$BACKUP_AT\" ]; then sh /usr/local/bin/backup.sh; sleep 60; fi;
+         sleep 30;
+       done"
+
+volumes:
+  nornament-db:
+
+networks:
+  dokploy-network:
+    external: true

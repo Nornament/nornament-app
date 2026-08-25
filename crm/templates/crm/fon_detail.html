@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% load crm_extras %}
+{% block title %}{{ customer.name }} · FoN{% endblock %}
+{% block content %}
+<h1>{{ customer.name }}</h1>
+<p class="muted small">FoN level {{ customer.fon_level }}{% if customer.fon_parent %} · under {{ customer.fon_parent.name }}{% endif %}</p>
+{% if payout %}
+<div class="card">
+  <h2>{{ payout.start }} – {{ payout.end }}</h2>
+  <table>
+    <tr><th>Category</th><th class="num">Billing</th><th class="num">Rate</th><th class="num">Payout</th></tr>
+    {% for key, label in categories.items %}
+    <tr><td>{{ label }}</td>
+        <td class="num mono">{{ payout.billing|lookup:key|floatformat:0 }}</td>
+        <td class="num">{{ payout.pct|lookup:key }}%</td>
+        <td class="num mono">{{ payout.payout|lookup:key|floatformat:0 }}</td></tr>
+    {% endfor %}
+    <tr><th>Total</th><th class="num mono">{{ payout.total|floatformat:0 }}</th><th></th>
+        <th class="num mono">{{ payout.total_payout|floatformat:0 }}</th></tr>
+  </table>
+  {% if payout.slab %}<p class="small muted">Slab reached: cat1 {{ payout.slab.cat1 }}% · cat2 {{ payout.slab.cat2 }}% · cat3 {{ payout.slab.cat3 }}%</p>{% endif %}
+</div>
+{% else %}<div class="card"><p class="muted">Not a FoN member.</p></div>{% endif %}
+{% if downline %}
+<div class="card">
+  <h2>Downline</h2>
+  <table>
+    <tr><th>Member</th><th>Level</th><th class="num">Below them</th></tr>
+    {% for member in downline %}
+    <tr><td><a href="{% url 'crm:fon_detail' member.pk %}">{{ member.name }}</a></td>
+        <td>{{ member.fon_level }}</td><td class="num">{{ member.children }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+<p><a href="{% url 'crm:fon' %}">← FoN register</a></p>
+{% endblock %}

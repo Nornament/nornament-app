@@ -1,0 +1,39 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Nornament{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  {# Vendored at build time — see static/vendor/README.md. Absent, every screen
+     still works: HTMX here only saves a page reload. #}
+  <script src="/static/vendor/htmx.min.js" defer></script>
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+{% if user.is_authenticated %}
+<nav class="nav">
+  <a class="brand" href="{% url 'stock:dashboard' %}">Nornament</a>
+  <a href="{% url 'stock:dashboard' %}">Dashboard</a>
+  <a href="{% url 'stock:piece_list' %}">Pieces</a>
+  {% if caps.manage_materials %}<a href="{% url 'stock:material_list' %}">Materials</a>{% endif %}
+  {% if caps.view_sale or caps.view_cost %}<a href="{% url 'stock:rate_list' %}">Rates</a>{% endif %}
+  {% if caps.edit_bom %}<a href="{% url 'stock:count_list' %}">Counts</a>{% endif %}
+  <a href="{% url 'stock:repair_list' %}">Repairs</a>
+  {% if caps.view_sale %}<a href="{% url 'stock:sale_list' %}">Sales</a>{% endif %}
+  <span class="sep">·</span>
+  <a href="{% url 'crm:dashboard' %}">CRM</a>
+  <a href="{% url 'crm:customer_list' %}">Customers</a>
+  <a href="{% url 'crm:order_list' %}">Orders</a>
+  <a href="{% url 'crm:fon' %}">FoN</a>
+  <span class="spacer"></span>
+  {% if is_admin %}<a href="{% url 'admin:index' %}">Admin</a>{% endif %}
+  <span class="who">{{ user }}</span>
+  <form method="post" action="{% url 'accounts:logout' %}" class="inline">{% csrf_token %}<button class="link">Sign out</button></form>
+</nav>
+{% endif %}
+<main>
+  {% if messages %}<ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

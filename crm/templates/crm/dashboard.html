@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}CRM · Nornament{% endblock %}
+{% block content %}
+<h1>CRM</h1>
+<div class="grid cols-4">
+  <div class="card stat"><div class="value">{{ customers }}</div><div class="label">Customers</div></div>
+  <div class="card stat"><div class="value">{{ pipeline.enquiries }}</div><div class="label">Open enquiries</div></div>
+  <div class="card stat"><div class="value">{{ pipeline.orders }}</div><div class="label">Orders in flight</div></div>
+  <div class="card stat"><div class="value">{{ pipeline.repairs }}</div><div class="label">Repairs open</div></div>
+  {% if month_revenue %}<div class="card stat"><div class="value">₹{{ month_revenue|floatformat:0 }}</div><div class="label">Month revenue</div></div>{% endif %}
+  <div class="card stat"><div class="value">{{ fon_members }}</div><div class="label">FoN members</div></div>
+</div>
+<div class="grid cols-3">
+  <div class="card">
+    <h2>Follow-ups due</h2>
+    <table>
+      {% for enquiry in follow_ups %}
+      <tr><td class="mono">{{ enquiry.enquiry_code }}</td><td>{{ enquiry.customer.name|default:"—" }}</td>
+          <td class="small muted">{{ enquiry.follow_up_date }}</td></tr>
+      {% empty %}<tr><td class="muted">Nothing due.</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div class="card">
+    <h2>Orders due</h2>
+    <table>
+      {% for order in due_orders %}
+      <tr><td class="mono">{{ order.order_code }}</td><td>{{ order.customer.name|default:"—" }}</td>
+          <td class="small muted">{{ order.status }} · {{ order.expected_delivery }}</td></tr>
+      {% empty %}<tr><td class="muted">Nothing due.</td></tr>{% endfor %}
+    </table>
+  </div>
+  {% if recent_sales %}
+  <div class="card">
+    <h2>Recent sales</h2>
+    <table>
+      {% for sale in recent_sales %}
+      <tr><td class="small">{{ sale.sold_on }}</td>
+          <td>{{ sale.customer.name|default:sale.customer_name|default:"—" }}</td>
+          <td class="num mono">{{ sale.sold_price|floatformat:0 }}</td>
+          <td><span class="badge {% if sale.source == 'CRM' %}ELSEWHERE{% else %}ok{% endif %}">{{ sale.source }}</span></td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

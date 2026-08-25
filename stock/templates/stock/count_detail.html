@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}{{ count.count_ref }} · Nornament{% endblock %}
+{% block content %}
+<h1 class="mono">{{ count.count_ref }}</h1>
+<p class="muted">{{ count.location.name }} · <span class="badge {% if count.status == 'OPEN' %}RESERVED{% else %}ok{% endif %}">{{ count.status }}</span></p>
+
+{% if count.status == 'OPEN' %}
+<div class="card">
+  <form hx-post="{% url 'stock:count_scan' count.pk %}" hx-target="#count-state" hx-swap="outerHTML"
+        method="post" action="{% url 'stock:count_scan' count.pk %}"
+        {% comment %}hx-on lets the scanner keep firing without touching the keyboard{% endcomment %}
+        hx-on::after-request="this.reset();this.code.focus()">
+    {% csrf_token %}
+    <label for="code">Scan a piece</label>
+    <input id="code" name="code" autofocus autocomplete="off" placeholder="Scan or type a jewel code">
+    <p class="small muted">A scanner's trailing suffix is ignored — everything after a double underscore is dropped.</p>
+  </form>
+</div>
+{% endif %}
+
+<div id="count-state">{% include "stock/_count_state.html" %}</div>
+
+{% if count.status == 'OPEN' %}
+<form class="card" method="post" action="{% url 'stock:count_close' count.pk %}">{% csrf_token %}
+  <label for="notes">Notes</label>
+  <textarea id="notes" name="notes" rows="2"></textarea>
+  <div class="row" style="margin-top:10px">
+    <button class="primary tight">Close count</button>
+    <button class="danger tight" name="cancel" value="1">Cancel count</button>
+  </div>
+</form>
+{% endif %}
+<p><a href="{% url 'stock:count_list' %}">← All counts</a></p>
+{% endblock %}

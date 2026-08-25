@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{{ piece.jewel_code }} scenarios · Nornament{% endblock %}
+{% block content %}
+<h1>Scenarios <span class="mono muted">{{ piece.jewel_code }}</span></h1>
+<p class="muted small">Metal passes through at its live rate under every scenario. Only stones move.</p>
+<div class="card">
+<table>
+  <tr>
+    <th>Scenario</th><th>Method</th><th class="num">Metal g</th>
+    {% if show_cost %}<th class="num">Metal cost</th>{% endif %}<th class="num">Metal sale</th>
+    {% if show_cost %}<th class="num">Stone cost</th>{% endif %}<th class="num">Stone sale</th>
+    <th class="num">Making</th>{% if show_cost %}<th class="num">Cost today</th>{% endif %}<th class="num">Price</th><th></th>
+  </tr>
+  {% for price in prices %}
+  <tr>
+    <td>{{ price.scenario_name }}<div class="muted small mono">{{ price.scenario }}</div></td>
+    <td class="small">{{ price.method }}</td>
+    <td class="num mono">{{ price.metal_gm }}</td>
+    {% if show_cost %}<td class="num mono">{{ price.metal_cost|floatformat:0 }}</td>{% endif %}
+    <td class="num mono">{{ price.metal_sale|floatformat:0 }}</td>
+    {% if show_cost %}<td class="num mono">{{ price.stone_cost|floatformat:0 }}</td>{% endif %}
+    <td class="num mono">{{ price.stone_sale|floatformat:0 }}</td>
+    <td class="num mono">{{ price.making_sale|floatformat:0 }}</td>
+    {% if show_cost %}<td class="num mono">{{ price.cost_today|floatformat:0 }}</td>{% endif %}
+    <td class="num mono"><strong>{{ price.price|floatformat:0 }}</strong></td>
+    <td class="small muted">{% if price.capped %}capped: {{ price.capped }}{% endif %}</td>
+  </tr>
+  {% empty %}<tr><td colspan="11" class="empty">No scenario is available to you.</td></tr>{% endfor %}
+</table>
+</div>
+<p><a href="{% url 'stock:piece_detail' piece.jewel_code %}">← {{ piece.jewel_code }}</a></p>
+{% endblock %}

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Pieces · Nornament{% endblock %}
+{% block content %}
+<h1>Pieces <span class="muted small">{{ total }}</span></h1>
+<form class="card row" method="get" action="{% url 'stock:piece_list' %}">
+  <div>
+    <label for="q">Search</label>
+    <input id="q" type="search" name="q" value="{{ q }}" placeholder="Jewel code, style, HUID"
+           hx-get="{% url 'stock:piece_rows' %}" hx-target="#rows" hx-trigger="keyup changed delay:300ms"
+           hx-include="closest form">
+  </div>
+  <div>
+    <label for="state">State</label>
+    <select id="state" name="state" hx-get="{% url 'stock:piece_rows' %}" hx-target="#rows" hx-include="closest form">
+      <option value="">Any</option>
+      {% for value, label in states %}<option value="{{ value }}" {% if value == selected_state %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="location">Location</label>
+    <select id="location" name="location" hx-get="{% url 'stock:piece_rows' %}" hx-target="#rows" hx-include="closest form">
+      <option value="">Any</option>
+      {% for location in locations %}<option value="{{ location.code }}" {% if location.code == selected_location %}selected{% endif %}>{{ location.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="tight"><button type="submit">Search</button></div>
+  <div class="tight"><a class="muted small" href="{% url 'stock:piece_export' %}?q={{ q }}&state={{ selected_state }}&location={{ selected_location }}">Export CSV</a></div>
+</form>
+<div id="rows">{% include "stock/_piece_rows.html" %}</div>
+{% endblock %}

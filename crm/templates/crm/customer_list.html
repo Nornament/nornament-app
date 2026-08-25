@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Customers · Nornament{% endblock %}
+{% block content %}
+<h1>Customers <span class="muted small">{{ total }}</span></h1>
+<form class="card row" method="get">
+  <div>
+    <label for="q">Search</label>
+    <input id="q" type="search" name="q" value="{{ q }}" placeholder="Name, code, phone, email"
+           hx-get="{% url 'crm:customer_rows' %}" hx-target="#customer-rows" hx-trigger="keyup changed delay:300ms"
+           hx-include="closest form">
+  </div>
+  <div class="tight"><label for="fon">FoN only</label><input id="fon" type="checkbox" name="fon" value="1"></div>
+  <div class="tight"><button>Search</button></div>
+</form>
+<div id="customer-rows">{% include "crm/_customer_rows.html" %}</div>
+{% endblock %}

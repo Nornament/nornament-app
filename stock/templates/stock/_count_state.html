@@ -1,0 +1,31 @@
+{% comment %}The live figures for one count. Re-rendered on every scan.{% endcomment %}
+<div class="grid cols-4">
+  <div class="card stat"><div class="value">{{ state.expected }}</div><div class="label">Expected</div></div>
+  <div class="card stat"><div class="value" style="color:var(--ok)">{{ state.found }}</div><div class="label">Found</div></div>
+  <div class="card stat"><div class="value" style="color:var(--warn)">{{ state.missing }}</div><div class="label">Missing</div></div>
+  <div class="card stat"><div class="value">{{ state.unexpected }}</div><div class="label">Unexpected</div></div>
+</div>
+<div class="grid cols-3">
+  <div class="card">
+    <h2>Just scanned</h2>
+    <table>
+      {% for scan in state.recent %}
+      <tr><td class="mono">{{ scan.code }}</td>
+          <td><span class="badge {{ scan.verdict }}">{{ scan.verdict }}</span></td>
+          <td class="small muted">{{ scan.note|default:"" }}</td></tr>
+      {% empty %}<tr><td class="muted">Nothing scanned yet.</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div class="card">
+    <h2>Missing <span class="muted small">{{ state.missing }}</span></h2>
+    <p class="mono small">{% for code in state.missing_list %}{{ code }} {% empty %}<span class="muted">Nothing missing.</span>{% endfor %}</p>
+  </div>
+  <div class="card">
+    <h2>Unexpected <span class="muted small">{{ state.unexpected }}</span></h2>
+    <table>
+      {% for item in state.unexpected_list %}
+      <tr><td class="mono">{{ item.code }}</td><td class="small muted">{{ item.note }}</td></tr>
+      {% empty %}<tr><td class="muted">Nothing unexpected.</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>

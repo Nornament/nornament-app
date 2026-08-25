@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% load crm_extras %}
+{% block title %}{{ customer.name }} · Nornament{% endblock %}
+{% block content %}
+<h1>{{ customer.name }}</h1>
+<p class="muted mono small">{{ customer.customer_code }}
+  {% if customer.is_fon %}· <span class="badge RESERVED">FoN level {{ customer.fon_level }}</span>{% endif %}</p>
+
+<div class="grid cols-3">
+  <div class="card">
+    <h2>Contact</h2>
+    <table>
+      <tr><td>Mobile</td><td class="mono">{{ customer.mobile|default:"—" }}</td></tr>
+      <tr><td>Email</td><td>{{ customer.email|default:"—" }}</td></tr>
+      <tr><td>Location</td><td>{{ customer.location|default:"—" }}</td></tr>
+      <tr><td>Birthday</td><td>{{ customer.birth_date|default:"—" }}</td></tr>
+      <tr><td>Anniversary</td><td>{{ customer.anniversary_date|default:"—" }}</td></tr>
+      <tr><td>Referred by</td><td>{{ customer.referrer.name|default:customer.reference_type }}</td></tr>
+    </table>
+  </div>
+  {% if sales %}
+  <div class="card">
+    <h2>Purchases</h2>
+    <p class="stat"><span class="value">₹{{ lifetime_value|floatformat:0 }}</span><span class="label">Lifetime value</span></p>
+    <table>
+      <tr><th>Date</th><th>What</th><th>Cat</th><th class="num">Amount</th></tr>
+      {% for sale in sales %}
+      <tr><td class="small">{{ sale.sold_on }}</td>
+          <td>{{ sale.piece.jewel_code|default:sale.description|default:"—" }}</td>
+          <td class="small muted">{{ sale.product_category|default:"—" }}</td>
+          <td class="num mono">{{ sale.sold_price|floatformat:0 }}</td></tr>
+      {% empty %}<tr><td colspan="4" class="muted">No purchases yet.</td></tr>{% endfor %}
+    </table>
+    {% if caps.adjust_stock %}
+    <form method="post" action="{% url 'crm:add_purchase' customer.pk %}" style="margin-top:12px">{% csrf_token %}
+      <div class="row">
+        <div><label for="amount">Amount</label><input id="amount" name="amount" inputmode="decimal" required></div>
+        <div><label for="date">Date</label><input id="date" name="date" type="date"></div>
+        <div><label for="category">Category</label>
+          <select id="category" name="category"><option value="cat1">Cat 1</option><option value="cat2">Cat 2</option><option value="cat3">Cat 3</option></select></div>
+        <div class="tight"><button class="primary">Add</button></div>
+      </div>
+      <p class="small muted">This writes a sale into the one ledger, tagged CRM — the same row FoN and reports read.</p>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% if payout %}
+  <div class="card">
+    <h2>FoN this month</h2>
+    <table>
+      <tr><th>Category</th><th class="num">Billing</th><th class="num">Rate</th><th class="num">Payout</th></tr>
+      {% for key, label in categories.items %}
+      <tr><td class="small">{{ label }}</td>
+          <td class="num mono">{{ payout.billing|lookup:key|floatformat:0 }}</td>
+          <td class="num">{{ payout.pct|lookup:key }}%</td>
+          <td class="num mono">{{ payout.payout|lookup:key|floatformat:0 }}</td></tr>
+      {% endfor %}
+      <tr><th>Total</th><th class="num mono">{{ payout.total|floatformat:0 }}</th><th></th>
+          <th class="num mono">{{ payout.total_payout|floatformat:0 }}</th></tr>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<div class="grid cols-3">
+  <div class="card"><h2>Enquiries</h2><table>
+    {% for enquiry in enquiries %}<tr><td class="mono">{{ enquiry.enquiry_code }}</td><td>{{ enquiry.item_of_interest|default:"—" }}</td>
+      <td class="small muted">{{ enquiry.status }}</td></tr>{% empty %}<tr><td class="muted">None.</td></tr>{% endfor %}
+  </table></div>
+  <div class="card"><h2>Orders</h2><table>
+    {% for order in orders %}<tr><td class="mono">{{ order.order_code }}</td><td>{{ order.item_description|truncatechars:40 }}</td>
+      <td class="small muted">{{ order.status }}</td></tr>{% empty %}<tr><td class="muted">None.</td></tr>{% endfor %}
+  </table></div>
+  <div class="card"><h2>Repairs</h2><table>
+    {% for repair in repairs %}<tr><td class="mono">{{ repair.repair_code }}</td><td>{{ repair.item_description|truncatechars:40 }}</td>
+      <td class="small muted">{{ repair.status }}</td></tr>{% empty %}<tr><td class="muted">None.</td></tr>{% endfor %}
+  </table></div>
+</div>
+<p><a href="{% url 'crm:customer_list' %}">← Customers</a></p>
+{% endblock %}

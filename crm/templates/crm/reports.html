@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Reports · Nornament{% endblock %}
+{% block content %}
+<h1>Reports</h1>
+<p class="muted small">Financial year from {{ financial_year_start }}.</p>
+{% if revenue %}
+<div class="grid cols-3">
+  <div class="card stat"><div class="value">₹{{ revenue.all|floatformat:0 }}</div><div class="label">Revenue, all sources</div></div>
+  <div class="card stat"><div class="value">₹{{ revenue.stock|floatformat:0 }}</div><div class="label">From stock</div></div>
+  <div class="card stat"><div class="value">₹{{ revenue.crm|floatformat:0 }}</div><div class="label">From CRM</div></div>
+</div>
+<p class="small muted">One number, three ways of arriving at it. The old apps disagreed here because commission
+  was paid off a typed array and revenue came from the stock ledger.</p>
+{% endif %}
+{% if margin %}
+<div class="grid cols-3">
+  <div class="card stat"><div class="value">₹{{ margin.margin|default:0|floatformat:0 }}</div><div class="label">Margin (stock sales)</div></div>
+</div>
+{% endif %}
+<div class="grid cols-3">
+  <div class="card">
+    <h2>Pipeline</h2>
+    <table>
+      <tr><td>Enquiries</td><td class="num">{{ pipeline.enquiries }}</td></tr>
+      <tr><td>Orders</td><td class="num">{{ pipeline.orders }}</td></tr>
+      <tr><td>Repairs</td><td class="num">{{ pipeline.repairs }}</td></tr>
+      <tr><td>Client materials</td><td class="num">{{ pipeline.client_materials }}</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h2>Orders by status</h2>
+    <table>
+      {% for row in by_status %}<tr><td>{{ row.status }}</td><td class="num">{{ row.orders }}</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

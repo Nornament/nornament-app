@@ -1,0 +1,9 @@
+<form class="card row" method="get">
+  <div><label for="q">Search</label><input id="q" type="search" name="q" value="{{ q }}"></div>
+  <div><label for="status">Status</label>
+    <select id="status" name="status">
+      <option value="">Any</option>
+      {% for status in statuses %}<option value="{{ status }}" {% if status == selected_status %}selected{% endif %}>{{ status }}</option>{% endfor %}
+    </select></div>
+  <div class="tight"><button>Filter</button></div>
+</form>

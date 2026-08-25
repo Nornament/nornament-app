@@ -1,46 +1,69 @@
 # Nornament
 
-One application for Nornament's jewellery operation: finished-goods stock, costing and margin, plus the customer CRM — on self-hosted Postgres, deployed to a VPS with Dokploy.
-
-**Nothing here is built yet.** This repo currently holds the spec and the two existing apps it is built from.
-
----
+One application for Nornament's jewellery operation: finished-goods stock,
+costing and margin, plus the customer CRM — Django on self-hosted Postgres,
+deployed to a VPS with Dokploy.
 
 ## Read this first
 
-**[`docs/PLAN.md`](docs/PLAN.md)** — the implementation plan. Phases 0–7, with the exact SQL, endpoint signatures, compose config and cutover sequence. Start there; it is the source of truth for what gets built.
+**[`PLAN.md`](PLAN.md)** — what is being built and why.
+**[`docs/DEPLOY-DOKPLOY.md`](docs/DEPLOY-DOKPLOY.md)** — getting it onto a VPS.
+**[`docs/RUNBOOK.md`](docs/RUNBOOK.md)** — how to run it, migrate onto it, and
+operate it.
 
----
+```sh
+pip install -r requirements-dev.txt
+createdb nornament
+export DJANGO_SECRET_KEY=dev-only DJANGO_DEBUG=1 POSTGRES_DB=nornament POSTGRES_USER=$USER POSTGRES_HOST=127.0.0.1
+python manage.py migrate && python manage.py createsuperuser && python manage.py runserver
+pytest
+```
 
-## What is in here
+## Layout
 
 | Path | What it is |
 |---|---|
-| `docs/PLAN.md` | The plan. Read before writing anything. |
-| `reference/Stock/` | The existing stock app — one HTML file, 53 Postgres migrations, 3 Deno edge functions. **The migrations and the edge-function contracts are the real spec**; the plan repeatedly points at specific files here. |
-| `reference/CRM/` | The existing CRM — one HTML file, React 18 UMD, 6 JSONB tables. |
+| `config/` | Settings (env-driven), URLs, WSGI. |
+| `accounts/` | The user, the eight capabilities as permissions, location scoping, the imported bcrypt hashes. |
+| `stock/` | The `app` schema mirrored as models, the ported business logic in `services.py`, the masking rule in `masking.py`, screens. |
+| `crm/` | The JSONB blobs as real models, FoN commission off the sale ledger, the quote calculator. |
+| `mediahub/` | `MediaAsset`, presigned uploads, `import_device_backup`. |
+| `etl/` | `load_legacy`, `parity_check`, `golden_export`, `import_logins`, and a rehearsal fixture. |
+| `deploy/` | Dockerfile, compose, backup and restore scripts. |
+| `legacy/` | The two old apps and the 53 SQL migrations, read-only. The functional and visual spec. |
 
-`reference/` is input, not output. Both directories are copies with their git history stripped — the originals are at `github.com/Nornament/Stock` and `github.com/Nornament/CRM`. Delete `reference/` once Phase 1 has moved what it needs.
+## The three things this rewrite exists to fix
 
-## What gets built (per the plan)
+**One revenue number.** FoN commission used to be paid off a hand-typed
+`purchases[]` array while the stock app reported its own figure. Both now read
+one `stock.Sale` ledger; a CRM purchase is a row in it with `source='CRM'` and
+no cost, so margin reporting filters on `source='STOCK'` rather than inventing
+a margin it does not have.
 
-```
-web/        the merged frontend — shell + two panes + one session.js
-api/        FastAPI sidecar: auth, admin, media presigning, PostgREST proxy
-db/         the 53 migrations verbatim, plus 0039 / 0040 / 0041
-deploy/     docker-compose.yml, migrate.sh, restore SQL
-```
+**Silver prices off silver.** `app.metal_purity` used to multiply every purity
+by the pure *gold* rate, so 925 silver was priced at 0.925 × gold. A purity now
+belongs to a metal and reads that metal's rate — in the app, in the quote
+calculator, everywhere.
 
----
+**The security model is tested.** 45 RLS policies and 111 inline capability
+gates became permissions plus service-layer checks, and for the first time
+there is a test that logs in as a SALES user, renders every screen and the CSV
+export, and asserts no cost, vendor or margin value appears anywhere. It runs
+on every commit.
 
 ## Rules
 
-**Never commit:** the Supabase direct connection string, Contabo S3 keys, the JWT secret, `logins.csv`, or any `.dump`. `.gitignore` covers the obvious shapes, but the real defence is not putting them in a file. Secrets live in Dokploy's Environment tab.
+**Never commit:** the Supabase connection string, Contabo keys, `logins.csv`,
+or any `.dump`. `.gitignore` covers the obvious shapes; the real defence is not
+putting them in a file. Secrets live in Dokploy's Environment tab.
 
-The `anon` publishable key already present in the two HTML files is *not* a secret — it identifies the project and nothing else, and every permission is enforced by row-level security and by capability checks inside the `api` functions.
+**All writes go through services.** `stock/services.py` and `crm/services.py`
+hold the rules the SQL functions used to. Admin write access to ledger-touching
+models is switched off for that reason.
 
-**Phases 0 and 6 cannot be done by an agent.** Pre-flight needs a live Supabase connection and a Contabo bucket; the cutover needs VPS access and a browser on each device that has ever run the CRM. Everything else — Phases 1–5 and authoring 0041 — is ordinary repo work.
+**Masking is decided in one place.** `stock/masking.py`. A screen that builds
+its own row dict is how a cost reaches a showroom login.
 
-**Preserve the security model.** The stock schema carries 45 RLS policies, 109 `SECURITY DEFINER` functions with `search_path` pinned, 111 capability gates and column-level cost masking. `0013_fix_privilege_escalation.sql` fixes a real `current_user`/`session_user` bug — the plan's risk #1 is re-shipping it by letting PostgREST connect as `postgres`. Read that migration before touching auth.
-
-**There are no tests in either app.** Verification is the checklist at the end of the plan, run by hand.
+**Port-as-is.** The screens are the old screens. A visual refresh is
+post-cutover work; doing it during the port turns every difference into a
+question of whether it was deliberate.
