@@ -18,6 +18,7 @@ did not look alike.
   <script>document.documentElement.dataset.theme = localStorage.theme ??
     (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : '');</script>
   <script src="{% static 'vendor/htmx.min.js' %}" defer></script>
+  <script src="{% static 'js/crm-upload.js' %}" defer></script>
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
 {% if user.is_authenticated %}

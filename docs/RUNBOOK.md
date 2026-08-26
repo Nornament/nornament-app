@@ -95,7 +95,23 @@ python manage.py load_legacy            # users, stock, crm — one transaction
 python manage.py load_legacy --dry-run  # counts, then rolls back
 python manage.py import_logins logins.csv
 python manage.py import_device_backup backups/*.json
+python manage.py push_inline_media      # CRM photos -> the bucket
+python manage.py audit_media            # and prove none went missing
 ```
+
+**Run `push_inline_media` after every `load_legacy`.** The stock app kept its
+media in R2 and `app.media_asset` points at the keys, so those come across as
+references. The CRM never used object storage at all — its photos are base64
+data URIs inside the `data` JSONB, under five different keys (`media[].data`,
+`photos[]`, `photo`, `beforePhoto`, `afterPhoto`). `load_legacy` decodes them
+onto the row, and `push_inline_media` moves them into the bucket and clears the
+column. Because the load is wipe-and-reload, a re-run puts them back on the row
+and the push has to follow it.
+
+`audit_media` is the gate: it counts the images in each legacy blob, compares
+that with the `MediaAsset` rows the record ended up with, and HEADs every
+object it claims is in the bucket. Nonzero exit if anything is short, so a
+clean run is the evidence that no CRM record lost a picture.
 
 `load_legacy` is wipe-and-reload, so it is idempotent by construction. Run it
 nightly until cutover; the final run should be boring.

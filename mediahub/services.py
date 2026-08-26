@@ -1,6 +1,8 @@
 """Resolving many media URLs in one pass, for a page that shows a grid."""
 from collections import defaultdict
 
+from django.urls import reverse
+
 from . import storage
 from .models import MediaAsset
 
@@ -20,8 +22,23 @@ def for_pieces(piece_ids, limit_each=None):
 
 
 def urls_for(assets):
-    """Presigned GET URLs, or ``None`` each when storage is not configured."""
+    """A URL per asset, or ``None`` where there is nothing to serve.
+
+    An asset whose bytes are still in the row is served by Django from
+    ``/media/<id>/`` rather than presigned — the CRM's photos arrived as base64
+    in a JSONB blob and have never been in a bucket. Everything else is a
+    presigned GET, and if storage is not configured those come back ``None`` so
+    the screen falls back to a placeholder instead of failing.
+    """
+    urls = {}
+    remote = []
+    for asset in assets:
+        if asset.inline_data:
+            urls[asset.pk] = reverse("mediahub:media", args=[asset.pk])
+        else:
+            remote.append(asset)
     try:
-        return {asset.pk: storage.presign_get(asset.storage_key, asset.mime_type, asset.file_name) for asset in assets}
+        urls |= {a.pk: storage.presign_get(a.storage_key, a.mime_type, a.file_name) for a in remote}
     except storage.StorageNotConfigured:
-        return {asset.pk: None for asset in assets}
+        urls |= {a.pk: None for a in remote}
+    return urls

@@ -296,6 +296,13 @@
     {% endfor %}
   </div>
   {% else %}<div class="empty">No media on this piece.</div>{% endif %}
+  {% if caps.edit_bom %}
+  <label class="drop-zone" style="display:block;margin-top:12px">
+    <input type="file" accept="image/*,video/*" multiple data-upload-scope="piece" data-upload-id="{{ piece.pk }}">
+    <span class="dim" style="font-size:12.5px">Drop photos here, or click to choose — they go straight to object storage</span>
+  </label>
+  <div class="dim" style="font-size:12.5px;margin-top:6px" data-upload-status></div>
+  {% endif %}
 </div>
 <div class="card"><h3>Social &amp; web</h3>
   <div class="bio"><dl>

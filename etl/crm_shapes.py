@@ -260,3 +260,82 @@ def repair_from_blob(row):
 def client_material_from_blob(row):
     blob, fields = _pipeline_common(row, "cm_code", "cm_code", CLIENT_MATERIAL_KEYS)
     return _apply(blob, fields, CLIENT_MATERIAL_KEYS)
+
+
+#: every key a legacy CRM row could hold an image under. The React app read
+#: ``media[0].data || photos[0] || beforePhoto``, and the customer avatar sat on
+#: ``photo`` — so all four shapes have to be walked or images go missing.
+MEDIA_KEYS = ("media", "photos", "photo", "beforePhoto", "afterPhoto")
+
+
+def _data_uri_parts(value):
+    """``data:image/jpeg;base64,…`` -> ``(mime, bytes)``, or ``None``.
+
+    Anything that is not a base64 data URI — an http URL, a stray string — is
+    returned as ``None`` so the caller can report it rather than guess.
+
+    A type the app would not serve is refused here too. ``text/html`` and
+    ``image/svg+xml`` can carry script, and these bytes are served from the
+    app's own origin until they reach the bucket; keeping them out entirely is
+    cheaper than remembering to be careful later.
+    """
+    import base64
+
+    from mediahub.storage import is_serveable
+
+    if not isinstance(value, str) or not value.startswith("data:"):
+        return None
+    header, _, payload = value.partition(",")
+    if not payload or ";base64" not in header:
+        return None
+    mime = header[5:].split(";", 1)[0] or "application/octet-stream"
+    if not is_serveable(mime):
+        return None
+    try:
+        return mime, base64.b64decode(payload, validate=False)
+    except Exception:
+        return None
+
+
+def media_from_blob(blob):
+    """Every image on one CRM row, as ``dict`` kwargs for ``MediaAsset``.
+
+    The CRM never used object storage: its photos are base64 data URIs inside
+    the JSONB. They come across as bytes on the row, which
+    ``manage.py push_inline_media`` later moves into the bucket.
+    """
+    import hashlib
+
+    out = []
+    for key in MEDIA_KEYS:
+        raw = blob.get(key)
+        if raw is None:
+            continue
+        entries = raw if isinstance(raw, list) else [raw]
+        for index, entry in enumerate(entries):
+            if isinstance(entry, dict):
+                value, name = entry.get("data"), entry.get("name")
+                legacy_id = entry.get("id")
+                kind = "VIDEO" if entry.get("type") == "video" else "PHOTO"
+            else:
+                value, name, legacy_id, kind = entry, None, None, "PHOTO"
+            parts = _data_uri_parts(value)
+            if parts is None:
+                continue
+            mime, payload = parts
+            out.append(
+                {
+                    "kind": "VIDEO" if mime.startswith("video/") else kind,
+                    "file_name": name or f"{key}-{index + 1}",
+                    "mime_type": mime,
+                    "inline_data": payload,
+                    "bytes": len(payload),
+                    "file_size_kb": int(len(payload) / 1024) or None,
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                    "rank_order": (index + 1) * 10,
+                    "caption": None if key in ("media", "photos", "photo") else key,
+                    "storage_provider": "INLINE",
+                    "legacy_id": legacy_id,
+                }
+            )
+    return out

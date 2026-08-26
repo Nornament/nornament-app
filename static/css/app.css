@@ -623,3 +623,10 @@ a{text-decoration:none}
 .body a:not([class]){color:inherit}
 .body a:not([class]):hover{text-decoration:underline}
 a.btn,a.chip,a.code,a.fchip{text-decoration:none}
+
+/* Upload target on the piece Media tab. The CRM half has its own; this is the
+   same control in the stock app's palette. */
+.drop-zone{border:1.5px dashed var(--rule);border-radius:9px;padding:22px 14px;text-align:center;
+  cursor:pointer;background:var(--surface-2);transition:border-color .15s,background .15s}
+.drop-zone:hover{border-color:var(--brand);background:var(--brand-soft)}
+.drop-zone input{display:none}

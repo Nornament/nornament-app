@@ -52,6 +52,13 @@ class MediaAsset(models.Model):
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, db_column="uploaded_by", related_name="+"
     )
+    # The CRM kept its photos as base64 inside the JSONB blob — they were never
+    # in a bucket at all. They land here on import so nothing is lost, and
+    # ``manage.py push_inline_media`` moves them into object storage and clears
+    # this column once credentials exist.
+    inline_data = models.BinaryField(
+        null=True, blank=True, help_text="Bytes held in the row because the object is not in the bucket yet."
+    )
     uploaded_at = models.DateTimeField(default=timezone.now)
     confirmed_at = models.DateTimeField(
         null=True, blank=True, help_text="Set when the object is known to exist in the bucket. An unconfirmed row is a reservation."

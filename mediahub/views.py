@@ -8,7 +8,7 @@ import json
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, permission_required
-from django.http import HttpResponseBadRequest, JsonResponse
+from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -52,6 +52,10 @@ def presign(request):
         return HttpResponseBadRequest(str(error))
     file_name = payload.get("file_name") or "upload.bin"
     content_type = payload.get("mime_type") or storage.guess_mime(file_name)
+    if not storage.is_serveable(content_type):
+        # the browser names its own content type; an object we would refuse to
+        # serve has no business being in the bucket under that name either
+        return HttpResponseBadRequest(f"{content_type} is not an accepted media type")
     key = storage.build_key(payload["scope"], payload["entity_id"], file_name)
 
     asset = MediaAsset.objects.create(
@@ -121,6 +125,24 @@ def proxy_upload(request):
 def media_redirect(request, media_id):
     """A short-lived GET URL. ``ResponseContentType`` so a HEIC renders as JPEG."""
     asset = get_object_or_404(MediaAsset, pk=media_id, is_archived=False)
+    if asset.inline_data:
+        # Never reached the bucket — the CRM stored these as base64 in the row,
+        # so unlike the presigned path this is served from *our* origin. The
+        # MIME came out of a data URI header that whoever uploaded through the
+        # old CRM controlled, so it is not trusted: anything off the allowlist
+        # is handed back as an octet-stream attachment, and the headers stop a
+        # sniffing browser or an embedded script from making a photo into XSS.
+        serveable = storage.is_serveable(asset.mime_type)
+        response = HttpResponse(
+            bytes(asset.inline_data),
+            content_type=asset.mime_type if serveable else "application/octet-stream",
+        )
+        name = (asset.file_name or f"{asset.media_ref or asset.pk}").replace('"', "")
+        response["Content-Disposition"] = f'{"inline" if serveable else "attachment"}; filename="{name}"'
+        response["X-Content-Type-Options"] = "nosniff"
+        response["Content-Security-Policy"] = "default-src 'none'; sandbox"
+        response["Cache-Control"] = "private, max-age=3600"
+        return response
     try:
         url = storage.presign_get(asset.storage_key, asset.mime_type, asset.file_name)
     except storage.StorageNotConfigured:

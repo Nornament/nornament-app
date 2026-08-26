@@ -1,6 +1,8 @@
-/* Photo upload for the CRM screens: presign → PUT → confirm, the same three
-   mediahub calls the legacy app made against Supabase storage. No framework —
-   the page reloads on success, which is what every other CRM write does. */
+/* Photo upload for both halves of the app: presign → PUT → confirm, the same
+   three mediahub calls, so every new photo lands in object storage rather than
+   in a database column. Scope comes off the input, so the CRM's entities and a
+   stock piece use the same code path. No framework — the page reloads on
+   success, which is what every other write here does. */
 (function () {
   const csrf = () => (document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/) || [])[1] || '';
 

@@ -97,3 +97,50 @@ def test_status_log_becomes_events():
     )
     assert events[0]["entity_type"] == "order" and events[0]["entity_id"] == 7
     assert events[0]["status"] == "Order Confirmed"
+
+
+# ── the CRM's base64 photos ──────────────────────────────────────────────
+def test_a_data_uri_becomes_bytes_on_the_row():
+    """The CRM never used object storage — its photos are base64 in the JSONB."""
+    from etl.crm_shapes import media_from_blob
+
+    one_pixel = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGP4DwABAQEAWk1v8QAAAABJRU5ErkJggg=="
+    assets = media_from_blob({"media": [{"id": "abc", "name": "front.png", "type": "image", "data": one_pixel}]})
+    assert len(assets) == 1
+    asset = assets[0]
+    assert asset["mime_type"] == "image/png"
+    assert asset["file_name"] == "front.png"
+    assert asset["inline_data"].startswith(b"\x89PNG")
+    assert asset["bytes"] == len(asset["inline_data"])
+    assert len(asset["sha256"]) == 64
+
+
+def test_every_key_the_legacy_hid_a_photo_under_is_walked():
+    """``media[].data``, ``photos[]``, ``photo``, ``beforePhoto``, ``afterPhoto``.
+
+    The React card read three of these and the avatar used a fourth; missing one
+    loses pictures silently, which is what this is here to stop.
+    """
+    from etl.crm_shapes import media_from_blob
+
+    uri = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP/AABEIAAEAAQMBIgACEQEDEQH/xAAfAAABBQEBAQEBAQAAAAAAAAAAAQIDBAUGBwgJCgv/2gAIAQEAAD8A0s8g/9k="
+    blob = {
+        "media": [{"data": uri, "name": "a.jpg"}],
+        "photos": [uri, uri],
+        "photo": uri,
+        "beforePhoto": uri,
+        "afterPhoto": uri,
+    }
+    assets = media_from_blob(blob)
+    assert len(assets) == 6
+    assert {a["caption"] for a in assets} == {None, "beforePhoto", "afterPhoto"}
+
+
+def test_a_value_that_is_not_a_data_uri_is_skipped_not_guessed():
+    """An http URL or a stray string is reported by the loader, never decoded."""
+    from etl.crm_shapes import media_from_blob
+
+    assert media_from_blob({"media": [{"data": "https://example.test/a.jpg"}]}) == []
+    assert media_from_blob({"photo": ""}) == []
+    assert media_from_blob({"photo": None}) == []
+    assert media_from_blob({}) == []

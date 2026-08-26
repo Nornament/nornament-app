@@ -51,7 +51,10 @@ TABLES = {
     "app.repair_job": ("repair_job", ["labour_cost"], []),
     "app.stock_count": ("stock_count", [], ["started_at", "closed_at"]),
     "app.stock_count_scan": ("stock_count_scan", [], ["scanned_at"]),
-    "app.media_asset": ("media_asset", [], ["uploaded_at"]),
+    # scope IS NULL is the stock half. The CRM's photos never lived in
+    # app.media_asset — they were base64 inside a JSONB blob — so they are
+    # counted against the blobs instead, in check_crm_media below.
+    "app.media_asset": ("media_asset", [], ["uploaded_at"], "scope IS NULL"),
     "app.rate_chart_line": ("rate_chart_line", ["cost_rate", "sale_rate"], []),
     "public.customers": ("crm_customer", [], ["created_at"]),
     "public.orders": ("crm_order", [], ["created_at"]),
@@ -134,6 +137,37 @@ class Command(BaseCommand):
             )
             sys.exit(1)
         self.stdout.write(f"ok  crm purchases -> sale       {actual_rows:>8} rows, {actual_sum}")
+        self.check_crm_media()
+
+    def check_crm_media(self):
+        """The base64 images in the CRM blobs against the media rows they became.
+
+        The other table with no like-for-like counterpart. Every CRM photo was
+        a data URI inside JSONB; if the decoder ever silently skips one, the
+        counts stop agreeing here rather than a screen quietly losing a picture.
+        """
+        from etl.crm_shapes import media_from_blob
+        from mediahub.models import MediaAsset
+
+        sources = {
+            "public.customers": "customer",
+            "public.enquiries": "enquiry",
+            "public.orders": "order",
+            "public.repairs": "repair",
+            "public.client_materials": "client_material",
+        }
+        expected = 0
+        for table in sources:
+            if not legacy.table_exists(table):
+                continue
+            for row in legacy.rows(f"SELECT data FROM {table}"):
+                expected += len(media_from_blob(_blob(row)))
+
+        actual = MediaAsset.objects.filter(scope__in=sources.values()).count()
+        if expected != actual:
+            self.stderr.write(f"CRM media: legacy blobs={expected} images; new media rows={actual}")
+            sys.exit(1)
+        self.stdout.write(f"ok  crm blobs -> media_asset    {actual:>8} images")
 
     def stats(self, connection, table, money, stamps, where=None):
         selects = ["count(*) AS rows"]

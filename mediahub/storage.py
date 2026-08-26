@@ -11,6 +11,34 @@ from functools import lru_cache
 from django.conf import settings
 
 
+#: The only content types this app will hand back from its own origin.
+#:
+#: An asset's MIME comes from the legacy data URI header, which whoever
+#: uploaded through the old CRM controlled. Serving ``text/html`` or
+#: ``image/svg+xml`` same-origin turns a stored photo into stored XSS with the
+#: viewer's session, so anything outside this list is rejected on the way in
+#: and coerced to a download on the way out.
+SERVEABLE_TYPES = frozenset(
+    {
+        "image/jpeg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+        "image/heic",
+        "image/heif",
+        "image/avif",
+        "video/mp4",
+        "video/quicktime",
+        "video/webm",
+        "application/pdf",
+    }
+)
+
+
+def is_serveable(mime_type):
+    return (mime_type or "").split(";", 1)[0].strip().lower() in SERVEABLE_TYPES
+
+
 class StorageNotConfigured(RuntimeError):
     pass
 

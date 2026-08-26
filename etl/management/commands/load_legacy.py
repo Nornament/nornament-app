@@ -14,6 +14,7 @@ from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.db.models import F
+from django.utils import timezone
 
 from accounts.models import User, sync_role_groups
 from crm.models import (
@@ -36,7 +37,9 @@ from crm.models import (
 from crm.models import Location as CrmLocation
 from etl import legacy
 from etl.crm_shapes import (
+    _data_uri_parts,
     blob_of,
+    media_from_blob,
     client_material_from_blob,
     customer_from_blob,
     enquiry_from_blob,
@@ -267,6 +270,14 @@ class Command(BaseCommand):
         return mapped
 
     # ── crm ──────────────────────────────────────────────────────────────
+    #: label -> the ``MediaAsset.scope`` a CRM asset of that entity carries
+    MEDIA_SCOPES = {
+        "crm.Enquiry": "enquiry",
+        "crm.Order": "order",
+        "crm.Repair": "repair",
+        "crm.ClientMaterial": "client_material",
+    }
+
     def load_crm(self):
         """The JSONB blobs become real rows, and purchases become sales.
 
@@ -275,8 +286,12 @@ class Command(BaseCommand):
         ``EtlException`` row rather than a silent null.
         """
         counts = {}
+        crm_media = 0
         for model in (StatusEvent, Occasion, RelatedPerson, Gift, OutreachEntry, Enquiry, Order, Repair, ClientMaterial):
             model.objects.all().delete()
+        # CRM assets only — the stock ones come from app.media_asset and are
+        # loaded by the table pass, so wiping all of them would lose 418 rows
+        MediaAsset.objects.filter(scope__isnull=False).delete()
         Sale.objects.filter(source=Sale.CRM).delete()
         Customer.objects.all().delete()
         EtlException.objects.all().delete()
@@ -288,6 +303,7 @@ class Command(BaseCommand):
             for event in status_events_from_blob(blob_of(row), "customer", customer.pk):
                 StatusEvent.objects.create(**event)
             self.load_customer_children(customer, blob_of(row))
+            crm_media += self.load_crm_media("customer", customer.pk, blob_of(row))
         counts["crm.Customer"] = len(by_legacy_id)
 
         # second pass: referrals and FoN parents, now that every customer exists
@@ -323,6 +339,7 @@ class Command(BaseCommand):
                         detail={"customer_id": row.get("customer_id")},
                     )
                 entity = model.objects.create(customer=customer, **builder(row))
+                crm_media += self.load_crm_media(self.MEDIA_SCOPES[label], entity.pk, blob_of(row))
                 for event in status_events_from_blob(blob_of(row), model.__name__.lower(), entity.pk):
                     StatusEvent.objects.create(**event)
                 loaded += 1
@@ -344,7 +361,67 @@ class Command(BaseCommand):
                 Salesperson.objects.create(name=name)
             counts["crm.Location"] = CrmLocation.objects.count()
             counts["crm.Salesperson"] = Salesperson.objects.count()
+        counts["mediahub.MediaAsset (CRM)"] = crm_media
         return counts
+
+    def load_crm_media(self, scope, entity_id, blob):
+        """The CRM's base64 photos, as real media rows.
+
+        They were never in a bucket, so they arrive with their bytes on the
+        row. ``manage.py push_inline_media`` moves them into object storage.
+        Anything under a media key that is not a base64 data URI is reported
+        rather than dropped — that is the whole point of the exceptions table.
+        """
+        made = 0
+        for spec in media_from_blob(blob):
+            spec.pop("legacy_id", None)
+            MediaAsset.objects.create(
+                media_ref=self._next_media_ref(),
+                scope=scope,
+                scope_id=str(entity_id),
+                confirmed_at=timezone.now(),
+                **spec,
+            )
+            made += 1
+        for key in ("media", "photos", "photo", "beforePhoto", "afterPhoto"):
+            raw = blob.get(key)
+            if raw is None:
+                continue
+            entries = raw if isinstance(raw, list) else [raw]
+            for entry in entries:
+                value = entry.get("data") if isinstance(entry, dict) else entry
+                if not isinstance(value, str) or not value:
+                    continue
+                if not value.startswith("data:"):
+                    EtlException.objects.create(
+                        entity=f"{scope}.media",
+                        legacy_id=str(entity_id),
+                        problem="media value is not a base64 data URI",
+                        detail={"key": key, "value": value[:200]},
+                    )
+                elif _data_uri_parts(value) is None:
+                    # a data URI we refused: a type we will not serve, or bytes
+                    # that would not decode. Reported, never silently skipped.
+                    EtlException.objects.create(
+                        entity=f"{scope}.media",
+                        legacy_id=str(entity_id),
+                        problem="media data URI refused (unsupported type or bad base64)",
+                        detail={"key": key, "header": value[:80]},
+                    )
+        return made
+
+    def _next_media_ref(self):
+        self._media_seq = getattr(self, "_media_seq", None)
+        if self._media_seq is None:
+            last = (
+                MediaAsset.objects.exclude(media_ref=None)
+                .order_by("-media_ref")
+                .values_list("media_ref", flat=True)
+                .first()
+            )
+            self._media_seq = int(last[1:]) if last and last[1:].isdigit() else 0
+        self._media_seq += 1
+        return f"M{self._media_seq:06d}"
 
     def load_customer_children(self, customer, blob):
         for occasion in blob.get("occasions") or []:
