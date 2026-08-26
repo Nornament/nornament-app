@@ -15,3 +15,18 @@ def lookup(mapping, key):
         return mapping.get(key)
     except AttributeError:
         return None
+
+
+@register.filter
+def wa_number(phone):
+    """A phone as wa.me digits — the legacy CRM's ``waNumber``, ported as-is.
+
+    Digits only; an 11-digit number loses a leading 0; a bare 10-digit local
+    number gains the 91 country code.
+    """
+    digits = "".join(ch for ch in str(phone or "") if ch.isdigit())
+    if len(digits) == 11 and digits.startswith("0"):
+        digits = digits[1:]
+    if len(digits) == 10:
+        digits = "91" + digits
+    return digits

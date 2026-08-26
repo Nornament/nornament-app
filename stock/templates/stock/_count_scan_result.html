@@ -1,16 +1,16 @@
-{% comment %}What a scan POST returns: the verdict line plus the whole state block,
+{% comment %}What a scan POST returns: the legacy verdict banner plus the whole state block,
 swapped in place of #count-state so the counter never loses their place.{% endcomment %}
 <div id="count-state">
   {% if result %}
-  <div class="card">
-    <p><span class="badge {{ result.verdict }}">{{ result.verdict }}</span>
-       <span class="mono">{{ result.code }}</span>
-       <span class="muted small">{{ result.note|default:"" }}</span></p>
+  <div class="vbanner {% if result.verdict == 'FOUND' %}vb-good{% elif result.verdict == 'ELSEWHERE' or result.verdict == 'NOT_STOCK' %}vb-warn{% elif result.verdict == 'ALREADY' %}vb-mute{% else %}vb-crit{% endif %}">
+    <span class="vcode">{{ result.code|default:"—" }}</span>
+    <b class="vsay">{% if result.verdict == 'FOUND' %}Found{% elif result.verdict == 'ELSEWHERE' %}Elsewhere{% elif result.verdict == 'NOT_STOCK' %}Not in stock{% elif result.verdict == 'ALREADY' %}Already counted{% elif result.verdict == 'UNKNOWN' %}Unknown code{% elif result.verdict == 'ERROR' %}Not recorded{% else %}{{ result.verdict }}{% endif %}</b>
+    <span class="vsay" style="opacity:.85">{% if result.note %}{{ result.note }}{% elif result.verdict == 'FOUND' %}where the books say it is{% endif %}</span>
     {% if result.code and count.status == 'OPEN' %}
-    <form hx-post="{% url 'stock:count_unscan' count.pk %}" hx-target="#count-state" hx-swap="outerHTML"
-          method="post" action="{% url 'stock:count_unscan' count.pk %}" class="inline">
+    <form class="inline" hx-post="{% url 'stock:count_unscan' count.pk %}" hx-target="#count-state" hx-swap="outerHTML"
+          method="post" action="{% url 'stock:count_unscan' count.pk %}">
       {% csrf_token %}<input type="hidden" name="code" value="{{ result.code }}">
-      <button class="link small">Undo this scan</button>
+      <button class="btn sm">Undo this scan</button>
     </form>
     {% endif %}
   </div>

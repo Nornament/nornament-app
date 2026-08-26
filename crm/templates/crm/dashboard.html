@@ -1,43 +1,109 @@
 {% extends "base.html" %}
 {% block title %}CRM · Nornament{% endblock %}
 {% block content %}
-<h1>CRM</h1>
-<div class="grid cols-4">
-  <div class="card stat"><div class="value">{{ customers }}</div><div class="label">Customers</div></div>
-  <div class="card stat"><div class="value">{{ pipeline.enquiries }}</div><div class="label">Open enquiries</div></div>
-  <div class="card stat"><div class="value">{{ pipeline.orders }}</div><div class="label">Orders in flight</div></div>
-  <div class="card stat"><div class="value">{{ pipeline.repairs }}</div><div class="label">Repairs open</div></div>
-  {% if month_revenue %}<div class="card stat"><div class="value">₹{{ month_revenue|floatformat:0 }}</div><div class="label">Month revenue</div></div>{% endif %}
-  <div class="card stat"><div class="value">{{ fon_members }}</div><div class="label">FoN members</div></div>
+<h1>Pipeline</h1>
+
+<div class="kpis">
+  <div class="kpi"><div class="lbl">Customers</div><div class="val">{{ customers }}</div>
+    <div class="sub">{{ fon_members }} FoN member{{ fon_members|pluralize }}</div></div>
+  <div class="kpi"><div class="lbl">Hot</div><div class="val">{{ temps.hot }}</div></div>
+  <div class="kpi"><div class="lbl">Warm</div><div class="val">{{ temps.warm }}</div></div>
+  <div class="kpi"><div class="lbl">Cold</div><div class="val">{{ temps.cold }}</div></div>
+  <div class="kpi"><div class="lbl">VIP</div><div class="val">{{ temps.vip }}</div></div>
+  {% if customer_value is not None %}
+  <div class="kpi"><div class="lbl">Total customer value</div><div class="val">₹{{ customer_value|floatformat:0 }}</div></div>
+  {% endif %}
+  <div class="kpi"><div class="lbl">Open enquiries</div><div class="val">{{ pipeline.enquiries }}</div></div>
+  <div class="kpi"><div class="lbl">Open orders</div><div class="val">{{ pipeline.orders }}</div></div>
+  <div class="kpi"><div class="lbl">Open repairs</div><div class="val">{{ pipeline.repairs }}</div></div>
+  <div class="kpi"><div class="lbl">Client materials</div><div class="val">{{ pipeline.client_materials }}</div></div>
+  {% if month_revenue %}
+  <div class="kpi"><div class="lbl">Month revenue</div><div class="val">₹{{ month_revenue|floatformat:0 }}</div></div>
+  {% endif %}
 </div>
+
+<div class="grid cols-4">
+  {% for label, kind, url_name, statuses in boards %}
+  <div class="card">
+    <div class="spread">
+      <h2>{{ label }}</h2>
+      <a class="btn sm" href="{% url url_name %}">View all →</a>
+    </div>
+    <table>
+      {% for status, count in statuses %}
+      <tr><td>{% include "crm/_status_chip.html" with status=status kind=kind %}</td>
+          <td class="num">{{ count }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endfor %}
+</div>
+
 <div class="grid cols-3">
   <div class="card">
-    <h2>Follow-ups due</h2>
+    <div class="spread">
+      <h2>Follow-ups due</h2>
+      <a class="btn sm" href="{% url 'crm:enquiry_list' %}">View all →</a>
+    </div>
     <table>
       {% for enquiry in follow_ups %}
-      <tr><td class="mono">{{ enquiry.enquiry_code }}</td><td>{{ enquiry.customer.name|default:"—" }}</td>
-          <td class="small muted">{{ enquiry.follow_up_date }}</td></tr>
-      {% empty %}<tr><td class="muted">Nothing due.</td></tr>{% endfor %}
+      <tr>
+        <td class="code">{{ enquiry.enquiry_code }}</td>
+        <td>{{ enquiry.customer.name|default:"—" }}
+          <div class="dim small">{{ enquiry.item_of_interest|default:""|truncatechars:32 }}</div></td>
+        <td class="small dim">{{ enquiry.follow_up_date }}</td>
+        <td>{% include "crm/_status_chip.html" with status=enquiry.status kind="enquiry" %}</td>
+      </tr>
+      {% empty %}<tr><td class="dim">Nothing due.</td></tr>{% endfor %}
     </table>
   </div>
+
   <div class="card">
-    <h2>Orders due</h2>
+    <div class="spread">
+      <h2>Orders due</h2>
+      <a class="btn sm" href="{% url 'crm:order_list' %}">View all →</a>
+    </div>
     <table>
       {% for order in due_orders %}
-      <tr><td class="mono">{{ order.order_code }}</td><td>{{ order.customer.name|default:"—" }}</td>
-          <td class="small muted">{{ order.status }} · {{ order.expected_delivery }}</td></tr>
-      {% empty %}<tr><td class="muted">Nothing due.</td></tr>{% endfor %}
+      <tr>
+        <td class="code">{{ order.order_code }}</td>
+        <td>{{ order.customer.name|default:"—" }}
+          <div class="dim small">{{ order.item_description|default:""|truncatechars:32 }}</div></td>
+        <td class="small dim">{{ order.expected_delivery }}</td>
+        <td>{% include "crm/_status_chip.html" with status=order.status kind="order" %}</td>
+      </tr>
+      {% empty %}<tr><td class="dim">Nothing due.</td></tr>{% endfor %}
     </table>
   </div>
+
+  <div class="card">
+    <div class="spread">
+      <h2>Upcoming reminders</h2>
+      <span class="small muted">next 30 days</span>
+    </div>
+    <table>
+      {% for reminder in reminders %}
+      <tr>
+        <td><a href="{% url 'crm:customer_detail' reminder.pk %}">{{ reminder.name }}</a>
+          <div class="dim small mono">{{ reminder.code }}</div></td>
+        <td><span class="chip {% if reminder.kind == 'Birthday' %}c-warn{% else %}c-good{% endif %}"><span class="dot"></span>{{ reminder.kind }}</span></td>
+        <td class="small dim">{% if reminder.days == 0 %}today{% else %}in {{ reminder.days }} day{{ reminder.days|pluralize }}{% endif %}</td>
+      </tr>
+      {% empty %}<tr><td class="dim">No upcoming reminders.</td></tr>{% endfor %}
+    </table>
+  </div>
+
   {% if recent_sales %}
   <div class="card">
     <h2>Recent sales</h2>
     <table>
       {% for sale in recent_sales %}
-      <tr><td class="small">{{ sale.sold_on }}</td>
-          <td>{{ sale.customer.name|default:sale.customer_name|default:"—" }}</td>
-          <td class="num mono">{{ sale.sold_price|floatformat:0 }}</td>
-          <td><span class="badge {% if sale.source == 'CRM' %}ELSEWHERE{% else %}ok{% endif %}">{{ sale.source }}</span></td></tr>
+      <tr>
+        <td class="small dim">{{ sale.sold_on }}</td>
+        <td>{{ sale.customer.name|default:sale.customer_name|default:"—" }}</td>
+        <td class="num">{{ sale.sold_price|floatformat:0 }}</td>
+        <td><span class="chip {% if sale.source == 'CRM' %}c-neutral{% else %}c-good{% endif %}"><span class="dot"></span>{{ sale.source }}</span></td>
+      </tr>
       {% endfor %}
     </table>
   </div>

@@ -9,6 +9,7 @@ returning the same partials the full page renders.
 """
 import csv
 from decimal import Decimal
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
@@ -21,16 +22,22 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from accounts.capabilities import EDIT_BOM, VIEW_COST, VIEW_MARGIN, VIEW_SALE
+from mediahub import services as media_services
+
 from . import services
-from .enums import COUNTABLE_STATES, MovementType, StockState
+from .enums import COUNTABLE_STATES, MaterialClass, MovementType, StockState, TERMINAL_STATES
 from .masking import allowed, piece_row
 from .models import (
     BomLine,
+    BomVersion,
+    JobCard,
     Location,
     Material,
+    MaterialCategory,
     Metal,
     MetalPurity,
     Piece,
+    PieceCertificate,
     RateChart,
     RateChartLine,
     RepairJob,
@@ -57,8 +64,15 @@ def dashboard(request):
         live.values("location__code", "location__name").annotate(pieces=Count("pk")).order_by("location__code")
     )
     by_state = pieces.values("stock_state").annotate(pieces=Count("pk")).order_by("stock_state")
+    # legacy "live": anything received and not yet terminal — repairs included
+    alive = pieces.exclude(stock_state__in=list(TERMINAL_STATES)).exclude(stock_state=StockState.NOT_RECEIVED)
+    priced = Q(bom_versions__is_current=True, bom_versions__total_cost_price__gt=0)
     context = {
         "live_count": live.count(),
+        "in_stock_count": pieces.filter(stock_state=StockState.IN_STOCK).count(),
+        "on_approval_count": pieces.filter(stock_state=StockState.ON_APPROVAL).count(),
+        "in_repair_count": pieces.filter(stock_state=StockState.IN_REPAIR).count(),
+        "unpriced_count": alive.count() - alive.filter(priced).count(),
         "by_location": by_location,
         "by_state": by_state,
         "open_counts": StockCount.objects.filter(status=StockCount.OPEN).select_related("location"),
@@ -67,7 +81,15 @@ def dashboard(request):
         )[:10],
         "metals": Metal.objects.filter(is_active=True),
         "should_make": services.should_make(request.user)[:10],
+        "recent_moves": StockMovement.objects.filter(piece__in=pieces).select_related(
+            "piece", "from_location", "to_location", "user"
+        )[:10],
     }
+    if allowed(request.user, "cost_price"):
+        context["stock_value"] = (
+            BomVersion.objects.filter(piece__in=alive, is_current=True).aggregate(value=Sum("total_cost_price"))["value"]
+            or Decimal("0")
+        )
     if allowed(request.user, "sold_price"):
         month_start = timezone.localdate().replace(day=1)
         context["month_sales"] = Sale.objects.filter(sold_on__gte=month_start).aggregate(
@@ -77,6 +99,12 @@ def dashboard(request):
 
 
 def _filtered(request):
+    """The list filter, shared by the page, the HTMX rows and the export.
+
+    ``state`` and ``location`` repeat (``?state=IN_STOCK&state=RESERVED``) —
+    the legacy multi-select chips. A single value still works: ``getlist``
+    reads both shapes.
+    """
     pieces = _visible_pieces(request)
     query = (request.GET.get("q") or "").strip()
     if query:
@@ -87,30 +115,67 @@ def _filtered(request):
             | Q(huid__icontains=query)
             | Q(src_ref__icontains=query)
         )
-    state = request.GET.get("state")
-    if state:
-        pieces = pieces.filter(stock_state=state)
-    location = request.GET.get("location")
-    if location:
-        pieces = pieces.filter(location__code=location)
-    return pieces, query
+    states = [value for value in request.GET.getlist("state") if value]
+    if states:
+        pieces = pieces.filter(stock_state__in=states)
+    locations = [value for value in request.GET.getlist("location") if value]
+    if locations:
+        pieces = pieces.filter(location__code__in=locations)
+    if request.GET.get("unpriced"):
+        pieces = pieces.exclude(bom_versions__is_current=True, bom_versions__total_cost_price__gt=0)
+    return pieces, query, states, locations
+
+
+def _filter_qs(query, states, locations):
+    params = ([("q", query)] if query else []) + [("state", s) for s in states] + [("location", c) for c in locations]
+    return urlencode(params)
+
+
+def _filter_chips(options, selected, other_qs_parts):
+    """One legacy ``.fchip`` per option: its toggled-URL querystring, precomputed."""
+    chips = []
+    for value, label in options:
+        toggled = [v for v in selected if v != value] if value in selected else selected + [value]
+        chips.append({"label": label, "active": value in selected, "qs": other_qs_parts(toggled)})
+    return chips
+
+
+def _pin_thumbs(page):
+    """First confirmed photo per piece on this page, presigned — or nothing at
+    all when media storage is not configured (``urls_for`` swallows
+    ``StorageNotConfigured``), so the screen falls back to the table."""
+    firsts = [assets[0] for assets in media_services.for_pieces([p.pk for p in page], limit_each=1).values() if assets]
+    urls = media_services.urls_for(firsts)
+    return {asset.piece_id: urls[asset.pk] for asset in firsts if urls.get(asset.pk)}
 
 
 @login_required
 def piece_list(request):
-    pieces, query = _filtered(request)
+    pieces, query, states, locations = _filtered(request)
     page = Paginator(pieces, PAGE_SIZE).get_page(request.GET.get("page"))
+    rows = [piece_row(request.user, piece) for piece in page]
+    thumbs = _pin_thumbs(page)
     return render(
         request,
         "stock/piece_list.html",
         {
             "page": page,
-            "rows": [piece_row(request.user, piece) for piece in page],
+            "rows": rows,
+            "pins": [
+                {"row": row, "thumb": thumbs[row["jewel_code_id"]]} for row in rows if row["jewel_code_id"] in thumbs
+            ],
             "q": query,
-            "states": StockState.choices,
-            "locations": Location.objects.filter(is_active=True),
-            "selected_state": request.GET.get("state", ""),
-            "selected_location": request.GET.get("location", ""),
+            "state_chips": _filter_chips(
+                StockState.choices, states, lambda toggled: _filter_qs(query, toggled, locations)
+            ),
+            "location_chips": _filter_chips(
+                [(l.code, l.name) for l in Location.objects.filter(is_active=True)],
+                locations,
+                lambda toggled: _filter_qs(query, states, toggled),
+            ),
+            "selected_states": states,
+            "selected_locations": locations,
+            "filter_qs": _filter_qs(query, states, locations),
             "total": pieces.count(),
         },
     )
@@ -119,7 +184,7 @@ def piece_list(request):
 @login_required
 def piece_rows(request):
     """The HTMX half of the list: the same rows, no chrome."""
-    pieces, _ = _filtered(request)
+    pieces, _, _, _ = _filtered(request)
     page = Paginator(pieces, PAGE_SIZE).get_page(request.GET.get("page"))
     return render(
         request,
@@ -132,6 +197,7 @@ def piece_rows(request):
 def piece_detail(request, jewel_code):
     piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
     row = piece_row(request.user, piece)
+    live_of_design = Piece.objects.filter(style=piece.style, stock_state=StockState.IN_STOCK).count()
     context = {
         "piece": piece,
         "row": row,
@@ -141,7 +207,24 @@ def piece_detail(request, jewel_code):
         "media": piece.media.filter(is_archived=False).order_by("rank_order"),
         "locations": Location.objects.filter(is_active=True),
         "sale": Sale.objects.filter(piece=piece).first() if allowed(request.user, "sold_price") else None,
+        "certificate": PieceCertificate.objects.filter(piece=piece).first(),
+        "planning": {
+            "floor": piece.style.nos_min_qty,
+            "live": live_of_design,
+            "short": max(0, piece.style.nos_min_qty - live_of_design),
+        },
     }
+    if allowed(request.user, "gold_rate_used"):
+        purity = MetalPurity.objects.select_related("metal").filter(pk=piece.metal_purity or "").first()
+        if purity:
+            context["rate_derivation"] = {
+                "metal": purity.metal.name,
+                "pure_rate": purity.metal.pure_rate,
+                "sale_pct": purity.sale_factor * 100,
+                "as_on": purity.metal.rate_as_on,
+            }
+    if allowed(request.user, "vendor_name"):
+        context["job_card"] = JobCard.objects.filter(piece=piece).order_by("-issued_on").first()
     return render(request, "stock/piece_detail.html", context)
 
 
@@ -150,11 +233,22 @@ def piece_detail(request, jewel_code):
 def piece_bom(request, jewel_code):
     """The material breakup. Gated whole — this is the ``materials`` capability."""
     piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
-    lines = BomLine.objects.filter(piece=piece, version_no=piece.current_bom_version).select_related(
-        "material", "material__category"
+    version = piece.current_bom()
+    lines = (
+        BomLine.objects.filter(piece=piece, version_no=piece.current_bom_version)
+        .select_related("material", "material__category")
+        .order_by("material__category__sort_order", "line_no")
     )
-    rows = []
+    show_cost = allowed(request.user, "cost_amount")
+    show_sale = allowed(request.user, "sale_amount")
+    ldp = services.line_dp()
+    metal_rate_today = services.alloy_cost_rate(piece.metal_purity)
+    sale_total = (version.total_sale_price if version else None) or None
+
+    groups, breakup = [], []
     for line in lines:
+        is_metal = line.material.mat_class == MaterialClass.METAL
+        share = (Decimal(100) * (line.sale_amount or 0) / sale_total) if sale_total else None
         row = {
             "line_no": line.line_no,
             "material": line.material.item_code,
@@ -168,17 +262,57 @@ def piece_bom(request, jewel_code):
             "off_chart": line.off_chart,
             "cost_rate": line.cost_rate,
             "cost_amount": line.cost_amount,
+            # today = the frozen line, except metal, which reprices live (app.current_cost)
+            "cost_rate_today": metal_rate_today if is_metal else line.cost_rate,
+            "cost_amount_today": (
+                services.round_to(metal_rate_today * (line.qty_value or 0), ldp) if is_metal else line.cost_amount
+            ),
             "sale_rate": line.sale_rate,
             "sale_amount": line.sale_amount,
+            "share_pct": services.round_to(share, 1) if share is not None else None,
+            "share_w": max(2, int(share * Decimal("0.38"))) if share is not None else 2,
             "chart_cost": services.chart_rate(line.material.item_code, line.size_band, "COST"),
             "chart_sale": services.chart_rate(line.material.item_code, line.size_band, "SALE"),
         }
-        rows.append({key: value for key, value in row.items() if allowed(request.user, key)})
-    return render(
-        request,
-        "stock/piece_bom.html",
-        {"piece": piece, "rows": rows, "version": piece.current_bom(), "row": piece_row(request.user, piece)},
-    )
+        label = line.material.category.name
+        if not groups or groups[-1]["label"] != label:
+            groups.append({"label": label, "rows": []})
+            breakup.append({"label": label, "pcs": 0, "qty": Decimal("0"), "uom": line.qty_uom, "amount": Decimal("0")})
+        groups[-1]["rows"].append({key: value for key, value in row.items() if allowed(request.user, key)})
+        breakup[-1]["pcs"] += line.pcs or 0
+        breakup[-1]["qty"] += line.qty_value or 0
+
+    # the customer-facing breakup carries one money column: sale if you may see
+    # it, else cost — same rule as the legacy screen
+    money = "sale" if show_sale else ("cost" if show_cost else None)
+    if money:
+        by_label = {group["label"]: group for group in breakup}
+        for line in lines:
+            amount = line.sale_amount if money == "sale" else line.cost_amount
+            by_label[line.material.category.name]["amount"] += amount or 0
+    context = {
+        "piece": piece,
+        "row": piece_row(request.user, piece),
+        "version": version,
+        "groups": groups,
+        "grp_span": 5 + (5 if show_cost else 0) + (3 if show_sale else 0),
+        "breakup": breakup if money else None,
+        "money": money,
+        "breakup_total": (version.total_sale_price if money == "sale" else version.total_cost_price)
+        if version and money
+        else None,
+        "cost_today_total": services.current_cost(piece) if show_cost else None,
+    }
+    if money == "sale":
+        purity = MetalPurity.objects.select_related("metal").filter(pk=piece.metal_purity or "").first()
+        if purity:
+            context["derivation"] = {
+                "metal": purity.metal.name,
+                "pure_rate": purity.metal.pure_rate,
+                "sale_pct": purity.sale_factor * 100,
+                "alloy_rate": services.alloy_sale_rate(piece.metal_purity),
+            }
+    return render(request, "stock/piece_bom.html", context)
 
 
 @login_required
@@ -187,6 +321,7 @@ def piece_scenarios(request, jewel_code):
     piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
     if not (request.user.has_perm(VIEW_SALE) or request.user.has_perm(VIEW_COST)):
         raise PermissionDenied("You cannot see pricing.")
+    show_cost = allowed(request.user, "cost_price")
     prices = []
     for scenario in Scenario.objects.filter(is_active=True).order_by("-is_default", "code"):
         if scenario.roles.exists() and not scenario.roles.filter(
@@ -194,13 +329,19 @@ def piece_scenarios(request, jewel_code):
         ).exists():
             continue
         try:
-            prices.append(services.scenario_price(piece, scenario))
+            price = services.scenario_price(piece, scenario)
         except ValidationError as error:
             messages.error(request, "; ".join(error.messages))
+            continue
+        row = price.__dict__.copy()
+        if show_cost:
+            # margin against cost today, never the frozen figure (legacy pricing tab)
+            row["margin"] = price.price - price.cost_today
+        prices.append(row)
     return render(
         request,
         "stock/piece_scenarios.html",
-        {"piece": piece, "prices": prices, "show_cost": allowed(request.user, "cost_price")},
+        {"piece": piece, "prices": prices, "show_cost": show_cost},
     )
 
 
@@ -270,12 +411,24 @@ def _message(error):
 @permission_required("accounts.manage_materials", raise_exception=True)
 def material_list(request):
     query = (request.GET.get("q") or "").strip()
+    selected_cat = (request.GET.get("cat") or "").strip()
     materials = Material.objects.select_related("category", "metal").order_by("category__sort_order", "item_code")
     if query:
         materials = materials.filter(Q(item_code__icontains=query) | Q(item_name__icontains=query))
+    if selected_cat:
+        materials = materials.filter(category_id=selected_cat)
     materials = materials.annotate(used_on_lines=Count("bom_lines"))
     template = "stock/_material_rows.html" if request.headers.get("HX-Request") else "stock/material_list.html"
-    return render(request, template, {"materials": materials, "q": query})
+    return render(
+        request,
+        template,
+        {
+            "materials": materials,
+            "q": query,
+            "categories": MaterialCategory.objects.all(),
+            "selected_cat": selected_cat,
+        },
+    )
 
 
 @login_required
@@ -288,6 +441,7 @@ def rate_list(request):
         if chart
         else RateChartLine.objects.none()
     )
+    show_multiple = allowed(request.user, "cost_rate") and allowed(request.user, "sale_rate")
     rows = []
     for line in lines:
         row = {
@@ -299,24 +453,35 @@ def rate_list(request):
             "sale_rate": line.sale_rate,
             "uom": line.rate_uom or line.material.default_uom,
         }
-        rows.append({key: value for key, value in row.items() if allowed(request.user, key)})
+        row = {key: value for key, value in row.items() if allowed(request.user, key)}
+        if show_multiple and line.cost_rate and line.sale_rate:
+            row["multiple"] = services.round_to(line.sale_rate / line.cost_rate, 2)
+        rows.append(row)
+    purity_rates = []
+    for purity in MetalPurity.objects.select_related("metal"):
+        entry = {
+            "karat": purity.karat,
+            "metal": purity.metal.name,
+            "sale_pct": purity.sale_factor * 100,
+            "sale_rate": services.metal_rate(purity.karat, "SALE"),
+        }
+        if allowed(request.user, "cost_rate"):
+            # true fineness is the cost basis; the spread over it is the margin
+            entry |= {
+                "cost_rate": services.metal_rate(purity.karat, "COST"),
+                "fineness_pct": purity.true_fineness * 100,
+                "spread_pt": (purity.sale_factor - purity.true_fineness) * 100,
+            }
+        purity_rates.append(entry)
     return render(
         request,
         "stock/rate_list.html",
         {
             "chart": chart,
             "rows": rows,
+            "show_multiple": show_multiple,
             "metals": Metal.objects.filter(is_active=True),
-            "purities": MetalPurity.objects.select_related("metal").all(),
-            "purity_rates": [
-                {
-                    "karat": purity.karat,
-                    "metal": purity.metal.name,
-                    "sale_rate": services.metal_rate(purity.karat, "SALE"),
-                    "cost_rate": services.metal_rate(purity.karat, "COST") if allowed(request.user, "cost_rate") else None,
-                }
-                for purity in MetalPurity.objects.select_related("metal")
-            ],
+            "purity_rates": purity_rates,
         },
     )
 
@@ -339,11 +504,17 @@ def count_list(request):
     counts = StockCount.objects.select_related("location", "counted_by").filter(
         location_id__in=request.user.visible_location_ids()
     )
-    return render(
-        request,
-        "stock/count_list.html",
-        {"counts": counts, "locations": Location.objects.filter(is_active=True)},
+    on_books = dict(
+        _visible_pieces(request)
+        .filter(stock_state__in=list(COUNTABLE_STATES))
+        .values_list("location_id")
+        .annotate(pieces=Count("pk"))
+        .values_list("location_id", "pieces")
     )
+    locations = list(Location.objects.filter(is_active=True))
+    for location in locations:
+        location.live_pieces = on_books.get(location.pk, 0)
+    return render(request, "stock/count_list.html", {"counts": counts, "locations": locations})
 
 
 @login_required
@@ -433,6 +604,9 @@ def sale_list(request):
             "sold_on": sale.sold_on,
             "jewel_code": sale.piece.jewel_code if sale.piece_id else None,
             "customer": sale.customer.name if sale.customer_id else sale.customer_name,
+            "customer_id": sale.customer_id,
+            "customer_code": sale.customer.customer_code if sale.customer_id else None,
+            "location": sale.location.name if sale.location_id else None,
             "source": sale.source,
             "sold_price": sale.sold_price,
             "cost_at_sale": sale.cost_at_sale,
@@ -449,10 +623,35 @@ def margin_report(request):
     sales = Sale.objects.filter(source=Sale.STOCK)
     totals = sales.aggregate(revenue=Sum("sold_price"), cost=Sum("cost_at_sale"), margin=Sum("margin_amt"))
     crm_revenue = Sale.objects.filter(source=Sale.CRM).aggregate(revenue=Sum("sold_price"))["revenue"] or Decimal("0")
+
+    # stock by location: pieces, carried cost and the unpriced few (pgReports)
+    show_value = allowed(request.user, "cost_price")
+    priced = Q(bom_versions__is_current=True, bom_versions__total_cost_price__gt=0)
+    annotations = {
+        "pieces": Count("pk", distinct=True),
+        "priced_pieces": Count("pk", filter=priced, distinct=True),
+    }
+    if show_value:
+        annotations["value"] = Sum("bom_versions__total_cost_price", filter=Q(bom_versions__is_current=True))
+    by_location = list(
+        _visible_pieces(request)
+        .filter(stock_state__in=list(COUNTABLE_STATES))
+        .values("location__code", "location__name")
+        .annotate(**annotations)
+        .order_by("location__code")
+    )
+    for entry in by_location:
+        entry["unpriced"] = entry["pieces"] - entry["priced_pieces"]
     return render(
         request,
         "stock/margin_report.html",
-        {"totals": totals, "crm_revenue": crm_revenue, "sales": sales.select_related("piece")[:200]},
+        {
+            "totals": totals,
+            "crm_revenue": crm_revenue,
+            "sales": sales.select_related("piece")[:200],
+            "by_location": by_location,
+            "show_value": show_value,
+        },
     )
 
 
@@ -463,7 +662,7 @@ def piece_export(request):
     An export is where masking is most often forgotten, so it goes through
     ``piece_row`` like everything else and is logged as an EXPORT.
     """
-    pieces, _ = _filtered(request)
+    pieces, _, _, _ = _filtered(request)
     rows = [piece_row(request.user, piece) for piece in pieces[:5000]]
     fields = list(rows[0].keys()) if rows else ["jewel_code"]
     response = HttpResponse(content_type="text/csv")

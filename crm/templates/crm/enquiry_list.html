@@ -1,19 +1,30 @@
 {% extends "base.html" %}
+{% load crm_extras %}
 {% block title %}Enquiries · Nornament{% endblock %}
 {% block content %}
 <h1>Enquiries</h1>
-{% include "crm/_pipeline_filter.html" with action_url="" %}
+<div class="kpis">
+  <div class="kpi"><div class="lbl">Total</div><div class="val">{{ kpis.total }}</div></div>
+  <div class="kpi"><div class="lbl">Active</div><div class="val">{{ kpis.active }}</div></div>
+  <div class="kpi"><div class="lbl">Converted</div><div class="val">{{ kpis.converted }}</div></div>
+  <div class="kpi"><div class="lbl">Lost</div><div class="val">{{ kpis.lost }}</div></div>
+</div>
+{% include "crm/_pipeline_filter.html" %}
 <div class="card">
 <table>
-  <tr><th>Code</th><th>Customer</th><th>Interest</th><th>Budget</th><th>Status</th><th>Follow up</th></tr>
+  <tr><th></th><th>Code</th><th>Customer</th><th>Item</th><th class="num">Budget</th><th>Follow-up</th><th>Temp</th><th>Status</th></tr>
   {% for row in rows %}
-  <tr><td class="mono">{{ row.enquiry_code }}</td>
-      <td>{% if row.customer %}<a href="{% url 'crm:customer_detail' row.customer.pk %}">{{ row.customer.name }}</a>{% else %}<span class="muted">unlinked</span>{% endif %}</td>
-      <td>{{ row.item_of_interest|default:"—" }}</td>
-      <td class="num mono">{{ row.estimated_budget|default_if_none:"—"|floatformat:0 }}</td>
-      <td class="small">{{ row.status }}</td>
-      <td class="small muted">{{ row.follow_up_date|default:"—" }}</td></tr>
-  {% empty %}<tr><td colspan="6" class="empty">No enquiries.</td></tr>{% endfor %}
+  <tr>
+    <td>{% with url=thumbs|lookup:row.pk %}{% if url %}<span class="th thpic" style="width:42px;height:42px"><img src="{{ url }}" alt="" loading="lazy"></span>{% else %}<span class="dim">—</span>{% endif %}{% endwith %}</td>
+    <td class="code">{{ row.enquiry_code }}</td>
+    <td>{% if row.customer %}<a href="{% url 'crm:customer_detail' row.customer.pk %}">{{ row.customer.name }}</a>{% else %}<span class="dim">unlinked</span>{% endif %}</td>
+    <td>{{ row.item_of_interest|default:"—" }}</td>
+    <td class="num">{{ row.estimated_budget|default_if_none:"—"|floatformat:0 }}</td>
+    <td class="small dim">{{ row.follow_up_date|default:"—" }}</td>
+    <td>{% if row.temperature %}{% include "crm/_status_chip.html" with status=row.temperature kind="temp" %}{% endif %}</td>
+    <td>{% include "crm/_status_chip.html" with status=row.status kind="enquiry" %}</td>
+  </tr>
+  {% empty %}<tr><td colspan="8" class="empty">No enquiries.</td></tr>{% endfor %}
 </table>
 </div>
 {% endblock %}

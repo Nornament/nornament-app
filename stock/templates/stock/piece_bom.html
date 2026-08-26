@@ -1,36 +1,108 @@
 {% extends "base.html" %}
 {% block title %}{{ piece.jewel_code }} BOM · Nornament{% endblock %}
 {% block content %}
-<h1>Material breakup <span class="mono muted">{{ piece.jewel_code }}</span></h1>
-<p class="muted small">Version {{ version.version_no }} · {{ version.reason }} · {{ version.created_at|date:"d M Y" }}</p>
+<div class="crumb"><a href="{% url 'stock:piece_detail' piece.jewel_code %}">← {{ piece.jewel_code }}</a> / Bill of materials</div>
+
+{% if breakup and groups %}
 <div class="card">
-<table>
-  <tr>
-    <th>#</th><th>Material</th><th>Size</th><th class="num">Pcs</th><th class="num">Qty</th><th>Basis</th>
-    {% if caps.view_cost %}<th class="num">Cost rate</th><th class="num">Cost</th><th class="num">Chart</th>{% endif %}
-    {% if caps.view_sale %}<th class="num">Sale rate</th><th class="num">Sale</th>{% endif %}
-  </tr>
-  {% for row in rows %}
-  <tr>
-    <td>{{ row.line_no }}</td>
-    <td><span class="mono">{{ row.material }}</span><div class="muted small">{{ row.material_name }}</div></td>
-    <td>{{ row.size_band|default:"—" }}</td>
-    <td class="num">{{ row.pcs|default_if_none:"—" }}</td>
-    <td class="num mono">{{ row.qty_value|default_if_none:"—" }} {{ row.qty_uom }}</td>
-    <td class="small">{{ row.basis }}{% if row.off_chart %} <span class="badge RESERVED">off chart</span>{% endif %}</td>
-    {% if caps.view_cost %}<td class="num mono">{{ row.cost_rate|default_if_none:"—" }}</td>
-      <td class="num mono">{{ row.cost_amount|default_if_none:"—"|floatformat:0 }}</td>
-      <td class="num mono muted small">{{ row.chart_cost|default_if_none:"—" }}</td>{% endif %}
-    {% if caps.view_sale %}<td class="num mono">{{ row.sale_rate|default_if_none:"—" }}</td>
-      <td class="num mono">{{ row.sale_amount|default_if_none:"—"|floatformat:0 }}</td>{% endif %}
-  </tr>
-  {% empty %}<tr><td colspan="11" class="empty">This piece has no bill of materials yet.</td></tr>{% endfor %}
-  <tr>
-    <th colspan="6">Totals</th>
-    {% if caps.view_cost %}<th colspan="3" class="num mono">{{ version.total_cost_price|default_if_none:"—"|floatformat:0 }}</th>{% endif %}
-    {% if caps.view_sale %}<th colspan="2" class="num mono">{{ version.total_sale_price|default_if_none:"—"|floatformat:0 }}</th>{% endif %}
-  </tr>
-</table>
+  <h3>Sale breakup</h3>
+  <p class="hint">What the customer is shown. Rolled up by material, {% if caps.view_cost and money == "sale" %}no cost figures — {% endif %}this is
+    the {% if money == "sale" %}sale{% else %}cost{% endif %} side only.</p>
+  <div class="breakup">
+    <div class="brow bhead"><span>Component</span><span class="n">Pcs</span>
+      <span class="n">Weight</span><span class="n">Amount</span></div>
+    {% for group in breakup %}
+    <div class="brow"><span>{{ group.label }}</span>
+      <span class="n">{{ group.pcs|default:"—" }}</span>
+      <span class="n">{% if group.qty %}{{ group.qty|floatformat:2 }} {{ group.uom }}{% else %}—{% endif %}</span>
+      <span class="n">₹{{ group.amount|floatformat:0 }}</span></div>
+    {% endfor %}
+    <div class="brow btot"><span>Total{% if money == "sale" %} sale price{% else %} cost{% endif %}</span><span></span>
+      <span class="n">{% if piece.measured_gross_wt_gm %}{{ piece.measured_gross_wt_gm|floatformat:3 }} g gross{% endif %}</span>
+      <span class="n">₹{{ breakup_total|default_if_none:"—"|floatformat:0 }}</span></div>
+  </div>
+  {% if derivation %}<div class="note">Gold rate is derived from the pure rate, never typed in:
+    <b>₹{{ derivation.pure_rate|floatformat:0 }}/g pure {{ derivation.metal|lower }}
+    × {{ derivation.sale_pct|floatformat:1 }}% ({{ piece.metal_purity }} sale purity)
+    = ₹{{ derivation.alloy_rate|floatformat:0 }}/g</b>.</div>{% endif %}
+  {% if version.net_metal_wt_gm %}<div class="note">Charged on <b>{{ version.net_metal_wt_gm|floatformat:3 }} g net metal</b>;
+    the making charge follows the same weight. Gross weight includes the stones, so it is never the basis for making.</div>{% endif %}
 </div>
-<p><a href="{% url 'stock:piece_detail' piece.jewel_code %}">← {{ piece.jewel_code }}</a></p>
+{% endif %}
+
+<div class="card">
+  <div class="spread" style="margin-bottom:10px">
+    <div><h3>Full bill of materials — version {{ version.version_no }}
+      <span class="chip {% if version.reason == 'REPAIR' %}c-ser{% else %}c-neutral{% endif %}">{{ version.reason }}</span></h3>
+      <p class="hint" style="margin:0">{{ version.created_at|date:"d M Y" }} · line-level detail behind the piece's pricing.</p></div>
+  </div>
+  <div style="overflow-x:auto">
+  <table class="bomtab">
+    <thead>
+      <tr class="band">
+        <th colspan="5"></th>
+        {% if caps.view_cost %}<th colspan="3" class="c-old">Cost — frozen on BOM v{{ version.version_no }}</th>
+          <th colspan="2" class="c-new">Cost — today</th>{% endif %}
+        {% if caps.view_sale %}<th colspan="3">Sale</th>{% endif %}
+      </tr>
+      <tr>
+        <th style="width:82px">Code</th><th style="min-width:120px">Material</th>
+        <th style="width:64px">Size</th>
+        <th class="num" style="width:44px">Pcs</th>
+        <th class="num" style="width:82px">Weight</th>
+        {% if caps.view_cost %}<th class="num c-old" style="width:72px">Rate</th>
+          <th class="num c-old" style="width:86px">Cost</th>
+          <th class="num c-old" style="width:72px">Chart</th>
+          <th class="num c-new" style="width:72px">Rate</th>
+          <th class="num c-new" style="width:86px">Cost</th>{% endif %}
+        {% if caps.view_sale %}<th class="num" style="width:72px">Rate</th>
+          <th class="num" style="width:88px">Sale</th>
+          <th class="num" style="width:74px">%</th>{% endif %}
+      </tr>
+    </thead><tbody>
+    {% for group in groups %}
+    <tr class="grp"><td colspan="{{ grp_span }}">{{ group.label }}</td></tr>
+    {% for row in group.rows %}
+    <tr>
+      <td class="code">{{ row.material }}</td>
+      <td>{{ row.material_name }}{% if row.basis == "BY_NET_METAL_WT" %} <span class="dim" style="font-size:11px">· on net metal weight</span>{% endif %}
+        {% if row.off_chart %} <span class="chip c-warn" style="font-size:10px">off chart</span>{% endif %}</td>
+      <td class="dim mono" style="font-size:12px">{{ row.size_band|default:"—" }}</td>
+      <td class="num">{{ row.pcs|default_if_none:"—" }}</td>
+      <td class="num">{{ row.qty_value|default_if_none:"—" }} {{ row.qty_uom|lower }}</td>
+      {% if caps.view_cost %}<td class="num c-old">{{ row.cost_rate|default_if_none:"—"|floatformat:0 }}</td>
+        <td class="num c-old">{{ row.cost_amount|default_if_none:"—"|floatformat:0 }}</td>
+        <td class="num c-old dim">{{ row.chart_cost|default_if_none:"—"|floatformat:0 }}</td>
+        <td class="num c-new">{{ row.cost_rate_today|default_if_none:"—"|floatformat:0 }}</td>
+        <td class="num c-new">{{ row.cost_amount_today|default_if_none:"—"|floatformat:0 }}</td>{% endif %}
+      {% if caps.view_sale %}<td class="num">{{ row.sale_rate|default_if_none:"—"|floatformat:0 }}</td>
+        <td class="num">{{ row.sale_amount|default_if_none:"—"|floatformat:0 }}</td>
+        <td class="num"><span style="display:flex;align-items:center;gap:7px;justify-content:flex-end">
+          <span class="sbar" style="width:{{ row.share_w }}px;background:var(--brand)"></span>{{ row.share_pct|default_if_none:"—"|floatformat:1 }}%</span></td>{% endif %}
+    </tr>
+    {% endfor %}
+    {% empty %}
+    <tr><td colspan="{{ grp_span }}"><div class="empty">This piece has no costed BOM. It contributes zero to stock valuation.</div></td></tr>
+    {% endfor %}
+    <tr class="btotrow">
+      <td colspan="5" style="text-align:right">Total</td>
+      {% if caps.view_cost %}<td class="num c-old"></td>
+        <td class="num c-old"><b>{{ version.total_cost_price|default_if_none:"—"|floatformat:0 }}</b></td>
+        <td class="num c-old"></td>
+        <td class="num c-new"></td>
+        <td class="num c-new"><b style="color:var(--brand)">{{ cost_today_total|default_if_none:"—"|floatformat:0 }}</b></td>{% endif %}
+      {% if caps.view_sale %}<td class="num"></td>
+        <td class="num"><b>{{ version.total_sale_price|default_if_none:"—"|floatformat:0 }}</b></td>
+        <td class="num"><b>100%</b></td>{% endif %}
+    </tr>
+    </tbody>
+  </table>
+  </div>
+  {% if caps.view_cost %}<div class="note">Only the <b>metal</b> rows differ between the two cost columns.
+    Everything else carries the rate written on its line and does not drift.
+    The <b>Chart</b> column is what the default rate chart says today; a line marked
+    <b>off chart</b> carries its own rate deliberately.</div>{% endif %}
+  {% if not caps.view_cost and not caps.view_sale %}<div class="note">Your role sees <b>what is in the piece</b>
+    but no rates or amounts — production needs the material list, not the pricing.</div>{% endif %}
+</div>
 {% endblock %}

@@ -1,30 +1,57 @@
 {% extends "base.html" %}
 {% block title %}Pieces · Nornament{% endblock %}
 {% block content %}
-<h1>Pieces <span class="muted small">{{ total }}</span></h1>
-<form class="card row" method="get" action="{% url 'stock:piece_list' %}">
-  <div>
-    <label for="q">Search</label>
+<form class="filterbar" method="get" action="{% url 'stock:piece_list' %}">
+  {% for value in selected_states %}<input type="hidden" name="state" value="{{ value }}">{% endfor %}
+  {% for value in selected_locations %}<input type="hidden" name="location" value="{{ value }}">{% endfor %}
+  <div class="frow">
+    <label class="flabel" for="q">Search</label>
     <input id="q" type="search" name="q" value="{{ q }}" placeholder="Jewel code, style, HUID"
+           style="flex:1;max-width:340px"
            hx-get="{% url 'stock:piece_rows' %}" hx-target="#rows" hx-trigger="keyup changed delay:300ms"
            hx-include="closest form">
   </div>
-  <div>
-    <label for="state">State</label>
-    <select id="state" name="state" hx-get="{% url 'stock:piece_rows' %}" hx-target="#rows" hx-include="closest form">
-      <option value="">Any</option>
-      {% for value, label in states %}<option value="{{ value }}" {% if value == selected_state %}selected{% endif %}>{{ label }}</option>{% endfor %}
-    </select>
+  <div class="frow">
+    <div class="flabel">Status</div>
+    <div class="fchips">
+      {% for chip in state_chips %}<a class="fchip" aria-pressed="{% if chip.active %}true{% else %}false{% endif %}" href="{% url 'stock:piece_list' %}?{{ chip.qs }}">{{ chip.label }}</a>{% endfor %}
+    </div>
   </div>
-  <div>
-    <label for="location">Location</label>
-    <select id="location" name="location" hx-get="{% url 'stock:piece_rows' %}" hx-target="#rows" hx-include="closest form">
-      <option value="">Any</option>
-      {% for location in locations %}<option value="{{ location.code }}" {% if location.code == selected_location %}selected{% endif %}>{{ location.name }}</option>{% endfor %}
-    </select>
+  <div class="frow">
+    <div class="flabel">Location</div>
+    <div class="fchips">
+      {% for chip in location_chips %}<a class="fchip" aria-pressed="{% if chip.active %}true{% else %}false{% endif %}" href="{% url 'stock:piece_list' %}?{{ chip.qs }}">{{ chip.label }}</a>{% endfor %}
+    </div>
   </div>
-  <div class="tight"><button type="submit">Search</button></div>
-  <div class="tight"><a class="muted small" href="{% url 'stock:piece_export' %}?q={{ q }}&state={{ selected_state }}&location={{ selected_location }}">Export CSV</a></div>
+  <div class="fsummary">
+    <span><b>{{ total }}</b> piece{{ total|pluralize }}</span>
+    <button class="btn sm" type="submit">Search</button>
+    <a class="btn sm" href="{% url 'stock:piece_list' %}">Clear all</a>
+    <a class="btn sm" href="{% url 'stock:piece_export' %}?{{ filter_qs }}">Export CSV</a>
+    <span style="margin-left:auto">Location and status are separate questions, so they filter together —
+      <b>Mumbai + On approval</b> is a valid ask.</span>
+  </div>
 </form>
+{% if pins %}
+<div class="masonry">
+  {% for pin in pins %}
+  <article class="pin">
+    <a href="{% url 'stock:piece_detail' pin.row.jewel_code %}"><img class="art" src="{{ pin.thumb }}" alt="{{ pin.row.jewel_code }}" loading="lazy"></a>
+    <div class="badge">{% include "stock/_chip.html" with state=pin.row.stock_state label=pin.row.stock_state_display %}</div>
+    {% if pin.row.location %}<div class="locbadge">{{ pin.row.location }}</div>{% endif %}
+    <div class="meta">
+      <div class="pcode"><a class="code" href="{% url 'stock:piece_detail' pin.row.jewel_code %}">{{ pin.row.jewel_code }}</a></div>
+      <div class="pname">{{ pin.row.design_name|default:pin.row.style_code }}</div>
+      <div class="prow">
+        <span class="price">{% if caps.view_sale %}{% if pin.row.sale_price %}₹{{ pin.row.sale_price|floatformat:0 }}{% else %}<span class="chip c-ser">not costed</span>{% endif %}{% endif %}</span>
+      </div>
+      <div class="sub"><span>{{ pin.row.karat|default:"—" }}</span><span>·</span>
+        <span>{{ pin.row.measured_gross_wt_gm|default_if_none:"—" }} g</span>
+        {% if caps.view_cost and pin.row.current_cost %}<span>·</span><span>cost ₹{{ pin.row.current_cost|floatformat:0 }}</span>{% endif %}</div>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% endif %}
 <div id="rows">{% include "stock/_piece_rows.html" %}</div>
 {% endblock %}

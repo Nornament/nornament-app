@@ -1,24 +1,32 @@
 {% extends "base.html" %}
 {% block title %}Repairs · Nornament{% endblock %}
 {% block content %}
-<h1>Repairs</h1>
 <div class="card">
-<table>
-  <tr><th>Job</th><th>Piece</th><th>Status</th><th>Opened</th><th>Closed</th><th>TAT</th><th>Vendor</th><th></th></tr>
+  <h3>Repairs</h3>
+  <p class="hint">A repair is not a note on a record — it forks the bill of materials.
+    Removing a stone and fitting a different one changes what the piece physically contains,
+    so it changes its cost.</p>
+  <table><thead><tr><th>Job</th><th>Jewel code</th><th>Fault</th><th>BOM</th><th>Status</th>
+    {% if caps.view_cost %}<th class="num">Labour</th>{% endif %}
+    <th>Opened</th><th>Closed</th><th class="num">TAT</th><th>Vendor</th><th></th></tr></thead><tbody>
   {% for job in jobs %}
   <tr>
-    <td class="mono">{{ job.job_no }}</td>
-    <td><a class="mono" href="{% url 'stock:piece_detail' job.piece.jewel_code %}">{{ job.piece.jewel_code }}</a></td>
-    <td><span class="badge {% if job.status == 'DONE' %}ok{% else %}RESERVED{% endif %}">{{ job.status }}</span></td>
-    <td class="small">{{ job.opened_on }}</td>
-    <td class="small">{{ job.closed_on|default:"—" }}</td>
+    <td class="code">{{ job.job_no }}</td>
+    <td><a class="code" href="{% url 'stock:piece_detail' job.piece.jewel_code %}">{{ job.piece.jewel_code }}</a></td>
+    <td>{{ job.fault_description|default:"—" }}</td>
+    <td class="dim">v{{ job.from_bom_version }} → {% if job.to_bom_version %}v{{ job.to_bom_version }}{% else %}—{% endif %}</td>
+    <td>{% if job.status == 'DONE' %}<span class="chip c-good">done</span>{% elif job.status == 'CANCELLED' %}<span class="chip c-crit">cancelled</span>{% else %}<span class="chip c-ser">open</span>{% endif %}</td>
+    {% if caps.view_cost %}<td class="num">{{ job.labour_cost|floatformat:0 }}</td>{% endif %}
+    <td class="dim">{{ job.opened_on }}</td>
+    <td class="dim">{{ job.closed_on|default:"—" }}</td>
     <td class="num">{{ job.tat_days|default_if_none:"—" }}</td>
-    <td>{{ job.vendor.name|default:"—" }}</td>
+    <td class="dim">{{ job.vendor.name|default:"—" }}</td>
     <td>{% if caps.edit_bom and job.status != 'DONE' %}
       <form method="post" action="{% url 'stock:repair_complete' job.pk %}" class="inline">{% csrf_token %}
-        <button class="small">Complete</button></form>{% endif %}</td>
+        <button class="btn sm">Complete</button></form>{% endif %}</td>
   </tr>
-  {% empty %}<tr><td colspan="8" class="empty">No repair jobs.</td></tr>{% endfor %}
-</table>
+  {% empty %}<tr><td colspan="11"><div class="empty">No repair jobs yet.<br><br>
+    Open a piece from Stock and record a repair to see the BOM fork.</div></td></tr>{% endfor %}
+  </tbody></table>
 </div>
 {% endblock %}

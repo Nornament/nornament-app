@@ -5,35 +5,59 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Nornament{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
-  {# Vendored at build time — see static/vendor/README.md. Absent, every screen
-     still works: HTMX here only saves a page reload. #}
+  <script>document.documentElement.dataset.theme = localStorage.theme ??
+    (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : '');</script>
   <script src="/static/vendor/htmx.min.js" defer></script>
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
 {% if user.is_authenticated %}
-<nav class="nav">
-  <a class="brand" href="{% url 'stock:dashboard' %}">Nornament</a>
-  <a href="{% url 'stock:dashboard' %}">Dashboard</a>
-  <a href="{% url 'stock:piece_list' %}">Pieces</a>
-  {% if caps.manage_materials %}<a href="{% url 'stock:material_list' %}">Materials</a>{% endif %}
-  {% if caps.view_sale or caps.view_cost %}<a href="{% url 'stock:rate_list' %}">Rates</a>{% endif %}
-  {% if caps.edit_bom %}<a href="{% url 'stock:count_list' %}">Counts</a>{% endif %}
-  <a href="{% url 'stock:repair_list' %}">Repairs</a>
-  {% if caps.view_sale %}<a href="{% url 'stock:sale_list' %}">Sales</a>{% endif %}
-  <span class="sep">·</span>
-  <a href="{% url 'crm:dashboard' %}">CRM</a>
-  <a href="{% url 'crm:customer_list' %}">Customers</a>
-  <a href="{% url 'crm:order_list' %}">Orders</a>
-  <a href="{% url 'crm:fon' %}">FoN</a>
-  <span class="spacer"></span>
-  {% if is_admin %}<a href="{% url 'admin:index' %}">Admin</a>{% endif %}
-  <span class="who">{{ user }}</span>
-  <form method="post" action="{% url 'accounts:logout' %}" class="inline">{% csrf_token %}<button class="link">Sign out</button></form>
-</nav>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <img class="brandimg" src="{% static 'img/logo.png' %}" alt="Nornament">
+    </div>
+    <nav class="nav">
+      <div class="navgrp">Operations</div>
+      {% url 'stock:dashboard' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">▦</span>Dashboard</a>
+      {% url 'stock:piece_list' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">◈</span>Pieces</a>
+      {% if caps.edit_bom %}{% url 'stock:count_list' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">☑</span>Stock Count</a>{% endif %}
+      {% if caps.view_sale %}{% url 'stock:sale_list' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">▤</span>Sales</a>{% endif %}
+      {% if caps.view_sale or caps.view_cost %}{% url 'stock:rate_list' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">↝</span>Rates</a>{% endif %}
+      {% if caps.manage_materials %}{% url 'stock:material_list' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">◇</span>Materials</a>{% endif %}
+      <div class="navgrp">Workshop</div>
+      {% url 'stock:repair_list' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">⚒</span>Repairs</a>
+      <div class="navgrp">CRM</div>
+      {% url 'crm:dashboard' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">▦</span>Pipeline</a>
+      {% url 'crm:customer_list' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">☺</span>Customers</a>
+      {% url 'crm:order_list' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">✎</span>Orders</a>
+      {% url 'crm:fon' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">₹</span>FoN</a>
+      {% if is_admin %}
+      <div class="navgrp">Admin</div>
+      <a href="{% url 'admin:index' %}"><span class="ico">⚙</span>Users &amp; Settings</a>
+      {% endif %}
+    </nav>
+    <div class="whoami"><b style="color:var(--ink)">{{ user }}</b></div>
+  </aside>
+  <div class="main">
+    <div class="top">
+      <h2></h2>
+      <button class="iconbtn" title="Toggle light / dark"
+        onclick="const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'':'dark';localStorage.theme=r.dataset.theme">◐</button>
+      <form method="post" action="{% url 'accounts:logout' %}" class="inline">{% csrf_token %}<button class="iconbtn">Sign out</button></form>
+    </div>
+    <div class="body">
+      {% if messages %}<ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>{% endif %}
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="gate">
+  <div class="gatecard">
+    {% if messages %}<ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>{% endif %}
+    {% block gate %}{% endblock %}
+  </div>
+</div>
 {% endif %}
-<main>
-  {% if messages %}<ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>{% endif %}
-  {% block content %}{% endblock %}
-</main>
 </body>
 </html>

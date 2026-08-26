@@ -1,53 +1,73 @@
 {% extends "base.html" %}
 {% block title %}Rates · Nornament{% endblock %}
 {% block content %}
-<h1>Rates</h1>
-<div class="grid cols-3">
-  <div class="card">
-    <h2>Metals</h2>
-    <table>
-      <tr><th>Metal</th><th class="num">Pure rate / g</th><th>As on</th></tr>
-      {% for metal in metals %}
-      <tr><td>{{ metal.name }}</td><td class="num mono">{{ metal.pure_rate|floatformat:0 }}</td>
-          <td class="small muted">{{ metal.rate_as_on|date:"d M Y H:i" }}</td></tr>
-      {% endfor %}
-    </table>
-    {% if is_admin %}
-    <form method="post" action="{% url 'stock:set_rate' %}" style="margin-top:12px">{% csrf_token %}
-      <div class="row">
-        <div><label for="code">Metal</label>
-          <select id="code" name="code">{% for metal in metals %}<option value="{{ metal.code }}">{{ metal.name }}</option>{% endfor %}</select></div>
-        <div><label for="pure_rate">New pure rate</label><input id="pure_rate" name="pure_rate" inputmode="decimal" required></div>
-        <div class="tight"><button class="primary">Set</button></div>
-      </div>
-      <p class="small muted">A move of more than three times is refused — set it in two steps if it is real.</p>
-    </form>
-    {% endif %}
-  </div>
-  <div class="card">
-    <h2>Purities</h2>
-    <table>
-      <tr><th>Karat</th><th>Metal</th><th class="num">Sale / g</th>{% if caps.view_cost %}<th class="num">Cost / g</th>{% endif %}</tr>
-      {% for purity in purity_rates %}
-      <tr><td>{{ purity.karat }}</td><td>{{ purity.metal }}</td>
-          <td class="num mono">{{ purity.sale_rate|floatformat:0 }}</td>
-          {% if caps.view_cost %}<td class="num mono">{{ purity.cost_rate|default_if_none:"—"|floatformat:0 }}</td>{% endif %}</tr>
-      {% endfor %}
-    </table>
-    <p class="small muted">Each purity prices off the metal it belongs to. Silver never reads the gold rate.</p>
-  </div>
-</div>
 <div class="card">
-  <h2>Rate chart {% if chart %}<span class="muted small">{{ chart.name }} v{{ chart.version_no }}</span>{% endif %}</h2>
-  <table>
-    <tr><th>Material</th><th>Size</th>{% if caps.view_cost %}<th class="num">Cost</th>{% endif %}{% if caps.view_sale %}<th class="num">Sale</th>{% endif %}<th>UOM</th></tr>
+  <h3>Metal rates</h3>
+  <p class="hint">One input per metal — the pure rate. Every karat is derived from it.
+    Silver never reads the gold rate.</p>
+  <table><thead><tr><th>Metal</th><th class="num">Pure rate / g</th><th>As on</th></tr></thead><tbody>
+    {% for metal in metals %}
+    <tr><td>{{ metal.name }}</td><td class="num">{{ metal.pure_rate|floatformat:0 }}</td>
+        <td class="dim" style="font-size:12px">{{ metal.rate_as_on|date:"d M Y H:i" }}</td></tr>
+    {% endfor %}
+  </tbody></table>
+  {% if is_admin %}
+  <form method="post" action="{% url 'stock:set_rate' %}" style="margin-top:12px">{% csrf_token %}
+    <div class="row">
+      <div><label for="code">Metal</label>
+        <select id="code" name="code">{% for metal in metals %}<option value="{{ metal.code }}">{{ metal.name }}</option>{% endfor %}</select></div>
+      <div><label for="pure_rate">New pure rate</label><input id="pure_rate" name="pure_rate" inputmode="decimal" required></div>
+      <div class="tight"><button class="btn primary">Set</button></div>
+    </div>
+  </form>
+  <div class="note">A move of more than three times is refused — set it in two steps if it is real.</div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3>Purities</h3>
+  <p class="hint">Each purity prices off the metal it belongs to, at that metal's live rate.</p>
+  <table><thead><tr><th>Karat</th><th class="num">Sale purity</th>
+    {% if caps.view_cost %}<th class="num">True fineness</th>{% endif %}
+    <th>Metal</th>
+    {% if caps.view_cost %}<th class="num">Spread</th>{% endif %}
+    <th class="num">Sale / g</th>
+    {% if caps.view_cost %}<th class="num">Cost / g</th>{% endif %}</tr></thead><tbody>
+    {% for purity in purity_rates %}
+    <tr><td class="code">{{ purity.karat }}</td>
+        <td class="num">{{ purity.sale_pct|floatformat:2 }}%</td>
+        {% if caps.view_cost %}<td class="num">{{ purity.fineness_pct|floatformat:2 }}%</td>{% endif %}
+        <td>{{ purity.metal }}</td>
+        {% if caps.view_cost %}<td class="num">{% if purity.spread_pt > 0 %}<span class="chip c-good">+{{ purity.spread_pt|floatformat:2 }} pt</span>{% else %}—{% endif %}</td>{% endif %}
+        <td class="num">{{ purity.sale_rate|floatformat:0 }}</td>
+        {% if caps.view_cost %}<td class="num">{{ purity.cost_rate|default_if_none:"—"|floatformat:0 }}</td>{% endif %}</tr>
+    {% endfor %}
+  </tbody></table>
+  {% if caps.view_cost %}<div class="note"><b>Sale purity and true fineness are separate columns on
+    purpose</b>: the spread between them is margin.</div>{% endif %}
+</div>
+
+<div class="card">
+  <div class="spread" style="margin-bottom:4px">
+    <div><h3>Rate chart{% if chart %} — {{ chart.name }} <span class="chip c-neutral">v{{ chart.version_no }}</span>{% endif %}</h3>
+      <p class="hint" style="margin:0;max-width:78ch">Cost and sale for every material, on one line.
+        Metal is deliberately absent — it prices from its live rate and a chart must not be able to
+        override that.</p></div>
+  </div>
+  <table style="margin-top:12px"><thead><tr>
+    <th>Material</th><th style="width:96px">Size</th>
+    {% if caps.view_cost %}<th class="num" style="width:118px">Cost rate</th>{% endif %}
+    {% if caps.view_sale %}<th class="num" style="width:118px">Sale rate</th>{% endif %}
+    {% if show_multiple %}<th class="num" style="width:74px">Multiple</th>{% endif %}
+    <th style="width:64px">Unit</th></tr></thead><tbody>
     {% for row in rows %}
-    <tr><td><span class="mono">{{ row.material }}</span> <span class="muted small">{{ row.material_name }}</span></td>
-        <td>{{ row.size_band|default:"—" }}</td>
-        {% if caps.view_cost %}<td class="num mono">{{ row.cost_rate|default_if_none:"—" }}</td>{% endif %}
-        {% if caps.view_sale %}<td class="num mono">{{ row.sale_rate|default_if_none:"—" }}</td>{% endif %}
-        <td>{{ row.uom }}</td></tr>
-    {% empty %}<tr><td colspan="5" class="empty">No default rate chart.</td></tr>{% endfor %}
-  </table>
+    <tr><td><span class="code">{{ row.material }}</span> <span class="dim" style="font-size:12px">{{ row.material_name }}</span></td>
+        <td class="dim mono" style="font-size:12px">{{ row.size_band|default:"—" }}</td>
+        {% if caps.view_cost %}<td class="num">{{ row.cost_rate|default_if_none:"—" }}</td>{% endif %}
+        {% if caps.view_sale %}<td class="num">{{ row.sale_rate|default_if_none:"—" }}</td>{% endif %}
+        {% if show_multiple %}<td class="num">{% if row.multiple %}{{ row.multiple|floatformat:2 }}×{% else %}—{% endif %}</td>{% endif %}
+        <td class="dim">{{ row.uom }}</td></tr>
+    {% empty %}<tr><td colspan="6"><div class="empty">No default rate chart.</div></td></tr>{% endfor %}
+  </tbody></table>
 </div>
 {% endblock %}

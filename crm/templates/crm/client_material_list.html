@@ -2,19 +2,25 @@
 {% block title %}Client materials · Nornament{% endblock %}
 {% block content %}
 <h1>Client materials</h1>
+<div class="kpis">
+  <div class="kpi"><div class="lbl">Total</div><div class="val">{{ kpis.total }}</div></div>
+  <div class="kpi"><div class="lbl">Active</div><div class="val">{{ kpis.active }}</div></div>
+  <div class="kpi"><div class="lbl">Returned</div><div class="val">{{ kpis.returned }}</div></div>
+</div>
 {% include "crm/_pipeline_filter.html" %}
 <div class="card">
 <table>
-  <tr><th>Code</th><th>Customer</th><th>Description</th><th>Metal</th><th class="num">Weight</th><th class="num">Value</th><th>Status</th></tr>
+  <tr><th>Code</th><th>Customer</th><th>Description</th><th>Metal</th><th>Received</th><th>Status</th></tr>
   {% for row in rows %}
-  <tr><td class="mono">{{ row.cm_code }}</td>
-      <td>{% if row.customer %}<a href="{% url 'crm:customer_detail' row.customer.pk %}">{{ row.customer.name }}</a>{% else %}<span class="muted">unlinked</span>{% endif %}</td>
-      <td>{{ row.jewellery_description|truncatechars:48 }}</td>
-      <td>{{ row.metal_type|default:"—" }}</td>
-      <td class="num mono">{{ row.weight_grams|default_if_none:"—" }}</td>
-      <td class="num mono">{{ row.estimated_value|default_if_none:"—"|floatformat:0 }}</td>
-      <td class="small">{{ row.status }}</td></tr>
-  {% empty %}<tr><td colspan="7" class="empty">Nothing held.</td></tr>{% endfor %}
+  <tr>
+    <td class="code">{{ row.cm_code }}</td>
+    <td>{% if row.customer %}<a href="{% url 'crm:customer_detail' row.customer.pk %}">{{ row.customer.name }}</a>{% else %}<span class="dim">unlinked</span>{% endif %}</td>
+    <td>{{ row.jewellery_description|truncatechars:48 }}</td>
+    <td>{{ row.metal_type|default:"—" }}</td>
+    <td class="small dim">{{ row.received_date|default:"—" }}</td>
+    <td>{% include "crm/_status_chip.html" with status=row.status kind="cm" %}</td>
+  </tr>
+  {% empty %}<tr><td colspan="6" class="empty">Nothing held.</td></tr>{% endfor %}
 </table>
 </div>
 {% endblock %}

@@ -1,13 +1,15 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Sign in · Nornament{% endblock %}
-{% block content %}
-<div class="card narrow">
-  <h1>Nornament</h1>
-  <form method="post">{% csrf_token %}
-    {{ form.non_field_errors }}
-    <label>Username or email {{ form.username }}</label>
-    <label>Password {{ form.password }}</label>
-    <button type="submit" class="primary">Sign in</button>
-  </form>
-</div>
+{% block gate %}
+<div class="gatelogo"><img src="{% static 'img/logo.png' %}" alt="Nornament"></div>
+{% if form.non_field_errors %}<div class="gateerr">{{ form.non_field_errors.0 }}</div>{% endif %}
+<form method="post">{% csrf_token %}
+  <label class="glbl" for="{{ form.username.id_for_label }}">Username or email</label>
+  {{ form.username }}
+  <label class="glbl" for="{{ form.password.id_for_label }}" style="margin-top:14px">Password</label>
+  {{ form.password }}
+  <button type="submit" class="btn primary gatebtn">Sign in</button>
+</form>
+<p class="gatefoot">Your stock, costs and prices are shown according to your role.</p>
 {% endblock %}

@@ -1,9 +1,20 @@
-<form class="card row" method="get">
-  <div><label for="q">Search</label><input id="q" type="search" name="q" value="{{ q }}"></div>
-  <div><label for="status">Status</label>
-    <select id="status" name="status">
-      <option value="">Any</option>
-      {% for status in statuses %}<option value="{{ status }}" {% if status == selected_status %}selected{% endif %}>{{ status }}</option>{% endfor %}
-    </select></div>
-  <div class="tight"><button>Filter</button></div>
-</form>
+<div class="filterbar">
+  <div class="frow">
+    <span class="flabel">Status</span>
+    <div class="fchips">
+      <a class="fchip" href="?q={{ q|urlencode }}" aria-pressed="{% if not selected_status %}true{% else %}false{% endif %}">All</a>
+      {% for status in statuses %}
+      <a class="fchip" href="?status={{ status|urlencode }}&amp;q={{ q|urlencode }}"
+         aria-pressed="{% if status == selected_status %}true{% else %}false{% endif %}">{{ status }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="frow">
+    <span class="flabel">Search</span>
+    <form method="get" class="row" style="flex:1">
+      <input type="hidden" name="status" value="{{ selected_status }}">
+      <div><input id="q" type="search" name="q" value="{{ q }}" placeholder="Customer or notes"></div>
+      <div class="tight"><button class="btn sm">Filter</button></div>
+    </form>
+  </div>
+</div>

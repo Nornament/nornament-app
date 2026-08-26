@@ -5,21 +5,23 @@
 <h1>Friends of Nornament</h1>
 <p class="muted small">Commission is computed from the sale ledger — the same rows the margin report reads.
   A level 1 earns on their whole downline; levels 2 and 3 earn a flat override on their own billing.</p>
-<div class="grid cols-3">
-  <div class="card stat"><div class="value">₹{{ total|floatformat:0 }}</div><div class="label">Payable this month</div></div>
-  <div class="card stat"><div class="value">{{ payouts|length }}</div><div class="label">Members</div></div>
+
+<div class="kpis">
+  <div class="kpi"><div class="lbl">Payable this month</div><div class="val">₹{{ total|floatformat:0 }}</div></div>
+  <div class="kpi"><div class="lbl">Members</div><div class="val">{{ payouts|length }}</div></div>
 </div>
+
 <div class="card">
 <table>
   <tr><th>Member</th><th>Level</th>{% for key, label in categories.items %}<th class="num">{{ label }}</th>{% endfor %}
       <th class="num">Billing</th><th class="num">Payout</th></tr>
   {% for payout in payouts %}
   <tr>
-    <td><a href="{% url 'crm:fon_detail' payout.customer.pk %}">{{ payout.customer.name }}</a></td>
-    <td>{{ payout.level }}</td>
-    {% for key, label in categories.items %}<td class="num mono">{{ payout.billing|lookup:key|floatformat:0 }}</td>{% endfor %}
-    <td class="num mono">{{ payout.total|floatformat:0 }}</td>
-    <td class="num mono"><strong>{{ payout.total_payout|floatformat:0 }}</strong></td>
+    <td><a href="{% url 'crm:fon_detail' payout.customer.pk %}"><b>{{ payout.customer.name }}</b></a></td>
+    <td><span class="chip {% if payout.level == 1 %}c-warn{% else %}c-neutral{% endif %}"><span class="dot"></span>Level {{ payout.level }}</span></td>
+    {% for key, label in categories.items %}<td class="num">{{ payout.billing|lookup:key|floatformat:0 }}</td>{% endfor %}
+    <td class="num">{{ payout.total|floatformat:0 }}</td>
+    <td class="num"><strong>{{ payout.total_payout|floatformat:0 }}</strong></td>
   </tr>
   {% empty %}<tr><td colspan="7" class="empty">No FoN members.</td></tr>{% endfor %}
 </table>

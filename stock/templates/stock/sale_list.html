@@ -1,23 +1,29 @@
 {% extends "base.html" %}
 {% block title %}Sales · Nornament{% endblock %}
 {% block content %}
-<h1>Sales</h1>
-<p class="muted small">One ledger. A CRM purchase appears here too, tagged CRM and carrying no cost.</p>
 <div class="card">
-<table>
-  <tr><th>Date</th><th>Piece</th><th>Customer</th><th>Source</th>
-      <th class="num">Sold</th>{% if caps.view_cost %}<th class="num">Cost</th>{% endif %}{% if caps.view_margin %}<th class="num">Margin</th>{% endif %}</tr>
+  <div class="spread" style="margin-bottom:10px">
+    <div><h3>Sale details</h3>
+      <p class="hint" style="margin:0">Price is whatever was actually received on that day — never
+        re-derived from today's gold rate. A CRM purchase appears here too, tagged CRM and carrying no cost.</p></div>
+  </div>
+  <table><thead><tr><th>Date</th><th>Jewel code</th><th>Customer</th><th>Customer code</th>
+    <th>Location</th><th>Source</th>
+    <th class="num">Price</th>{% if caps.view_cost %}<th class="num">Cost</th>{% endif %}{% if caps.view_margin %}<th class="num">Margin</th>{% endif %}</tr></thead><tbody>
   {% for row in rows %}
   <tr>
-    <td class="small">{{ row.sold_on }}</td>
-    <td class="mono">{{ row.jewel_code|default:"—" }}</td>
+    <td class="dim">{{ row.sold_on }}</td>
+    <td>{% if row.jewel_code %}<a class="code" href="{% url 'stock:piece_detail' row.jewel_code %}">{{ row.jewel_code }}</a>{% else %}<span class="dim">—</span>{% endif %}</td>
     <td>{{ row.customer|default:"—" }}</td>
-    <td><span class="badge {% if row.source == 'CRM' %}ELSEWHERE{% else %}ok{% endif %}">{{ row.source }}</span></td>
-    <td class="num mono">{{ row.sold_price|floatformat:0 }}</td>
-    {% if caps.view_cost %}<td class="num mono">{{ row.cost_at_sale|default_if_none:"—"|floatformat:0 }}</td>{% endif %}
-    {% if caps.view_margin %}<td class="num mono">{{ row.margin_amt|default_if_none:"—"|floatformat:0 }}</td>{% endif %}
+    <td>{% if row.customer_code %}<a class="code" href="{% url 'crm:customer_detail' row.customer_id %}">{{ row.customer_code }}</a>
+      <span class="chip c-good" style="font-size:10px">linked</span>{% else %}<span class="dim" style="font-size:12px">none</span>{% endif %}</td>
+    <td class="dim">{{ row.location|default:"—" }}</td>
+    <td><span class="chip {% if row.source == 'CRM' %}c-neutral{% else %}c-good{% endif %}">{% if row.source == 'CRM' %}CRM{% else %}recorded here{% endif %}</span></td>
+    <td class="num">{{ row.sold_price|floatformat:0 }}</td>
+    {% if caps.view_cost %}<td class="num">{{ row.cost_at_sale|default_if_none:"—"|floatformat:0 }}</td>{% endif %}
+    {% if caps.view_margin %}<td class="num">{{ row.margin_amt|default_if_none:"—"|floatformat:0 }}</td>{% endif %}
   </tr>
-  {% empty %}<tr><td colspan="7" class="empty">No sales.</td></tr>{% endfor %}
-</table>
+  {% empty %}<tr><td colspan="9"><div class="empty">No sale recorded.</div></td></tr>{% endfor %}
+  </tbody></table>
 </div>
 {% endblock %}

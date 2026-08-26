@@ -1,109 +1,223 @@
 {% extends "base.html" %}
 {% block title %}{{ piece.jewel_code }} · Nornament{% endblock %}
 {% block content %}
-<h1 class="mono">{{ piece.jewel_code }}</h1>
-<p class="muted">{{ piece.style.style_code }} · {{ row.design_name|default:"" }} · <span class="badge {{ piece.stock_state }}">{{ row.stock_state_display }}</span></p>
-{% if gaps %}<div class="gaps">{% for gap in gaps %}<span class="gap">{{ gap }}</span>{% endfor %}</div>{% endif %}
+<div class="crumb"><a href="{% url 'stock:piece_list' %}">← Stock</a> / {{ piece.jewel_code }}</div>
+<div class="spread" style="margin-bottom:14px">
+  <div class="hero">
+    <div>
+      <div style="font-family:var(--mono);font-size:24px;font-weight:600;letter-spacing:-.02em">{{ piece.jewel_code }}</div>
+      <div class="dim" style="font-size:13px">{{ row.design_name|default:row.style_code }} · {{ row.karat|default:"—" }} ·
+        {% include "stock/_chip.html" with state=piece.stock_state label=row.stock_state_display %}</div>
+    </div>
+  </div>
+</div>
+{% if gaps %}<div class="gaps" style="margin-bottom:14px">{% for gap in gaps %}<span class="gap">{{ gap }}</span>{% endfor %}</div>{% endif %}
 
-<div class="grid cols-3">
-  <div class="card">
-    <h2>Piece</h2>
-    <table>
-      <tr><td>Karat</td><td>{{ row.karat|default:"—" }}</td></tr>
-      <tr><td>Colour</td><td>{{ row.metal_colour|default:"—" }}</td></tr>
-      <tr><td>Size</td><td>{{ row.size_label|default:"—" }}</td></tr>
-      <tr><td>Gross weight</td><td class="mono">{{ row.measured_gross_wt_gm|default_if_none:"—" }} g</td></tr>
-      <tr><td>BOM weight</td><td class="mono">{{ row.bom_weight_gm|default_if_none:"—" }} g</td></tr>
-      <tr><td>Net metal</td><td class="mono">{{ row.net_metal_wt_gm|default_if_none:"—" }} g</td></tr>
-      <tr><td>HUID</td><td class="mono">{{ row.huid|default:"—" }}</td></tr>
-      <tr><td>Location</td><td>{{ row.location|default:"—" }}</td></tr>
-      <tr><td>Received</td><td>{{ row.received_on|default:"—" }}</td></tr>
-      {% if caps.view_vendor %}<tr><td>Vendor</td><td>{{ row.vendor_name|default:"—" }}</td></tr>{% endif %}
-    </table>
-    {% if reconciliation and reconciliation.out_of_tolerance %}
-    <p class="small" style="color:var(--warn)">Weight is {{ reconciliation.diff_gm }} g off the BOM — outside tolerance.</p>
+{% if caps.view_sale or caps.view_cost %}
+<div class="card">
+  <div class="pricerow">
+    {% if caps.view_sale %}
+    <div>
+      <div class="lbl">Sale price</div>
+      <div class="bignum">{{ row.sale_price|default_if_none:"—"|floatformat:0 }}</div>
+      {% if rate_derivation %}
+      <div class="asof" style="margin-top:6px"><span class="livedot"></span>
+        {{ rate_derivation.metal }} ₹{{ rate_derivation.pure_rate|floatformat:0 }}/g
+        × {{ rate_derivation.sale_pct|floatformat:1 }}% = ₹{{ row.gold_rate_used|default_if_none:"—"|floatformat:0 }}/g
+        for {{ row.karat|default:"—" }} · as on {{ rate_derivation.as_on|date:"d M Y H:i" }}</div>
+      {% else %}
+      <div class="asof" style="margin-top:6px"><span class="livedot"></span>
+        metal at ₹{{ row.gold_rate_used|default_if_none:"—"|floatformat:0 }}/g for {{ row.karat|default:"—" }}</div>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if caps.view_cost %}
+    <div class="pcell">
+      <div class="lbl">Cost — frozen on BOM v{{ row.bom_version|default:"—" }}</div>
+      <div class="midnum">{{ row.cost_price|default_if_none:"—"|floatformat:0 }}</div>
+      <div class="dim" style="font-size:11.5px;margin-top:4px">as the piece was made</div>
+    </div>
+    <div class="pcell now">
+      <div class="lbl" style="color:var(--brand)">Cost — today <span class="ro">read only</span></div>
+      <div class="midnum" style="color:var(--brand)">{{ row.current_cost|default_if_none:"—"|floatformat:0 }}</div>
+      <div class="dim" style="font-size:11.5px;margin-top:4px">at this morning's metal rate</div>
+    </div>
     {% endif %}
   </div>
-
-  {% if caps.view_sale or caps.view_cost %}
-  <div class="card">
-    <h2>Pricing</h2>
-    <table>
-      {% if caps.view_sale %}<tr><td>Sale price</td><td class="num mono">{{ row.sale_price|default_if_none:"—"|floatformat:0 }}</td></tr>
-      <tr><td>Metal rate used</td><td class="num mono">{{ row.gold_rate_used|default_if_none:"—"|floatformat:0 }}</td></tr>{% endif %}
-      {% if caps.view_cost %}<tr><td>Cost (frozen)</td><td class="num mono">{{ row.cost_price|default_if_none:"—"|floatformat:0 }}</td></tr>
-      <tr><td>Cost today</td><td class="num mono">{{ row.current_cost|default_if_none:"—"|floatformat:0 }}</td></tr>{% endif %}
-      {% if caps.view_margin %}<tr><td>Margin</td><td class="num mono">{{ row.margin|default_if_none:"—"|floatformat:0 }}</td></tr>
-      <tr><td>Margin at today's cost</td><td class="num mono">{{ row.current_margin|default_if_none:"—"|floatformat:0 }}</td></tr>{% endif %}
-    </table>
-    <p class="small"><a href="{% url 'stock:piece_scenarios' piece.jewel_code %}">Scenarios</a>
-      {% if caps.manage_materials %}· <a href="{% url 'stock:piece_bom' piece.jewel_code %}">Material breakup</a>{% endif %}</p>
+  {% if caps.view_margin %}
+  <div class="marginrow">
+    <div><span class="lbl">Margin on frozen cost</span>
+      <b class="mono">{{ row.margin|default_if_none:"—"|floatformat:0 }}</b></div>
+    <div><span class="lbl">Margin at today's metal</span>
+      <b class="mono">{{ row.current_margin|default_if_none:"—"|floatformat:0 }}</b></div>
   </div>
   {% endif %}
+  <div class="note">The frozen figure is what this piece <b>did</b> cost. The one beside it is what an
+    identical piece would cost to make this morning — the only one worth quoting against. Neither cost
+    figure is ever written back.</div>
+  <p style="margin:10px 0 0;font-size:12.5px"><a href="{% url 'stock:piece_scenarios' piece.jewel_code %}">Scenarios</a>
+    {% if caps.manage_materials %}· <a href="{% url 'stock:piece_bom' piece.jewel_code %}">Material breakup</a>{% endif %}</p>
+</div>
+{% endif %}
 
-  <div class="card">
-    <h2>Move</h2>
-    {% if caps.adjust_stock or caps.edit_bom %}
-    <form method="post" action="{% url 'stock:move_piece' piece.jewel_code %}">{% csrf_token %}
-      <label for="location">Location</label>
-      <select id="location" name="location">
-        {% for location in locations %}<option value="{{ location.code }}" {% if location.pk == piece.location_id %}selected{% endif %}>{{ location.name }}</option>{% endfor %}
-      </select>
-      <div class="row" style="margin-top:10px">
-        <button class="tight" name="action" value="receive">Receive</button>
-        <button class="tight" name="action" value="transfer">Transfer</button>
-        <button class="tight" name="action" value="reserve">Reserve</button>
-        <button class="tight" name="action" value="unreserve">Unreserve</button>
-      </div>
-    </form>
-    {% else %}<p class="muted small">You can see this piece but not move it.</p>{% endif %}
-
-    {% if caps.adjust_stock and not piece.is_terminal %}
-    <h3 style="margin-top:16px">Sell</h3>
-    <form method="post" action="{% url 'stock:sell_piece' piece.jewel_code %}">{% csrf_token %}
-      <div class="row">
-        <div><label for="sold_price">Sold price</label><input id="sold_price" name="sold_price" required inputmode="decimal"></div>
-        <div><label for="discount_amt">Discount</label><input id="discount_amt" name="discount_amt" value="0" inputmode="decimal"></div>
-      </div>
-      <div class="row"><div><label for="customer_name">Customer</label><input id="customer_name" name="customer_name"></div></div>
-      <button class="primary" style="margin-top:10px">Record sale</button>
-    </form>
-    {% endif %}
-
-    {% if caps.melt and not piece.is_terminal %}
-    <h3 style="margin-top:16px">Melt</h3>
-    <form method="post" action="{% url 'stock:melt_piece' piece.jewel_code %}">{% csrf_token %}
-      <label for="reason">Reason (at least 10 characters)</label>
-      <textarea id="reason" name="reason" rows="2" required minlength="10"></textarea>
-      <button class="danger" style="margin-top:8px">Melt this piece</button>
-    </form>
-    {% endif %}
+<div class="card"><h3>Identity</h3>
+  <div class="bio">
+    <dl>
+      <div class="biorow"><dt>Jewel code</dt><dd class="mono">{{ piece.jewel_code }}</dd></div>
+      <div class="biorow"><dt>Style / design no</dt><dd class="mono">{{ piece.style.style_code }}</dd></div>
+      <div class="biorow"><dt>Design name</dt><dd>{{ row.design_name|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Category</dt><dd>{{ row.category|default:"—" }}</dd></div>
+    </dl>
+    <dl>
+      <div class="biorow"><dt>Karat</dt><dd>{{ row.karat|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Colour</dt><dd>{{ row.metal_colour|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Size</dt><dd>{{ row.size_label|default:"—" }}</dd></div>
+      {% if caps.view_vendor %}<div class="biorow"><dt>Vendor</dt><dd>{{ row.vendor_name|default:"—" }}</dd></div>{% endif %}
+    </dl>
   </div>
+</div>
+
+<div class="card"><h3>Weights &amp; dimensions</h3>
+  <div class="bio">
+    <dl>
+      <div class="biorow"><dt>Gross weight</dt><dd class="mono">{{ row.measured_gross_wt_gm|default_if_none:"—" }} g</dd></div>
+      <div class="biorow"><dt>Net metal weight (NWT)</dt><dd class="mono">{{ row.net_metal_wt_gm|default_if_none:"—" }} g</dd></div>
+      <div class="biorow"><dt>BOM-derived weight</dt><dd class="mono">{{ row.bom_weight_gm|default_if_none:"—" }} g</dd></div>
+      {% if reconciliation %}
+      <div class="biorow"><dt>Difference</dt><dd class="mono">{{ reconciliation.diff_gm }} g
+        {% if reconciliation.out_of_tolerance %}<span class="chip c-crit">out of tolerance</span>
+        {% else %}<span class="chip c-good">in tolerance</span>{% endif %}</dd></div>
+      {% endif %}
+    </dl>
+    <dl>
+      <div class="biorow"><dt>HUID</dt><dd class="mono">{{ row.huid|default:"—" }}</dd></div>
+    </dl>
+  </div>
+  <div class="note">HUID is engraved per individual article by BIS rule — it is the one identifier
+    that legally cannot live at design level.</div>
+</div>
+
+<div class="card"><h3>Compliance</h3>
+  <div class="bio">
+    <dl>
+      <div class="biorow"><dt>Hallmarked</dt><dd>{% if piece.huid or piece.hallmarked_on %}<span class="chip c-good">Yes</span>{% else %}<span class="chip c-warn">not recorded</span>{% endif %}</dd></div>
+      <div class="biorow"><dt>HUID</dt><dd class="mono">{% if row.huid %}{{ row.huid }}{% else %}<span class="dim">not recorded</span>{% endif %}</dd></div>
+    </dl>
+    <dl>
+      <div class="biorow"><dt>Certificate company</dt><dd>{{ certificate.company|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Certificate code</dt><dd class="mono">{{ certificate.cert_number|default:"—" }}</dd></div>
+    </dl>
+  </div>
+  <div class="note">HUID is engraved per individual article by BIS rule — it is the one identifier
+    that legally cannot live at design level.</div>
+</div>
+
+<div class="card"><h3>Availability</h3>
+  <div class="bio">
+    <dl>
+      <div class="biorow"><dt>Status</dt><dd>{% include "stock/_chip.html" with state=piece.stock_state label=row.stock_state_display %}</dd></div>
+      <div class="biorow"><dt>Location</dt><dd>{{ row.location|default:"—" }}</dd></div>
+    </dl>
+    <dl>
+      <div class="biorow"><dt>Received on</dt><dd>{{ row.received_on|default:"—" }}</dd></div>
+    </dl>
+  </div>
+</div>
+
+<div class="card"><h3>Planning</h3>
+  <div class="bio">
+    <dl>
+      <div class="biorow"><dt>NOS floor (this design)</dt><dd>{{ planning.floor }}</dd></div>
+      <div class="biorow"><dt>Live pieces of design</dt><dd>{{ planning.live }}</dd></div>
+    </dl>
+    <dl>
+      <div class="biorow"><dt>Should make</dt><dd>{% if planning.short %}<span class="chip c-ser">yes — {{ planning.short }} short</span>{% else %}<span class="chip c-good">no</span>{% endif %}</dd></div>
+    </dl>
+  </div>
+</div>
+
+{% if caps.view_vendor %}
+<div class="card"><h3>Vendor &amp; turnaround</h3>
+  <div class="bio">
+    <dl>
+      <div class="biorow"><dt>Vendor</dt><dd>{% if row.vendor_name %}{{ row.vendor_name }}{% if row.vendor_code %} ({{ row.vendor_code }}){% endif %}{% else %}<span class="dim">not recorded</span>{% endif %}</dd></div>
+      <div class="biorow"><dt>Job card</dt><dd class="mono">{% if job_card %}{{ job_card.job_no }}{% else %}<span class="dim">not recorded</span>{% endif %}</dd></div>
+    </dl>
+    <dl>
+      <div class="biorow"><dt>Vendor average TAT</dt><dd>{% if row.vendor_avg_tat_days %}{{ row.vendor_avg_tat_days }} days{% else %}<span class="dim">no completed jobs yet</span>{% endif %}</dd></div>
+    </dl>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="spread" style="margin-bottom:10px">
+    <div><h3>Move</h3>
+      <p class="hint" style="margin:0">Every movement is a ledger row. Nothing is edited in place.</p></div>
+  </div>
+  {% if caps.adjust_stock or caps.edit_bom %}
+  <form method="post" action="{% url 'stock:move_piece' piece.jewel_code %}">{% csrf_token %}
+    <label for="location">Location</label>
+    <select id="location" name="location" style="max-width:280px">
+      {% for location in locations %}<option value="{{ location.code }}" {% if location.pk == piece.location_id %}selected{% endif %}>{{ location.name }}</option>{% endfor %}
+    </select>
+    <div class="row" style="margin-top:10px">
+      <button class="btn tight" name="action" value="receive">Receive</button>
+      <button class="btn tight" name="action" value="transfer">Transfer</button>
+      <button class="btn tight" name="action" value="reserve">Reserve</button>
+      <button class="btn tight" name="action" value="unreserve">Unreserve</button>
+    </div>
+  </form>
+  {% else %}<div class="empty">You can see this piece but not move it.</div>{% endif %}
+
+  {% if caps.adjust_stock and not piece.is_terminal %}
+  <h3 style="margin-top:16px">Sell</h3>
+  <form method="post" action="{% url 'stock:sell_piece' piece.jewel_code %}">{% csrf_token %}
+    <div class="row">
+      <div><label for="sold_price">Sold price</label><input id="sold_price" name="sold_price" required inputmode="decimal"></div>
+      <div><label for="discount_amt">Discount</label><input id="discount_amt" name="discount_amt" value="0" inputmode="decimal"></div>
+    </div>
+    <div class="row"><div><label for="customer_name">Customer</label><input id="customer_name" name="customer_name"></div></div>
+    <button class="btn primary" style="margin-top:10px">Record sale</button>
+  </form>
+  {% endif %}
+
+  {% if caps.melt and not piece.is_terminal %}
+  <h3 style="margin-top:16px">Melt</h3>
+  <p class="hint">This is permanent. A melted jewel code refuses every further movement.</p>
+  <form method="post" action="{% url 'stock:melt_piece' piece.jewel_code %}">{% csrf_token %}
+    <label for="reason">Reason (at least 10 characters)</label>
+    <textarea id="reason" name="reason" rows="2" required minlength="10"></textarea>
+    <button class="btn danger" style="margin-top:8px">♨ Melt permanently</button>
+  </form>
+  {% endif %}
 </div>
 
 {% if sale %}
 <div class="card">
-  <h2>Sale</h2>
+  <div class="spread" style="margin-bottom:10px">
+    <div><h3>Sale details</h3>
+      <p class="hint" style="margin:0">Price is whatever was actually received on that day —
+        never re-derived from today's gold rate.</p></div>
+  </div>
   <p>Sold on {{ sale.sold_on }} for <span class="mono">{{ sale.sold_price|floatformat:0 }}</span>
      {% if caps.view_margin %}· margin <span class="mono">{{ sale.margin_amt|default_if_none:"—"|floatformat:0 }}</span>{% endif %}</p>
 </div>
 {% endif %}
 
-<div class="card">
-  <h2>Movements</h2>
-  <table>
-    <tr><th>When</th><th>Type</th><th>From</th><th>To</th><th>State</th><th>Who</th><th>Reason</th></tr>
+<div class="card"><h3>Movement ledger</h3>
+  <table><thead><tr><th>Event</th><th>From</th><th>To</th><th>Resulting state</th><th>Date</th><th>By</th><th>Reason</th></tr></thead><tbody>
     {% for movement in movements %}
     <tr>
-      <td class="small">{{ movement.moved_at|date:"d M Y H:i" }}</td>
-      <td>{{ movement.move_type }}</td>
-      <td>{{ movement.from_location.code|default:"—" }}</td>
-      <td>{{ movement.to_location.code|default:"—" }}</td>
-      <td><span class="badge {{ movement.resulting_state }}">{{ movement.resulting_state }}</span></td>
-      <td class="small muted">{{ movement.user|default:"—" }}</td>
-      <td class="small muted">{{ movement.reason|default:"" }}</td>
+      <td>{{ movement.move_type|lower }}</td>
+      <td class="dim">{{ movement.from_location.code|default:"—" }}</td>
+      <td class="dim">{{ movement.to_location.code|default:"—" }}</td>
+      <td>{% include "stock/_chip.html" with state=movement.resulting_state label=movement.resulting_state %}</td>
+      <td class="dim">{{ movement.moved_at|date:"d M Y H:i" }}</td>
+      <td class="dim">{{ movement.user|default:"—" }}</td>
+      <td class="dim">{{ movement.reason|default:"—" }}</td>
     </tr>
-    {% empty %}<tr><td colspan="7" class="muted">Never moved.</td></tr>{% endfor %}
-  </table>
+    {% empty %}<tr><td colspan="7"><div class="empty">Never moved.</div></td></tr>{% endfor %}
+  </tbody></table>
 </div>
 {% endblock %}

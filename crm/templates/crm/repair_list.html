@@ -2,18 +2,27 @@
 {% block title %}CRM repairs · Nornament{% endblock %}
 {% block content %}
 <h1>Repairs</h1>
+<div class="kpis">
+  <div class="kpi"><div class="lbl">Total</div><div class="val">{{ kpis.total }}</div></div>
+  <div class="kpi"><div class="lbl">Open</div><div class="val">{{ kpis.open }}</div></div>
+  <div class="kpi"><div class="lbl">Ready</div><div class="val">{{ kpis.ready }}</div></div>
+  <div class="kpi"><div class="lbl">Delivered</div><div class="val">{{ kpis.delivered }}</div></div>
+</div>
 {% include "crm/_pipeline_filter.html" %}
 <div class="card">
 <table>
-  <tr><th>Code</th><th>Customer</th><th>Item</th><th>Issue</th><th class="num">Estimate</th><th>Status</th><th>Due</th></tr>
+  <tr><th>Code</th><th>Customer</th><th>Item</th><th>Karigar</th><th>Return</th><th>Status</th><th class="num">Cost</th></tr>
   {% for row in rows %}
-  <tr><td class="mono">{{ row.repair_code }}</td>
-      <td>{% if row.customer %}<a href="{% url 'crm:customer_detail' row.customer.pk %}">{{ row.customer.name }}</a>{% else %}<span class="muted">unlinked</span>{% endif %}</td>
-      <td>{{ row.item_description|truncatechars:40 }}</td>
-      <td class="small muted">{{ row.issue|truncatechars:60 }}</td>
-      <td class="num mono">{{ row.estimated_cost|default_if_none:"—"|floatformat:0 }}</td>
-      <td class="small">{{ row.status }}</td>
-      <td class="small muted">{{ row.expected_return|default:"—" }}</td></tr>
+  <tr>
+    <td class="code">{{ row.repair_code }}</td>
+    <td>{% if row.customer %}<a href="{% url 'crm:customer_detail' row.customer.pk %}">{{ row.customer.name }}</a>{% else %}<span class="dim">unlinked</span>{% endif %}</td>
+    <td>{{ row.item_description|truncatechars:40 }}
+        {% if row.issue %}<div class="dim small">{{ row.issue|truncatechars:60 }}</div>{% endif %}</td>
+    <td>{{ row.karigar|default:"—" }}</td>
+    <td class="small dim">{{ row.expected_return|default:"—" }}</td>
+    <td>{% include "crm/_status_chip.html" with status=row.status kind="repair" %}</td>
+    <td class="num">{{ row.estimated_cost|default_if_none:"—"|floatformat:0 }}</td>
+  </tr>
   {% empty %}<tr><td colspan="7" class="empty">No repairs.</td></tr>{% endfor %}
 </table>
 </div>

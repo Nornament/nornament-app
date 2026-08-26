@@ -1,31 +1,26 @@
-{% comment %}The live figures for one count. Re-rendered on every scan.{% endcomment %}
-<div class="grid cols-4">
-  <div class="card stat"><div class="value">{{ state.expected }}</div><div class="label">Expected</div></div>
-  <div class="card stat"><div class="value" style="color:var(--ok)">{{ state.found }}</div><div class="label">Found</div></div>
-  <div class="card stat"><div class="value" style="color:var(--warn)">{{ state.missing }}</div><div class="label">Missing</div></div>
-  <div class="card stat"><div class="value">{{ state.unexpected }}</div><div class="label">Unexpected</div></div>
+{% comment %}The live figures for one count — legacy countPanel(). Re-rendered on every scan.{% endcomment %}
+<div class="ctally">
+  <div class="tcard"><span class="tl">On the books here</span><span class="tv">{{ state.expected }}</span></div>
+  <div class="tcard{% if state.found %} good{% endif %}"><span class="tl">Found</span><span class="tv">{{ state.found }}</span></div>
+  <div class="tcard{% if state.missing %} crit{% endif %}"><span class="tl">Still missing</span><span class="tv">{{ state.missing }}</span></div>
+  <div class="tcard{% if state.unexpected %} warn{% endif %}"><span class="tl">Unexpected</span><span class="tv">{{ state.unexpected }}</span></div>
 </div>
-<div class="grid cols-3">
-  <div class="card">
-    <h2>Just scanned</h2>
-    <table>
-      {% for scan in state.recent %}
-      <tr><td class="mono">{{ scan.code }}</td>
-          <td><span class="badge {{ scan.verdict }}">{{ scan.verdict }}</span></td>
-          <td class="small muted">{{ scan.note|default:"" }}</td></tr>
-      {% empty %}<tr><td class="muted">Nothing scanned yet.</td></tr>{% endfor %}
-    </table>
+<div class="cbar"><span style="width:{% if state.expected %}{% widthratio state.found state.expected 100 %}{% else %}0{% endif %}%"></span></div>
+<p class="hint" style="margin:7px 0 0">{% if state.expected %}{{ state.found }} of {{ state.expected }} accounted for{% if state.unexpected %}, plus {{ state.unexpected }} that should not be here{% endif %}.{% else %}Nothing is recorded at {{ state.location }}, so everything scanned reads as unexpected.{% endif %}</p>
+
+<div style="margin-top:18px">
+  <h4 style="margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">
+    Last {{ state.recent|length }} scanned</h4>
+  <div class="cscroll">
+    {% for scan in state.recent %}
+    <span class="cpill {% if scan.verdict == 'FOUND' %}p-good{% elif scan.verdict == 'NOT_STOCK' or scan.verdict == 'ELSEWHERE' %}p-warn{% endif %}"><span class="pc">{{ scan.code }}</span>{% if scan.note %}<span class="pn">{{ scan.note }}</span>{% endif %}{% if count.status == 'OPEN' %}<form class="inline" hx-post="{% url 'stock:count_unscan' count.pk %}" hx-target="#count-state" hx-swap="outerHTML" method="post" action="{% url 'stock:count_unscan' count.pk %}">{% csrf_token %}<input type="hidden" name="code" value="{{ scan.code }}"><button class="x" title="Undo this scan">×</button></form>{% endif %}</span>
+    {% empty %}<span class="dim" style="font-size:13px">Nothing scanned yet. The box above is already focused — start scanning.</span>{% endfor %}
   </div>
-  <div class="card">
-    <h2>Missing <span class="muted small">{{ state.missing }}</span></h2>
-    <p class="mono small">{% for code in state.missing_list %}{{ code }} {% empty %}<span class="muted">Nothing missing.</span>{% endfor %}</p>
-  </div>
-  <div class="card">
-    <h2>Unexpected <span class="muted small">{{ state.unexpected }}</span></h2>
-    <table>
-      {% for item in state.unexpected_list %}
-      <tr><td class="mono">{{ item.code }}</td><td class="small muted">{{ item.note }}</td></tr>
-      {% empty %}<tr><td class="muted">Nothing unexpected.</td></tr>{% endfor %}
-    </table>
-  </div>
+</div>
+
+<div class="ccols">
+  <div><h4>Not found yet · {{ state.missing }}</h4>
+    <div class="cscroll">{% for code in state.missing_list %}<span class="cpill"><span class="pc">{{ code }}</span></span>{% empty %}<span class="dim" style="font-size:13px">Nothing outstanding.</span>{% endfor %}</div></div>
+  <div><h4>Should not be here · {{ state.unexpected }}</h4>
+    <div class="cscroll">{% for item in state.unexpected_list %}<span class="cpill p-warn"><span class="pc">{{ item.code }}</span>{% if item.note %}<span class="pn">{{ item.note }}</span>{% endif %}</span>{% empty %}<span class="dim" style="font-size:13px">Nothing unexpected.</span>{% endfor %}</div></div>
 </div>

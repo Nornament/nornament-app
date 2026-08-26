@@ -1,74 +1,133 @@
 {% extends "base.html" %}
 {% block title %}Dashboard · Nornament{% endblock %}
 {% block content %}
-<h1>Stock</h1>
-<div class="grid cols-4">
-  <div class="card stat"><div class="value">{{ live_count }}</div><div class="label">Live pieces</div></div>
-  {% if month_sales %}
-  <div class="card stat"><div class="value">{{ month_sales.pieces|default:0 }}</div><div class="label">Sold this month</div></div>
-  {% if caps.view_sale %}<div class="card stat"><div class="value">₹{{ month_sales.revenue|default:0|floatformat:0 }}</div><div class="label">Month revenue</div></div>{% endif %}
+<div class="kpis">
+  <div class="kpi"><div class="lbl">Pieces in stock</div><div class="val">{{ in_stock_count }}</div>
+    <div class="sub">{{ live_count }} live overall</div></div>
+  <div class="kpi"><div class="lbl">On approval</div><div class="val">{{ on_approval_count }}</div>
+    <div class="sub">out with customers</div></div>
+  <div class="kpi"><div class="lbl">In repair</div><div class="val">{{ in_repair_count }}</div>
+    <div class="sub">at the workshop</div></div>
+  {% if caps.view_cost %}
+  <div class="kpi"><div class="lbl">Stock value at cost</div>
+    <div class="val" style="font-size:24px">₹{{ stock_value|default:0|floatformat:0 }}</div>
+    <div class="sub">current BOM versions</div></div>
+  {% else %}
+  <div class="kpi"><div class="lbl">Stock value at cost</div>
+    <div class="val" style="font-size:19px;color:var(--muted)">🔒 hidden</div>
+    <div class="sub">your role cannot see cost</div></div>
   {% endif %}
-  <div class="card stat"><div class="value">{{ open_counts|length }}</div><div class="label">Open counts</div></div>
+  <div class="kpi {% if unpriced_count %}alert{% endif %}"><div class="lbl">Unpriced pieces</div>
+    <div class="val">{{ unpriced_count }}</div>
+    <div class="sub">{% if unpriced_count %}valued at zero above{% else %}all costed{% endif %}</div></div>
+  {% if month_sales %}
+  <div class="kpi"><div class="lbl">Sold this month</div><div class="val">{{ month_sales.pieces|default:0 }}</div>
+    <div class="sub">since the 1st</div></div>
+  {% if caps.view_sale %}
+  <div class="kpi"><div class="lbl">Month revenue</div>
+    <div class="val" style="font-size:24px">₹{{ month_sales.revenue|default:0|floatformat:0 }}</div>
+    <div class="sub">sold price, all sources</div></div>
+  {% endif %}
+  {% endif %}
+  <div class="kpi"><div class="lbl">Open counts</div><div class="val">{{ open_counts|length }}</div>
+    <div class="sub">{% if open_counts %}in progress now{% else %}none in progress{% endif %}</div></div>
 </div>
+
+{% if unpriced_count %}
+<div class="card" style="border-color:var(--serious)">
+  <div class="spread"><div>
+    <h3>⚠ {{ unpriced_count }} piece{{ unpriced_count|pluralize }} ha{{ unpriced_count|pluralize:"s,ve" }} no costed bill of materials</h3>
+    <p class="hint" style="margin-bottom:0">These contribute <b>zero</b> to the stock value above.
+      A half-imported catalogue reports a healthy-looking total that is badly understated —
+      this is the number to watch when you load your 1000 codes.</p></div>
+    <a class="btn" href="{% url 'stock:piece_list' %}?unpriced=1">Show them</a></div>
+</div>
+{% endif %}
 
 <div class="grid cols-3">
   <div class="card">
-    <h2>By location</h2>
-    <table>
-      <tr><th>Location</th><th class="num">Pieces</th></tr>
+    <h3>Stock by location</h3>
+    <p class="hint">Live pieces only — a sold or melted piece sits nowhere.</p>
+    <table><thead><tr><th>Location</th><th class="num">Live pieces</th></tr></thead><tbody>
       {% for row in by_location %}
       <tr><td>{{ row.location__name|default:"—" }}</td><td class="num">{{ row.pieces }}</td></tr>
-      {% empty %}<tr><td colspan="2" class="muted">Nothing in stock.</td></tr>{% endfor %}
-    </table>
+      {% empty %}<tr><td colspan="2" class="dim">Nothing in stock.</td></tr>{% endfor %}
+    </tbody></table>
   </div>
   <div class="card">
-    <h2>By state</h2>
-    <table>
-      <tr><th>State</th><th class="num">Pieces</th></tr>
+    <h3>By state</h3>
+    <p class="hint">Every piece is in exactly one state.</p>
+    <table><thead><tr><th>State</th><th class="num">Pieces</th></tr></thead><tbody>
       {% for row in by_state %}
-      <tr><td><span class="badge {{ row.stock_state }}">{{ row.stock_state }}</span></td><td class="num">{{ row.pieces }}</td></tr>
+      <tr><td>{% include "stock/_chip.html" with state=row.stock_state label=row.stock_state %}</td>
+          <td class="num">{{ row.pieces }}</td></tr>
       {% endfor %}
-    </table>
+    </tbody></table>
   </div>
   {% if caps.view_sale or caps.view_cost %}
   <div class="card">
-    <h2>Metal rates</h2>
-    <table>
-      <tr><th>Metal</th><th class="num">Pure rate / g</th><th>As on</th></tr>
+    <h3>Metal rates</h3>
+    <p class="hint">One live rate per metal. Every karat derives from it.</p>
+    <table><thead><tr><th>Metal</th><th class="num">Pure rate / g</th><th>As on</th></tr></thead><tbody>
       {% for metal in metals %}
-      <tr><td>{{ metal.name }}</td><td class="num mono">{{ metal.pure_rate|floatformat:0 }}</td><td class="small muted">{{ metal.rate_as_on|date:"d M Y H:i" }}</td></tr>
+      <tr><td>{{ metal.name }}</td><td class="num mono">{{ metal.pure_rate|floatformat:0 }}</td>
+          <td class="dim" style="font-size:12px">{{ metal.rate_as_on|date:"d M Y H:i" }}</td></tr>
       {% endfor %}
-    </table>
+    </tbody></table>
   </div>
   {% endif %}
+</div>
+
+<div class="card">
+  <div class="spread"><h3>Needs making</h3></div>
+  <p class="hint">Counted per <b>design</b>, not per jewel code — a jewel code is one piece and can never be restocked.</p>
+  {% if should_make %}
+  <table><thead><tr><th>Style</th><th>Design</th>
+    <th class="num">Floor</th><th class="num">Live pieces</th><th class="num">Shortfall</th></tr></thead><tbody>
+    {% for row in should_make %}
+    <tr><td><span class="code">{{ row.style_code }}</span></td><td>{{ row.name }}</td>
+        <td class="num">{{ row.nos_min_qty }}</td><td class="num">{{ row.live_pieces }}</td>
+        <td class="num"><span class="chip c-ser">{{ row.shortfall }}</span></td></tr>
+    {% endfor %}
+  </tbody></table>
+  {% else %}<div class="empty">Every design is at or above its floor.</div>{% endif %}
+</div>
+
+<div class="card"><h3>Recent activity</h3>
+  <p class="hint">Every movement is a ledger row. Nothing is edited in place.</p>
+  <table><thead><tr><th>Jewel code</th><th>Event</th><th>From → To</th><th>Date</th><th>By</th></tr></thead><tbody>
+    {% for movement in recent_moves %}
+    <tr>
+      <td><a class="code" href="{% url 'stock:piece_detail' movement.piece.jewel_code %}">{{ movement.piece.jewel_code }}</a></td>
+      <td>{{ movement.get_move_type_display|lower }}</td>
+      <td class="dim">{{ movement.from_location.name|default:"—" }} → {{ movement.to_location.name|default:"—" }}</td>
+      <td class="dim">{{ movement.moved_at|date:"d M Y H:i" }}</td>
+      <td class="dim">{{ movement.user|default:"—" }}</td>
+    </tr>
+    {% empty %}<tr><td colspan="5"><div class="empty">Nothing has moved yet.</div></td></tr>{% endfor %}
+  </tbody></table>
 </div>
 
 <div class="grid cols-3">
   {% if open_counts %}
   <div class="card">
-    <h2>Counts in progress</h2>
+    <h3>Counts in progress</h3>
+    <p class="hint">Saved on the server — anyone can resume them.</p>
     {% for count in open_counts %}
-    <p><a href="{% url 'stock:count_detail' count.pk %}">{{ count.count_ref }}</a> <span class="muted small">{{ count.location.name }}</span></p>
+    <p><a class="code" href="{% url 'stock:count_detail' count.pk %}">{{ count.count_ref }}</a>
+       <span class="dim" style="font-size:12px">{{ count.location.name }}</span></p>
     {% endfor %}
   </div>
   {% endif %}
   {% if open_repairs %}
   <div class="card">
-    <h2>Repairs open</h2>
+    <h3>Repairs open</h3>
+    <p class="hint">A repair forks the bill of materials when it closes.</p>
     {% for job in open_repairs %}
-    <p>{{ job.job_no }} <span class="muted small">{{ job.piece.jewel_code }} · {{ job.status }}</span></p>
+    <p><span class="code">{{ job.job_no }}</span>
+       <span class="dim" style="font-size:12px">{{ job.piece.jewel_code }}</span>
+       <span class="chip c-ser">open</span></p>
     {% endfor %}
-  </div>
-  {% endif %}
-  {% if should_make %}
-  <div class="card">
-    <h2>Below minimum</h2>
-    <table>
-      <tr><th>Style</th><th class="num">Live</th><th class="num">Short</th></tr>
-      {% for row in should_make %}
-      <tr><td>{{ row.style_code }}</td><td class="num">{{ row.live_pieces }}</td><td class="num">{{ row.shortfall }}</td></tr>
-      {% endfor %}
-    </table>
   </div>
   {% endif %}
 </div>

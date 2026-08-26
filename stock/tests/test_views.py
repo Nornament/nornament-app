@@ -60,7 +60,7 @@ def test_the_scan_flow_returns_a_row_partial_not_a_page(client, admin_user_, rec
     response = client.post(reverse("stock:count_scan", kwargs={"count_id": count.pk}), {"code": "ER00738"})
     body = response.content.decode()
     assert response.status_code == 200
-    assert "FOUND" in body and "ER00738" in body
+    assert ">Found<" in body and "ER00738" in body
     assert "<html" not in body
 
 
@@ -68,7 +68,7 @@ def test_an_unknown_scan_says_so_without_failing(client, admin_user_, received_p
     client.force_login(admin_user_)
     count = services.open_count(admin_user_, "MUM")
     response = client.post(reverse("stock:count_scan", kwargs={"count_id": count.pk}), {"code": "GHOST"})
-    assert "UNKNOWN" in response.content.decode()
+    assert "Unknown code" in response.content.decode()
 
 
 def test_selling_from_the_screen_writes_one_sale(client, admin_user_, received_piece):

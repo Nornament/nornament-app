@@ -1,0 +1,4 @@
+{% comment %}The legacy status pill — nornament.html chip()/STATE_CHIP, one place.
+Usage: {% include "stock/_chip.html" with state=... label=... %}
+IN_STOCK/FOUND/ok → c-good · RESERVED/pending → c-warn · IN_REPAIR → c-ser ·
+SOLD/MELTED/LOST/MISSING/ERROR → c-crit · everything else → c-neutral.{% endcomment %}<span class="chip {% if state == 'IN_STOCK' or state == 'FOUND' or state == 'DONE' or state == 'CLOSED' %}c-good{% elif state == 'RESERVED' or state == 'ON_APPROVAL' or state == 'OPEN' or state == 'WITH_VENDOR' %}c-warn{% elif state == 'IN_REPAIR' %}c-ser{% elif state == 'SOLD' or state == 'MELTED' or state == 'LOST' or state == 'MISSING' or state == 'ERROR' or state == 'UNKNOWN' or state == 'CANCELLED' %}c-crit{% else %}c-neutral{% endif %}"><span class="dot" style="background:currentColor"></span>{{ label|default:state }}</span>

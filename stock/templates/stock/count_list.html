@@ -1,30 +1,45 @@
 {% extends "base.html" %}
 {% block title %}Stock counts · Nornament{% endblock %}
 {% block content %}
-<h1>Stock counts</h1>
-<form class="card row" method="post" action="{% url 'stock:count_open' %}">{% csrf_token %}
-  <div>
-    <label for="location">Count a location</label>
-    <select id="location" name="location">
-      {% for location in locations %}<option value="{{ location.code }}">{{ location.name }}</option>{% endfor %}
-    </select>
-  </div>
-  <div class="tight"><button class="primary">Open or resume</button></div>
-</form>
 <div class="card">
-<table>
-  <tr><th>Ref</th><th>Location</th><th>Status</th><th>Started</th><th>Closed</th><th>By</th><th class="num">Scans</th></tr>
-  {% for count in counts %}
-  <tr>
-    <td><a class="mono" href="{% url 'stock:count_detail' count.pk %}">{{ count.count_ref }}</a></td>
-    <td>{{ count.location.name }}</td>
-    <td><span class="badge {% if count.status == 'OPEN' %}RESERVED{% else %}ok{% endif %}">{{ count.status }}</span></td>
-    <td class="small">{{ count.started_at|date:"d M Y H:i" }}</td>
-    <td class="small">{{ count.closed_at|date:"d M Y H:i"|default:"—" }}</td>
-    <td class="small muted">{{ count.counted_by|default:"—" }}</td>
-    <td class="num">{{ count.scans.count }}</td>
-  </tr>
-  {% empty %}<tr><td colspan="7" class="empty">No counts yet.</td></tr>{% endfor %}
-</table>
+  <h3>Physical stock count</h3>
+  <p class="hint">Two different things: what the system believes is on the shelf, and what someone
+    actually found there. This is the second one. Pick a location, scan every piece you can physically
+    pick up, and the variance falls out of the difference.</p>
+
+  <div class="lcgrid">
+    {% for location in locations %}
+    <form method="post" action="{% url 'stock:count_open' %}" style="display:contents">{% csrf_token %}
+      <input type="hidden" name="location" value="{{ location.code }}">
+      <button type="submit" class="loccard{% for count in counts %}{% if count.status == 'OPEN' and count.location_id == location.pk %} resume{% endif %}{% endfor %}">
+        <span class="lcname">{{ location.name }}</span>
+        <span class="lccode">{{ location.code }}</span>
+        <span class="lcn">{{ location.live_pieces }} piece{{ location.live_pieces|pluralize }} on the books here</span>
+        {% for count in counts %}{% if count.status == 'OPEN' and count.location_id == location.pk %}<span class="chip c-warn">in progress · {{ count.scans.count }} scanned</span>{% endif %}{% endfor %}
+        <span class="dim" style="font-size:11.5px">start or resume a count →</span>
+      </button>
+    </form>
+    {% endfor %}
+  </div>
+
+  <div style="margin-top:26px"><h3>Past counts</h3>
+    <table><thead><tr><th>Ref</th><th>Location</th><th>Status</th>
+      <th class="num">Expected</th><th class="num">Found</th><th class="num">Missing</th>
+      <th class="num">Unexpected</th><th>Closed</th><th>By</th></tr></thead><tbody>
+    {% for count in counts %}
+    <tr>
+      <td><a class="code" href="{% url 'stock:count_detail' count.pk %}">{{ count.count_ref }}</a></td>
+      <td>{{ count.location.name }}</td>
+      <td>{% include "stock/_chip.html" with state=count.status label=count.status %}</td>
+      <td class="num dim">{% if count.result %}{{ count.result.expected }}{% else %}—{% endif %}</td>
+      <td class="num">{% if count.result %}{{ count.result.found }}{% else %}—{% endif %}</td>
+      <td class="num">{% if count.result.missing %}<span class="chip c-crit">{{ count.result.missing }}</span>{% elif count.result %}0{% else %}—{% endif %}</td>
+      <td class="num">{% if count.result.unexpected %}<span class="chip c-warn">{{ count.result.unexpected }}</span>{% elif count.result %}0{% else %}—{% endif %}</td>
+      <td class="dim">{{ count.closed_at|date:"d M Y"|default:"—" }}</td>
+      <td class="dim">{{ count.counted_by|default:"—" }}</td>
+    </tr>
+    {% empty %}<tr><td colspan="9"><div class="empty">No counts yet.</div></td></tr>{% endfor %}
+    </tbody></table>
+  </div>
 </div>
 {% endblock %}

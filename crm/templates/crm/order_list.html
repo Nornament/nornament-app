@@ -2,34 +2,37 @@
 {% block title %}Orders · Nornament{% endblock %}
 {% block content %}
 <h1>Orders</h1>
-{% if totals %}
-<div class="grid cols-3">
-  <div class="card stat"><div class="value">₹{{ totals.billed|default:0|floatformat:0 }}</div><div class="label">Billed</div></div>
-  <div class="card stat"><div class="value">₹{{ totals.advance|default:0|floatformat:0 }}</div><div class="label">Advance received</div></div>
+<div class="kpis">
+  <div class="kpi"><div class="lbl">Total</div><div class="val">{{ counts.total }}</div></div>
+  <div class="kpi"><div class="lbl">Open</div><div class="val">{{ counts.open }}</div></div>
+  <div class="kpi"><div class="lbl">Delivered</div><div class="val">{{ counts.delivered }}</div></div>
+  {% if totals %}
+  <div class="kpi"><div class="lbl">Billed</div><div class="val">₹{{ totals.billed|default:0|floatformat:0 }}</div></div>
+  <div class="kpi"><div class="lbl">Advance received</div><div class="val">₹{{ totals.advance|default:0|floatformat:0 }}</div></div>
+  <div class="kpi"><div class="lbl">Balance on open orders</div><div class="val">₹{{ totals.open_balance|default:0|floatformat:0 }}</div></div>
+  {% endif %}
 </div>
-{% endif %}
 {% include "crm/_pipeline_filter.html" %}
 <div class="card">
 <table>
-  <tr><th>Code</th><th>Customer</th><th>Item</th><th class="num">Total</th><th class="num">Advance</th><th class="num">Balance</th><th>Status</th><th>Due</th><th></th></tr>
+  <tr><th>Order</th><th>Customer</th><th>Item</th><th>Delivery</th><th>Status</th><th class="num">Total</th><th class="num">Balance</th><th></th></tr>
   {% for row in rows %}
   <tr>
-    <td class="mono">{{ row.order_code }}</td>
-    <td>{% if row.customer %}<a href="{% url 'crm:customer_detail' row.customer.pk %}">{{ row.customer.name }}</a>{% else %}<span class="muted">unlinked</span>{% endif %}</td>
+    <td class="code">{{ row.order_code }}</td>
+    <td>{% if row.customer %}<a href="{% url 'crm:customer_detail' row.customer.pk %}">{{ row.customer.name }}</a>{% else %}<span class="dim">unlinked</span>{% endif %}</td>
     <td>{{ row.item_description|truncatechars:48 }}</td>
-    <td class="num mono">{{ row.total_amount|default_if_none:"—"|floatformat:0 }}</td>
-    <td class="num mono">{{ row.advance_paid|default_if_none:"—"|floatformat:0 }}</td>
-    <td class="num mono">{{ row.balance_due|floatformat:0 }}</td>
-    <td class="small">{{ row.status }}</td>
-    <td class="small muted">{{ row.expected_delivery|default:"—" }}</td>
+    <td class="small dim">{{ row.expected_delivery|default:"—" }}</td>
+    <td>{% include "crm/_status_chip.html" with status=row.status kind="order" %}</td>
+    <td class="num">{{ row.total_amount|default_if_none:"—"|floatformat:0 }}</td>
+    <td class="num">{{ row.balance_due|floatformat:0 }}</td>
     <td>
       <form method="post" action="{% url 'crm:order_status' row.pk %}" class="inline">{% csrf_token %}
         <select name="status">{% for status in statuses %}<option value="{{ status }}" {% if status == row.status %}selected{% endif %}>{{ status }}</option>{% endfor %}</select>
-        <button class="small">Set</button>
+        <button class="btn sm">Set</button>
       </form>
     </td>
   </tr>
-  {% empty %}<tr><td colspan="9" class="empty">No orders.</td></tr>{% endfor %}
+  {% empty %}<tr><td colspan="8" class="empty">No orders.</td></tr>{% endfor %}
 </table>
 </div>
 {% endblock %}

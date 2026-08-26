@@ -2,80 +2,209 @@
 {% load crm_extras %}
 {% block title %}{{ customer.name }} · Nornament{% endblock %}
 {% block content %}
-<h1>{{ customer.name }}</h1>
-<p class="muted mono small">{{ customer.customer_code }}
-  {% if customer.is_fon %}· <span class="badge RESERVED">FoN level {{ customer.fon_level }}</span>{% endif %}</p>
 
-<div class="grid cols-3">
-  <div class="card">
-    <h2>Contact</h2>
-    <table>
-      <tr><td>Mobile</td><td class="mono">{{ customer.mobile|default:"—" }}</td></tr>
-      <tr><td>Email</td><td>{{ customer.email|default:"—" }}</td></tr>
-      <tr><td>Location</td><td>{{ customer.location|default:"—" }}</td></tr>
-      <tr><td>Birthday</td><td>{{ customer.birth_date|default:"—" }}</td></tr>
-      <tr><td>Anniversary</td><td>{{ customer.anniversary_date|default:"—" }}</td></tr>
-      <tr><td>Referred by</td><td>{{ customer.referrer.name|default:customer.reference_type }}</td></tr>
-    </table>
+<div class="spread">
+  <div>
+    <h1>{{ customer.name }} <span class="muted mono small">{{ customer.customer_code }}</span></h1>
+    <div class="tagrow">
+      <span class="tagchip">{{ customer.customer_type }}</span>
+      {% if customer.temperature %}{% include "crm/_status_chip.html" with status=customer.temperature kind="temp" %}{% endif %}
+      {% if customer.is_fon %}<span class="chip c-warn"><span class="dot"></span>FoN level {{ customer.fon_level }}</span>{% endif %}
+      {% if customer.phone %}<span class="tagchip mono">{{ customer.phone }}</span>{% endif %}
+    </div>
   </div>
-  {% if sales %}
-  <div class="card">
-    <h2>Purchases</h2>
-    <p class="stat"><span class="value">₹{{ lifetime_value|floatformat:0 }}</span><span class="label">Lifetime value</span></p>
-    <table>
-      <tr><th>Date</th><th>What</th><th>Cat</th><th class="num">Amount</th></tr>
-      {% for sale in sales %}
-      <tr><td class="small">{{ sale.sold_on }}</td>
-          <td>{{ sale.piece.jewel_code|default:sale.description|default:"—" }}</td>
-          <td class="small muted">{{ sale.product_category|default:"—" }}</td>
-          <td class="num mono">{{ sale.sold_price|floatformat:0 }}</td></tr>
-      {% empty %}<tr><td colspan="4" class="muted">No purchases yet.</td></tr>{% endfor %}
-    </table>
-    {% if caps.adjust_stock %}
-    <form method="post" action="{% url 'crm:add_purchase' customer.pk %}" style="margin-top:12px">{% csrf_token %}
-      <div class="row">
-        <div><label for="amount">Amount</label><input id="amount" name="amount" inputmode="decimal" required></div>
-        <div><label for="date">Date</label><input id="date" name="date" type="date"></div>
-        <div><label for="category">Category</label>
-          <select id="category" name="category"><option value="cat1">Cat 1</option><option value="cat2">Cat 2</option><option value="cat3">Cat 3</option></select></div>
-        <div class="tight"><button class="primary">Add</button></div>
+  <div class="tgroup">
+    {% if customer.mobile %}<a class="btn" href="https://wa.me/{{ customer.mobile|wa_number }}" target="_blank" rel="noopener">WhatsApp</a>{% endif %}
+    <a class="btn" href="{% url 'crm:customer_list' %}">← Customers</a>
+  </div>
+</div>
+
+<div class="kpis" style="margin-top:14px">
+  <div class="kpi"><div class="lbl">Orders</div><div class="val">{{ orders|length }}</div></div>
+  {% if lifetime_value is not None %}
+  <div class="kpi"><div class="lbl">Total spent</div><div class="val">₹{{ lifetime_value|floatformat:0 }}</div></div>
+  {% endif %}
+  <div class="kpi"><div class="lbl">Referrals</div><div class="val">{{ customer.referred_customers.count }}</div></div>
+  <div class="kpi"><div class="lbl">Enquiries</div><div class="val">{{ enquiries|length }}</div></div>
+  <div class="kpi"><div class="lbl">Repairs</div><div class="val">{{ repairs|length }}</div></div>
+</div>
+
+<div class="card">
+  <h2>Overview</h2>
+  <div class="bio">
+    <dl>
+      <div class="biorow"><dt>Mobile</dt><dd class="mono">{{ customer.mobile|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Landline</dt><dd class="mono">{{ customer.landline|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Email</dt><dd>{{ customer.email|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Address</dt><dd>{{ customer.address|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Location</dt><dd>{{ customer.location|default:"—" }}</dd></div>
+    </dl>
+    <dl>
+      <div class="biorow"><dt>Birthday</dt><dd>{{ customer.birth_date|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Anniversary</dt><dd>{{ customer.anniversary_date|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Engagement</dt><dd>{{ customer.engagement_date|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Wedding</dt><dd>{{ customer.wedding_date|default:"—" }}</dd></div>
+    </dl>
+    <dl>
+      <div class="biorow"><dt>Metal preference</dt><dd>{{ customer.metal_preference|join:", "|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Salesperson</dt><dd>{{ customer.salesperson_preference|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Payment</dt><dd>{{ customer.payment_preference|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Referred by</dt><dd>{{ customer.referrer.name|default:customer.reference_type }}</dd></div>
+      <div class="biorow"><dt>Outreach</dt><dd>{% if customer.outreach_done %}Done{% else %}Pending{% endif %}{% if customer.outreach_last_date %} · last {{ customer.outreach_last_date }}{% endif %}</dd></div>
+      {% if customer.fon_parent %}<div class="biorow"><dt>FoN parent</dt><dd>{{ customer.fon_parent.name }}</dd></div>{% endif %}
+    </dl>
+  </div>
+  {% if customer.personal_observation or customer.client_personal_info %}
+  <div class="note" style="margin-bottom:0">
+    {% if customer.personal_observation %}{{ customer.personal_observation }}{% endif %}
+    {% if customer.client_personal_info %}<div class="dim small">{{ customer.client_personal_info }}</div>{% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{% if media %}
+<div class="card">
+  <h2>Photos</h2>
+  <div class="mgrid">
+    {% for asset, url in media %}
+    <figure class="mcard">
+      <div class="mshot">
+        {% if url %}<img src="{{ url }}" alt="{{ asset.caption|default:asset.file_name|default:'Photo' }}" loading="lazy">
+        {% else %}<span class="mext">{{ asset.kind }}</span>{% endif %}
       </div>
-      <p class="small muted">This writes a sale into the one ledger, tagged CRM — the same row FoN and reports read.</p>
-    </form>
-    {% endif %}
+      <figcaption>
+        <span class="mname">{{ asset.caption|default:asset.file_name|default:asset.media_ref }}</span>
+        <span class="mmeta">{{ asset.uploaded_at|date:"j M Y" }}</span>
+      </figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if related_people %}
+<div class="card">
+  <h2>Related people</h2>
+  <table>
+    <tr><th>Name</th><th>Relation</th><th>Phone</th><th>Birthday</th><th>Note</th></tr>
+    {% for person in related_people %}
+    <tr><td><b>{{ person.name }}</b></td><td>{{ person.relation|default:"—" }}</td>
+        <td class="mono small">{{ person.phone|default:"—" }}</td>
+        <td class="small dim">{{ person.birth_date|default:"—" }}</td>
+        <td class="small dim">{{ person.note }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+{% if lifetime_value is not None %}
+<div class="card">
+  <h2>Purchase history</h2>
+  <table>
+    <tr><th>Date</th><th>What</th><th>Cat</th><th class="num">Amount</th></tr>
+    {% for sale in sales %}
+    <tr><td class="small dim">{{ sale.sold_on }}</td>
+        <td>{{ sale.piece.jewel_code|default:sale.description|default:"—" }}</td>
+        <td class="small dim">{{ sale.product_category|default:"—" }}</td>
+        <td class="num">{{ sale.sold_price|floatformat:0 }}</td></tr>
+    {% empty %}<tr><td colspan="4" class="dim">No purchases yet.</td></tr>{% endfor %}
+  </table>
+  {% if caps.adjust_stock %}
+  <form method="post" action="{% url 'crm:add_purchase' customer.pk %}" style="margin-top:12px">{% csrf_token %}
+    <div class="row">
+      <div><label for="amount">Amount</label><input id="amount" name="amount" inputmode="decimal" required></div>
+      <div><label for="date">Date</label><input id="date" name="date" type="date"></div>
+      <div><label for="category">Category</label>
+        <select id="category" name="category"><option value="cat1">Cat 1</option><option value="cat2">Cat 2</option><option value="cat3">Cat 3</option></select></div>
+      <div class="tight"><button class="primary">Add</button></div>
+    </div>
+    <p class="small muted">This writes a sale into the one ledger, tagged CRM — the same row FoN and reports read.</p>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="grid cols-3">
+  <div class="card">
+    <h2>Orders</h2>
+    <table>
+      {% for order in orders %}
+      <tr><td class="code">{{ order.order_code }}</td>
+          <td>{{ order.item_description|truncatechars:40 }}</td>
+          <td>{% include "crm/_status_chip.html" with status=order.status kind="order" %}</td></tr>
+      {% empty %}<tr><td class="dim">None.</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div class="card">
+    <h2>Enquiries</h2>
+    <table>
+      {% for enquiry in enquiries %}
+      <tr><td class="code">{{ enquiry.enquiry_code }}</td>
+          <td>{{ enquiry.item_of_interest|default:"—" }}</td>
+          <td>{% include "crm/_status_chip.html" with status=enquiry.status kind="enquiry" %}</td></tr>
+      {% empty %}<tr><td class="dim">None.</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div class="card">
+    <h2>Client materials</h2>
+    <table>
+      {% for material in client_materials %}
+      <tr><td class="code">{{ material.cm_code }}</td>
+          <td>{{ material.jewellery_description|truncatechars:40 }}</td>
+          <td>{% include "crm/_status_chip.html" with status=material.status kind="cm" %}</td></tr>
+      {% empty %}<tr><td class="dim">None.</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div class="card">
+    <h2>Repairs</h2>
+    <table>
+      {% for repair in repairs %}
+      <tr><td class="code">{{ repair.repair_code }}</td>
+          <td>{{ repair.item_description|truncatechars:40 }}</td>
+          <td>{% include "crm/_status_chip.html" with status=repair.status kind="repair" %}</td></tr>
+      {% empty %}<tr><td class="dim">None.</td></tr>{% endfor %}
+    </table>
+  </div>
+  {% if gifts %}
+  <div class="card">
+    <h2>Gifting</h2>
+    <table>
+      {% for gift in gifts %}
+      <tr><td class="small dim">{{ gift.date|default:"—" }}</td>
+          <td>{{ gift.description|truncatechars:40 }}<div class="dim small">{{ gift.occasion }}</div></td>
+          <td class="num">{{ gift.amount|default_if_none:"—"|floatformat:0 }}</td></tr>
+      {% endfor %}
+    </table>
   </div>
   {% endif %}
-  {% if payout %}
+  {% if occasions %}
   <div class="card">
-    <h2>FoN this month</h2>
+    <h2>Occasions</h2>
     <table>
-      <tr><th>Category</th><th class="num">Billing</th><th class="num">Rate</th><th class="num">Payout</th></tr>
-      {% for key, label in categories.items %}
-      <tr><td class="small">{{ label }}</td>
-          <td class="num mono">{{ payout.billing|lookup:key|floatformat:0 }}</td>
-          <td class="num">{{ payout.pct|lookup:key }}%</td>
-          <td class="num mono">{{ payout.payout|lookup:key|floatformat:0 }}</td></tr>
+      {% for occasion in occasions %}
+      <tr><td>{{ occasion.occasion_type }}</td>
+          <td class="small dim">{{ occasion.date|default:"—" }}</td>
+          <td class="small dim">{{ occasion.note }}</td></tr>
       {% endfor %}
-      <tr><th>Total</th><th class="num mono">{{ payout.total|floatformat:0 }}</th><th></th>
-          <th class="num mono">{{ payout.total_payout|floatformat:0 }}</th></tr>
     </table>
   </div>
   {% endif %}
 </div>
 
-<div class="grid cols-3">
-  <div class="card"><h2>Enquiries</h2><table>
-    {% for enquiry in enquiries %}<tr><td class="mono">{{ enquiry.enquiry_code }}</td><td>{{ enquiry.item_of_interest|default:"—" }}</td>
-      <td class="small muted">{{ enquiry.status }}</td></tr>{% empty %}<tr><td class="muted">None.</td></tr>{% endfor %}
-  </table></div>
-  <div class="card"><h2>Orders</h2><table>
-    {% for order in orders %}<tr><td class="mono">{{ order.order_code }}</td><td>{{ order.item_description|truncatechars:40 }}</td>
-      <td class="small muted">{{ order.status }}</td></tr>{% empty %}<tr><td class="muted">None.</td></tr>{% endfor %}
-  </table></div>
-  <div class="card"><h2>Repairs</h2><table>
-    {% for repair in repairs %}<tr><td class="mono">{{ repair.repair_code }}</td><td>{{ repair.item_description|truncatechars:40 }}</td>
-      <td class="small muted">{{ repair.status }}</td></tr>{% empty %}<tr><td class="muted">None.</td></tr>{% endfor %}
-  </table></div>
+{% if payout %}
+<div class="card">
+  <h2>FoN this month</h2>
+  <table>
+    <tr><th>Category</th><th class="num">Billing</th><th class="num">Rate</th><th class="num">Payout</th></tr>
+    {% for key, billing in payout.billing.items %}
+    <tr><td class="small">{% if key == 'cat1' %}Cat 1{% elif key == 'cat2' %}Cat 2{% elif key == 'cat3' %}Cat 3{% else %}{{ key }}{% endif %}</td>
+        <td class="num">{{ billing|floatformat:0 }}</td>
+        <td class="num">{{ payout.pct|lookup:key }}%</td>
+        <td class="num">{{ payout.payout|lookup:key|floatformat:0 }}</td></tr>
+    {% endfor %}
+    <tr><th>Total</th><th class="num">{{ payout.total|floatformat:0 }}</th><th></th>
+        <th class="num">{{ payout.total_payout|floatformat:0 }}</th></tr>
+  </table>
 </div>
-<p><a href="{% url 'crm:customer_list' %}">← Customers</a></p>
+{% endif %}
 {% endblock %}

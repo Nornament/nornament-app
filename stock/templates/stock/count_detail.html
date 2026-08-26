@@ -1,34 +1,43 @@
 {% extends "base.html" %}
 {% block title %}{{ count.count_ref }} · Nornament{% endblock %}
 {% block content %}
-<h1 class="mono">{{ count.count_ref }}</h1>
-<p class="muted">{{ count.location.name }} · <span class="badge {% if count.status == 'OPEN' %}RESERVED{% else %}ok{% endif %}">{{ count.status }}</span></p>
-
-{% if count.status == 'OPEN' %}
+<div class="crumb"><a href="{% url 'stock:count_list' %}">← All counts</a> / {{ count.count_ref }}</div>
 <div class="card">
-  <form hx-post="{% url 'stock:count_scan' count.pk %}" hx-target="#count-state" hx-swap="outerHTML"
+  <div class="spread">
+    <div><h3>{{ count.location.name }}
+      <span class="code" style="font-size:12px;color:var(--muted);font-weight:400">{{ count.count_ref }}</span></h3>
+      <p class="hint" style="margin:0">Started {{ count.started_at|date:"d M Y H:i" }}
+        by {{ count.counted_by|default:"—" }}. Saved on the server — you can close this and come back.</p></div>
+    <div>{% include "stock/_chip.html" with state=count.status label=count.status %}</div>
+  </div>
+
+  {% if count.status == 'OPEN' %}
+  <form class="scanbar" hx-post="{% url 'stock:count_scan' count.pk %}" hx-target="#count-state" hx-swap="outerHTML"
         method="post" action="{% url 'stock:count_scan' count.pk %}"
         {% comment %}hx-on lets the scanner keep firing without touching the keyboard{% endcomment %}
         hx-on::after-request="this.reset();this.code.focus()">
     {% csrf_token %}
-    <label for="code">Scan a piece</label>
-    <input id="code" name="code" autofocus autocomplete="off" placeholder="Scan or type a jewel code">
-    <p class="small muted">A scanner's trailing suffix is ignored — everything after a double underscore is dropped.</p>
+    <input id="code" name="code" autofocus autocomplete="off" autocapitalize="characters" spellcheck="false"
+           placeholder="Scan a tag, or type a jewel code and press Enter">
+    <button class="btn" type="submit">Add</button>
+  </form>
+  <p class="hint" style="margin:7px 0 0">A scanner's trailing suffix is ignored — everything after a
+    double underscore is dropped.</p>
+  {% endif %}
+
+  <div id="count-state">{% include "stock/_count_state.html" %}</div>
+</div>
+
+{% if count.status == 'OPEN' %}
+<div class="card">
+  <form method="post" action="{% url 'stock:count_close' count.pk %}">{% csrf_token %}
+    <label for="notes">Notes</label>
+    <textarea id="notes" name="notes" rows="2"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn primary tight">Finish &amp; show variance</button>
+      <button class="btn danger tight" name="cancel" value="1">Abandon</button>
+    </div>
   </form>
 </div>
 {% endif %}
-
-<div id="count-state">{% include "stock/_count_state.html" %}</div>
-
-{% if count.status == 'OPEN' %}
-<form class="card" method="post" action="{% url 'stock:count_close' count.pk %}">{% csrf_token %}
-  <label for="notes">Notes</label>
-  <textarea id="notes" name="notes" rows="2"></textarea>
-  <div class="row" style="margin-top:10px">
-    <button class="primary tight">Close count</button>
-    <button class="danger tight" name="cancel" value="1">Cancel count</button>
-  </div>
-</form>
-{% endif %}
-<p><a href="{% url 'stock:count_list' %}">← All counts</a></p>
 {% endblock %}

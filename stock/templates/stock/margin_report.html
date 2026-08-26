@@ -1,24 +1,48 @@
 {% extends "base.html" %}
 {% block title %}Margin · Nornament{% endblock %}
 {% block content %}
-<h1>Margin</h1>
-<p class="muted small">Stock-sourced sales only — a CRM purchase carries no cost, so a margin for it would be invented.</p>
-<div class="grid cols-4">
-  <div class="card stat"><div class="value">₹{{ totals.revenue|default:0|floatformat:0 }}</div><div class="label">Revenue (stock)</div></div>
-  <div class="card stat"><div class="value">₹{{ totals.cost|default:0|floatformat:0 }}</div><div class="label">Cost at sale</div></div>
-  <div class="card stat"><div class="value" style="color:var(--ok)">₹{{ totals.margin|default:0|floatformat:0 }}</div><div class="label">Margin</div></div>
-  <div class="card stat"><div class="value">₹{{ crm_revenue|floatformat:0 }}</div><div class="label">Revenue (CRM, no cost)</div></div>
+<div class="kpis">
+  <div class="kpi"><div class="lbl">Revenue — stock</div>
+    <div class="val" style="font-size:24px">₹{{ totals.revenue|default:0|floatformat:0 }}</div>
+    <div class="sub">stock-sourced sales</div></div>
+  <div class="kpi"><div class="lbl">Cost at sale</div>
+    <div class="val" style="font-size:24px">₹{{ totals.cost|default:0|floatformat:0 }}</div>
+    <div class="sub">frozen when each piece sold</div></div>
+  <div class="kpi"><div class="lbl">Margin</div>
+    <div class="val" style="font-size:24px">₹{{ totals.margin|default:0|floatformat:0 }}</div>
+    <div class="sub">sale minus cost</div></div>
+  <div class="kpi"><div class="lbl">Revenue — CRM</div>
+    <div class="val" style="font-size:24px">₹{{ crm_revenue|floatformat:0 }}</div>
+    <div class="sub">carries no cost, no margin</div></div>
 </div>
+
+<div class="card"><h3>Stock by location</h3>
+  <p class="hint">Unpriced pieces are listed separately because they contribute zero to the value —
+    without that column a partly-imported catalogue looks healthy while being understated.</p>
+  <table><thead><tr><th>Location</th><th class="num">Live pieces</th>
+    {% if show_value %}<th class="num">Value at cost</th>{% endif %}<th class="num">Unpriced</th></tr></thead><tbody>
+  {% for entry in by_location %}
+  <tr><td>{{ entry.location__name|default:"—" }}</td>
+      <td class="num">{{ entry.pieces }}</td>
+      {% if show_value %}<td class="num">₹{{ entry.value|default:0|floatformat:0 }}</td>{% endif %}
+      <td class="num">{% if entry.unpriced %}<span class="chip c-ser">{{ entry.unpriced }}</span>{% else %}0{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="4"><div class="empty">Nothing in stock.</div></td></tr>{% endfor %}
+  </tbody></table>
+</div>
+
 <div class="card">
-<table>
-  <tr><th>Date</th><th>Piece</th><th class="num">Sold</th><th class="num">Cost</th><th class="num">Margin</th></tr>
+  <h3>Margin by sale</h3>
+  <p class="hint">Stock-sourced sales only — a CRM purchase carries no cost, so a margin for it would
+    be invented.</p>
+  <table><thead><tr><th>Date</th><th>Jewel code</th><th class="num">Price</th>
+    <th class="num">Cost</th><th class="num">Margin</th></tr></thead><tbody>
   {% for sale in sales %}
-  <tr><td class="small">{{ sale.sold_on }}</td>
-      <td class="mono">{{ sale.piece.jewel_code|default:"—" }}</td>
-      <td class="num mono">{{ sale.sold_price|floatformat:0 }}</td>
-      <td class="num mono">{{ sale.cost_at_sale|default_if_none:"—"|floatformat:0 }}</td>
-      <td class="num mono">{{ sale.margin_amt|default_if_none:"—"|floatformat:0 }}</td></tr>
-  {% empty %}<tr><td colspan="5" class="empty">No sales yet.</td></tr>{% endfor %}
-</table>
+  <tr><td class="dim">{{ sale.sold_on }}</td>
+      <td>{% if sale.piece %}<a class="code" href="{% url 'stock:piece_detail' sale.piece.jewel_code %}">{{ sale.piece.jewel_code }}</a>{% else %}<span class="dim">—</span>{% endif %}</td>
+      <td class="num">{{ sale.sold_price|floatformat:0 }}</td>
+      <td class="num">{{ sale.cost_at_sale|default_if_none:"—"|floatformat:0 }}</td>
+      <td class="num">{{ sale.margin_amt|default_if_none:"—"|floatformat:0 }}</td></tr>
+  {% empty %}<tr><td colspan="5"><div class="empty">No sales yet.</div></td></tr>{% endfor %}
+  </tbody></table>
 </div>
 {% endblock %}
