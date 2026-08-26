@@ -43,5 +43,13 @@ class EtlExceptionAdmin(admin.ModelAdmin):
     list_filter = ("entity", "problem")
 
 
+@admin.register(models.OutreachEntry)
+class OutreachEntryAdmin(admin.ModelAdmin):
+    list_display = ("customer", "date", "type", "outcome", "next_follow_up", "by")
+    list_filter = ("type",)
+    search_fields = ("customer__name", "notes")
+
+
 admin.site.register(models.Salesperson)
+admin.site.register(models.Location)
 admin.site.register(models.CrmSetting)

@@ -67,7 +67,8 @@ Docker creates it as a directory and the app boots without its settings.
 3. **Contabo smoke test**: a presigned PUT from a browser (CORS), a GET with
    `ResponseContentType`, path-style addressing. If the browser PUT fails, set
    `MEDIA_DIRECT_UPLOAD=false` — uploads then proxy through Django. One flag.
-4. `rclone copy r2:nornament-media contabo:<bucket>` — idempotent, re-run at cutover.
+4. `rclone copy r2:nornament-media contabo:nornamentbucket` — idempotent, re-run
+   at cutover. Source and destination bucket names differ; keys do not.
 5. Export `logins.csv` — the header row is required, `import_logins` reads by
    column name, and the `AS email` matters (`lower(email)`'s default column
    name is `lower`):

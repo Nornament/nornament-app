@@ -1,0 +1,18 @@
+{% comment %}Status chips plus the List / Kanban / + New row — the legacy module
+toolbar, identical on all four screens.{% endcomment %}
+<div class="fl ia jb mb16 g8" style="flex-wrap:wrap">
+  <div class="fl ia g8" style="flex-wrap:wrap">
+    <a class="chip{% if not selected_status %} act{% endif %}" href="?{% if view_mode == 'kanban' %}view=kanban{% endif %}">All</a>
+    {% for status in statuses %}
+    <a class="chip{% if selected_status == status %} act{% endif %}"
+       href="?status={{ status|urlencode }}{% if view_mode == 'kanban' %}&amp;view=kanban{% endif %}">{{ status }}</a>
+    {% endfor %}
+  </div>
+  <div class="fl g8">
+    <a class="btn btn-s btn-sm{% if view_mode == 'list' %} act{% endif %}"
+       href="?{% if selected_status %}status={{ selected_status|urlencode }}{% endif %}">☰ List</a>
+    <a class="btn btn-s btn-sm{% if view_mode == 'kanban' %} act{% endif %}"
+       href="?view=kanban{% if selected_status %}&amp;status={{ selected_status|urlencode }}{% endif %}">⣿ Kanban</a>
+    <a class="btn btn-p btn-sm" href="{% url 'crm:pipeline_new' kind %}">+ New</a>
+  </div>
+</div>

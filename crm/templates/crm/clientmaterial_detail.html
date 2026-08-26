@@ -1,0 +1,24 @@
+{% extends "crm/_pipeline_detail.html" %}
+{% load crm_extras %}
+
+{% block extra_actions %}
+{% if row.status != 'Moved to Order' and row.status != 'Moved to Repair' %}
+<form method="post" action="{% url 'crm:material_convert' row.pk 'order' %}">{% csrf_token %}
+  <button class="btn btn-s btn-sm">→ Order</button></form>
+<form method="post" action="{% url 'crm:material_convert' row.pk 'repair' %}">{% csrf_token %}
+  <button class="btn btn-s btn-sm">→ Repair</button></form>
+{% endif %}
+{% endblock %}
+
+{% block detail_fields %}
+<div><div class="il">Received</div><div class="iv">{{ row.received_date|date:"d M Y"|default:"—" }}</div></div>
+<div><div class="il">Metal</div><div class="iv">{{ row.metal_type|default:"—" }}</div></div>
+<div><div class="il">Weight</div><div class="iv">{% if row.weight_grams %}{{ row.weight_grams }} g{% else %}—{% endif %}</div></div>
+{% if caps.view_sale %}<div><div class="il">Estimated Value</div><div class="iv">{{ row.estimated_value|inr }}</div></div>{% endif %}
+{% endblock %}
+
+{% block detail_prose %}
+{% if row.jewellery_description %}<div class="il mt12 mb4">Description</div><div class="iv">{{ row.jewellery_description|linebreaksbr }}</div>{% endif %}
+{% if row.issue %}<div class="il mt12 mb4">Issue</div><div class="iv">{{ row.issue|linebreaksbr }}</div>{% endif %}
+{% if row.design_notes %}<div class="il mt12 mb4">Design Notes</div><div class="iv" style="line-height:1.6">{{ row.design_notes|linebreaksbr }}</div>{% endif %}
+{% endblock %}

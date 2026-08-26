@@ -1,22 +1,38 @@
-<div class="card">
-<table>
-  <tr><th>Customer</th><th>Contact</th><th>Location</th><th>Status</th><th>Type</th><th>FoN</th>{% if caps.view_sale %}<th class="num">Value</th>{% endif %}</tr>
-  {% for customer in page %}
-  <tr>
-    <td><a href="{% url 'crm:customer_detail' customer.pk %}"><b>{{ customer.name }}</b></a>
-        <div class="dim small mono">{{ customer.customer_code }}</div></td>
-    <td class="mono small">{{ customer.phone|default:"—" }}</td>
-    <td>{{ customer.location|default:"—" }}</td>
-    <td>{% if customer.temperature %}{% include "crm/_status_chip.html" with status=customer.temperature kind="temp" %}{% else %}<span class="dim">—</span>{% endif %}</td>
-    <td class="small">{{ customer.customer_type }}</td>
-    <td>{% if customer.is_fon %}<span class="chip c-warn"><span class="dot"></span>Level {{ customer.fon_level }}</span>{% endif %}</td>
-    {% if caps.view_sale %}<td class="num">{% if customer.value %}₹{{ customer.value|floatformat:0 }}{% else %}<span class="dim">—</span>{% endif %}</td>{% endif %}
-  </tr>
-  {% empty %}<tr><td colspan="7" class="empty">No customers match.</td></tr>{% endfor %}
-</table>
+{% load crm_extras %}
+<div class="card" style="padding:0">
+  <div style="overflow-x:auto">
+    <table class="cust-table">
+      <thead><tr><th>Customer</th><th>Contact</th><th>Location</th><th>Status</th><th>Type</th><th>FoN</th>
+        {% if caps.view_sale %}<th class="tr">Value</th>{% endif %}<th></th></tr></thead>
+      <tbody>
+      {% for customer in page %}
+      <tr onclick="location='{% url 'crm:customer_detail' customer.pk %}'">
+        <td><div class="nc"><div class="av">{{ customer.name|initials }}</div>
+          <div><div class="fw">{{ customer.name }}</div><div class="ncode">{{ customer.customer_code }}</div></div></div></td>
+        <td><div class="sm">{{ customer.mobile|default:"—" }}</div><div class="sm mu">{{ customer.email }}</div></td>
+        <td class="sm">{% if customer.location %}📍 {{ customer.location }}{% else %}—{% endif %}</td>
+        <td>{% include "crm/_temp_badge.html" with temp=customer.temperature %}</td>
+        <td>{% include "crm/_type_badge.html" with ctype=customer.customer_type %}</td>
+        <td>{% if customer.is_fon %}{% include "crm/_fon_badge.html" with level=customer.fon_level %}{% else %}—{% endif %}</td>
+        {% if caps.view_sale %}<td class="tr fw">{{ customer.value|inr }}</td>{% endif %}
+        <td><div class="fl g8" onclick="event.stopPropagation()">
+          <a class="BI" href="{% url 'crm:customer_edit' customer.pk %}" title="Edit">✏️</a>
+          <form method="post" action="{% url 'crm:customer_delete' customer.pk %}"
+                onsubmit="return confirm('Delete {{ customer.name|escapejs }}? Their enquiries, orders and repairs stay, unlinked.')">
+            {% csrf_token %}<button class="BI" title="Delete">🗑</button></form>
+        </div></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8"><div class="es"><div class="ei">🔍</div><p>No customers match</p></div></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
-{% if page.has_other_pages %}
-<p class="small muted">Page {{ page.number }} of {{ page.paginator.num_pages }} ·
-  {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">Previous</a>{% endif %}
-  {% if page.has_next %}<a href="?page={{ page.next_page_number }}">Next</a>{% endif %}</p>
-{% endif %}
+<div class="sm mu mt8 tr" style="padding:8px 16px">
+  {{ page.paginator.count }} of {{ grand_total }} customers
+  {% if page.has_other_pages %}· page {{ page.number }} of {{ page.paginator.num_pages }}
+    {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&amp;q={{ q|urlencode }}">‹ Previous</a>{% endif %}
+    {% if page.has_next %}<a href="?page={{ page.next_page_number }}&amp;q={{ q|urlencode }}">Next ›</a>{% endif %}
+  {% endif %}
+</div>

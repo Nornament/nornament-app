@@ -1,38 +1,62 @@
-{% extends "base.html" %}
-{% block title %}Orders · Nornament{% endblock %}
+{% extends "crm_base.html" %}
+{% load crm_extras %}
+{% block title %}Orders · Nornament CRM{% endblock %}
+{% block heading %}Orders{% endblock %}
+{% block subheading %}{{ counts.open }} open{% endblock %}
+{% block actions %}<a class="btn btn-p" href="{% url 'crm:pipeline_new' 'order' %}">+ New Order</a>{% endblock %}
+
 {% block content %}
-<h1>Orders</h1>
-<div class="kpis">
-  <div class="kpi"><div class="lbl">Total</div><div class="val">{{ counts.total }}</div></div>
-  <div class="kpi"><div class="lbl">Open</div><div class="val">{{ counts.open }}</div></div>
-  <div class="kpi"><div class="lbl">Delivered</div><div class="val">{{ counts.delivered }}</div></div>
+<div class="g4 mb16">
+  <div class="sc"><div class="sv">{{ counts.total }}</div><div class="sl">Total</div></div>
+  <div class="sc"><div class="sv c-warm">{{ counts.open }}</div><div class="sl">Open</div></div>
+  <div class="sc"><div class="sv c-ok">{{ counts.delivered }}</div><div class="sl">Delivered</div></div>
   {% if totals %}
-  <div class="kpi"><div class="lbl">Billed</div><div class="val">₹{{ totals.billed|default:0|floatformat:0 }}</div></div>
-  <div class="kpi"><div class="lbl">Advance received</div><div class="val">₹{{ totals.advance|default:0|floatformat:0 }}</div></div>
-  <div class="kpi"><div class="lbl">Balance on open orders</div><div class="val">₹{{ totals.open_balance|default:0|floatformat:0 }}</div></div>
+  <div class="sc"><div class="sv c-acc" style="font-size:20px">{{ totals.open_balance|inr }}</div><div class="sl">Balance</div></div>
+  {% else %}
+  <div class="sc"><div class="sv c-cold">{{ status_counts|lookup:"Ready"|default:0 }}</div><div class="sl">Ready</div></div>
   {% endif %}
 </div>
-{% include "crm/_pipeline_filter.html" %}
-<div class="card">
-<table>
-  <tr><th>Order</th><th>Customer</th><th>Item</th><th>Delivery</th><th>Status</th><th class="num">Total</th><th class="num">Balance</th><th></th></tr>
-  {% for row in rows %}
-  <tr>
-    <td class="code">{{ row.order_code }}</td>
-    <td>{% if row.customer %}<a href="{% url 'crm:customer_detail' row.customer.pk %}">{{ row.customer.name }}</a>{% else %}<span class="dim">unlinked</span>{% endif %}</td>
-    <td>{{ row.item_description|truncatechars:48 }}</td>
-    <td class="small dim">{{ row.expected_delivery|default:"—" }}</td>
-    <td>{% include "crm/_status_chip.html" with status=row.status kind="order" %}</td>
-    <td class="num">{{ row.total_amount|default_if_none:"—"|floatformat:0 }}</td>
-    <td class="num">{{ row.balance_due|floatformat:0 }}</td>
-    <td>
-      <form method="post" action="{% url 'crm:order_status' row.pk %}" class="inline">{% csrf_token %}
-        <select name="status">{% for status in statuses %}<option value="{{ status }}" {% if status == row.status %}selected{% endif %}>{{ status }}</option>{% endfor %}</select>
-        <button class="btn sm">Set</button>
-      </form>
-    </td>
-  </tr>
-  {% empty %}<tr><td colspan="8" class="empty">No orders.</td></tr>{% endfor %}
-</table>
+
+{% include "crm/_pipeline_toolbar.html" %}
+
+{% if view_mode == 'kanban' %}
+  {% include "crm/_kanban.html" %}
+{% else %}
+<div class="card" style="padding:0">
+  <div style="overflow-x:auto">
+    <table>
+      <thead><tr><th style="width:44px;padding:6px 8px"></th><th>Order</th><th>Customer</th><th>Item</th>
+        <th>Delivery</th><th>Status</th>{% if caps.view_sale %}<th class="tr">Total</th><th class="tr">Balance</th>{% endif %}<th></th></tr></thead>
+      <tbody>
+      {% for row in rows %}
+      <tr onclick="location='{% url 'crm:order_detail' row.pk %}'">
+        <td style="padding:6px 8px;width:44px">{% with url=thumbs|lookup:row.pk %}
+          {% if url %}<img src="{{ url }}" style="width:36px;height:36px;object-fit:cover;border-radius:5px;display:block" alt="">
+          {% else %}<div style="width:36px;height:36px;border-radius:5px;background:#f0ebe2;display:flex;align-items:center;justify-content:center;font-size:13px;color:#c9a84c">📷</div>{% endif %}
+        {% endwith %}</td>
+        <td class="fw">{{ row.order_code }}</td>
+        <td>{% if row.customer %}<div class="nc"><div class="av" style="width:26px;height:26px;font-size:10px">{{ row.customer.name|initials }}</div>
+            <span style="color:var(--acc)" onclick="event.stopPropagation();location='{% url 'crm:customer_detail' row.customer.pk %}'">{{ row.customer.name }}</span></div>
+          {% else %}<span class="mu">Unknown</span>{% endif %}</td>
+        <td>{{ row.item_description|truncatechars:48 }}</td>
+        <td class="sm">{{ row.expected_delivery|date:"d M Y"|default:"—" }}</td>
+        <td>{% include "crm/_status_chip.html" with status=row.status %}</td>
+        {% if caps.view_sale %}
+        <td class="tr">{{ row.total_amount|inr }}</td>
+        <td class="tr fw" style="color:{% if row.balance_due > 0 %}var(--hot){% else %}var(--ok){% endif %}">{{ row.balance_due|inr }}</td>
+        {% endif %}
+        <td onclick="event.stopPropagation()">
+          <form method="post" action="{% url 'crm:pipeline_status' 'order' row.pk %}" class="fl g8">{% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <select name="status" style="width:auto;min-width:140px">{% for status in statuses %}<option value="{{ status }}" {% if status == row.status %}selected{% endif %}>{{ status }}</option>{% endfor %}</select>
+            <button class="btn btn-s btn-xs">Set</button>
+          </form>
+        </td>
+      </tr>
+      {% empty %}<tr><td colspan="9"><div class="es"><div class="ei">📦</div><p>No orders</p></div></td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
+{% endif %}
 {% endblock %}

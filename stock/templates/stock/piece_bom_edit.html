@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Edit BOM · {{ piece.jewel_code }}{% endblock %}
+{% block heading %}Edit bill of materials — {{ piece.jewel_code }}{% endblock %}
+{% block content %}
+<div class="crumb"><a href="{% url 'stock:piece_list' %}">← Stock</a> /
+  <a href="{% url 'stock:piece_detail' piece.jewel_code %}">{{ piece.jewel_code }}</a> / BOM</div>
+
+<div class="card">
+  <div class="spread">
+    <div><h3>Lines on v{{ version.version_no|default:1 }}</h3>
+      <p class="hint" style="margin:0">Saving forks a <b>new</b> version. The one you are editing is
+        superseded, never overwritten — which is what makes a correction auditable in the export.</p></div>
+  </div>
+
+  <form method="post" id="bomform">{% csrf_token %}
+    {{ formset.management_form }}
+    <datalist id="materials">{% for material in materials %}<option value="{{ material.item_code }}">{{ material.item_name }}</option>{% endfor %}</datalist>
+    <table style="margin-top:12px"><thead><tr><th>Material</th><th style="width:110px">Size</th>
+      <th class="num" style="width:120px">Qty</th><th style="width:100px">Unit</th>
+      <th style="width:70px">Remove</th></tr></thead>
+      <tbody id="bomrows">
+      {% for line in formset %}
+      <tr>
+        {{ line.id }}
+        <td>{{ line.material }}{{ line.material.errors }}</td>
+        <td>{{ line.size_band }}</td>
+        <td class="num">{{ line.qty_value }}{{ line.qty_value.errors }}</td>
+        <td>{{ line.qty_uom }}</td>
+        <td>{{ line.DELETE }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <button type="button" class="btn sm" id="addrow" style="margin-top:10px">+ Add a line</button>
+
+    <div style="margin-top:16px;max-width:520px">
+      <label for="note">Why (goes on the version)</label>
+      <input id="note" name="note" placeholder="Corrected the centre stone weight">
+    </div>
+    <div class="row" style="margin-top:16px">
+      <button class="btn primary">Save as a new version</button>
+      <a class="btn" href="{% url 'stock:piece_bom' piece.jewel_code %}">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<template id="bomrow">
+  <tr>
+    <td><input type="text" list="materials" name="line-__N__-material"></td>
+    <td><input type="text" name="line-__N__-size_band"></td>
+    <td class="num"><input type="number" step="0.0001" name="line-__N__-qty_value"></td>
+    <td><select name="line-__N__-qty_uom">{% for value, label in uoms %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></td>
+    <td><input type="checkbox" name="line-__N__-DELETE"></td>
+  </tr>
+</template>
+
+<script>
+// Add-a-line for the formset: bump TOTAL_FORMS and stamp the index in.
+document.getElementById('addrow').addEventListener('click', function () {
+  var total = document.getElementById('id_line-TOTAL_FORMS');
+  var n = parseInt(total.value, 10);
+  var html = document.getElementById('bomrow').innerHTML.replaceAll('__N__', n);
+  var row = document.createElement('tbody');
+  row.innerHTML = html;
+  document.getElementById('bomrows').appendChild(row.firstElementChild);
+  total.value = n + 1;
+});
+// The material column is a datalist, so give every existing input the list too.
+document.querySelectorAll('#bomrows input[name$="-material"]').forEach(function (input) {
+  input.setAttribute('list', 'materials');
+});
+</script>
+{% endblock %}

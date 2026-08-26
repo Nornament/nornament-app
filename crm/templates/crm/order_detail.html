@@ -1,0 +1,41 @@
+{% extends "crm/_pipeline_detail.html" %}
+{% load crm_extras %}
+
+{% block detail_fields %}
+<div><div class="il">Order Date</div><div class="iv">{{ row.order_date|date:"d M Y"|default:"—" }}</div></div>
+<div><div class="il">Expected Delivery</div><div class="iv">{{ row.expected_delivery|date:"d M Y"|default:"—" }}</div></div>
+<div><div class="il">Metal</div><div class="iv">{{ row.metal_type|default:"—" }}{% if row.metal_purity %} · {{ row.metal_purity }}{% endif %}</div></div>
+<div><div class="il">Weight</div><div class="iv">{% if row.weight_grams %}{{ row.weight_grams }} g{% else %}—{% endif %}</div></div>
+{% if caps.view_vendor %}<div><div class="il">Vendor</div><div class="iv">{{ row.vendor|default:"—" }}</div></div>{% endif %}
+{% endblock %}
+
+{% block detail_prose %}
+{% if row.item_description %}<div class="il mt12 mb4">Item</div><div class="iv">{{ row.item_description|linebreaksbr }}</div>{% endif %}
+{% if row.stone_details %}<div class="il mt12 mb4">Stone Details</div><div class="iv">{{ row.stone_details|linebreaksbr }}</div>{% endif %}
+{% if row.diamond_details %}<div class="il mt12 mb4">Diamond Details</div><div class="iv">{{ row.diamond_details|linebreaksbr }}</div>{% endif %}
+{% if row.design_brief %}<div class="il mt12 mb4">Design Brief</div><div class="iv" style="line-height:1.6">{{ row.design_brief|linebreaksbr }}</div>{% endif %}
+{% endblock %}
+
+{% block detail_side %}
+{% if caps.view_sale %}
+<div class="card mb14">
+  <div class="it mb12">Money</div>
+  <div class="ii">
+    <div><div class="il">Total Amount</div><div class="iv fw">{{ row.total_amount|inr }}</div></div>
+    <div><div class="il">Advance Paid</div><div class="iv">{{ row.advance_paid|inr }}</div></div>
+    <div><div class="il">Billing Date</div><div class="iv">{{ row.billing_date|date:"d M Y"|default:"—" }}</div></div>
+    <div><div class="il">Billing Amount</div><div class="iv">{{ row.billing_amount|inr }}</div></div>
+  </div>
+  <div class="divL"></div>
+  <div class="fl ia jb"><span class="il" style="margin:0">Balance Due</span>
+    <span class="fw" style="font-size:18px;color:{% if row.balance_due > 0 %}var(--hot){% else %}var(--ok){% endif %}">{{ row.balance_due|inr }}</span></div>
+</div>
+{% endif %}
+{% if row.enquiry %}
+<div class="card mb14"><div class="it mb12">From</div>
+  <a class="pc" href="{% url 'crm:enquiry_detail' row.enquiry.pk %}" style="color:inherit">
+    <div class="pip">🔍</div><div style="flex:1"><div class="pa">{{ row.enquiry.enquiry_code }}</div>
+    <div class="pm">{{ row.enquiry.item_of_interest }}</div></div></a>
+</div>
+{% endif %}
+{% endblock %}

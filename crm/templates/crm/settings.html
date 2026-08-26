@@ -1,0 +1,40 @@
+{% extends "crm_base.html" %}
+{% block title %}Settings · Nornament CRM{% endblock %}
+{% block heading %}Settings{% endblock %}
+{% block subheading %}Locations · Salespersons{% endblock %}
+
+{% block content %}
+<div class="g2">
+  <div class="card">
+    <div class="it mb12">Salespersons</div>
+    <table>
+      {% for person in salespersons %}
+      <tr><td>{{ person.name }}</td>
+          <td>{% if person.is_active %}<span class="badge bf">Active</span>{% else %}<span class="badge bo">Inactive</span>{% endif %}</td>
+          <td class="tr"><form method="post" onsubmit="return confirm('Remove {{ person.name|escapejs }}?')">{% csrf_token %}
+            <input type="hidden" name="kind" value="salesperson"><input type="hidden" name="delete" value="{{ person.pk }}">
+            <button class="BI">🗑</button></form></td></tr>
+      {% empty %}<tr><td class="mu">None yet.</td></tr>{% endfor %}
+    </table>
+    <form method="post" class="mt12">{% csrf_token %}<input type="hidden" name="kind" value="salesperson">
+      {% for field in salesperson_form %}{% include "crm/_field.html" %}{% endfor %}
+      <button class="btn btn-p btn-sm">Add</button></form>
+  </div>
+
+  <div class="card">
+    <div class="it mb12">Locations</div>
+    <table>
+      {% for location in locations %}
+      <tr><td>📍 {{ location.name }}</td>
+          <td>{% if location.is_active %}<span class="badge bf">Active</span>{% else %}<span class="badge bo">Inactive</span>{% endif %}</td>
+          <td class="tr"><form method="post" onsubmit="return confirm('Remove {{ location.name|escapejs }}?')">{% csrf_token %}
+            <input type="hidden" name="kind" value="location"><input type="hidden" name="delete" value="{{ location.pk }}">
+            <button class="BI">🗑</button></form></td></tr>
+      {% empty %}<tr><td class="mu">None yet — the customer filters fall back to whatever locations the data already has.</td></tr>{% endfor %}
+    </table>
+    <form method="post" class="mt12">{% csrf_token %}<input type="hidden" name="kind" value="location">
+      {% for field in location_form %}{% include "crm/_field.html" %}{% endfor %}
+      <button class="btn btn-p btn-sm">Add</button></form>
+  </div>
+</div>
+{% endblock %}

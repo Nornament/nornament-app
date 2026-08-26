@@ -128,9 +128,10 @@ td.code{font-family:var(--mono);font-size:13px;font-weight:600}
 
 /* tabs */
 .tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:16px}
-.tabs button{background:none;border:0;border-bottom:2px solid transparent;padding:9px 13px;
-  color:var(--ink-2);font-size:13.5px;margin-bottom:-1px}
-.tabs button[aria-selected="true"]{color:var(--brand);border-bottom-color:var(--brand);font-weight:600}
+.tabs button,.tabs a{display:inline-block;background:none;border:0;border-bottom:2px solid transparent;
+  padding:9px 13px;color:var(--ink-2);font-size:13.5px;margin-bottom:-1px;text-decoration:none}
+.tabs button[aria-selected="true"],.tabs a[aria-selected="true"]{color:var(--brand);border-bottom-color:var(--brand);font-weight:600}
+.tabs a:hover{color:var(--ink)}
 
 /* modal */
 .scrim{position:fixed;inset:0;background:rgba(11,11,11,.42);display:none;
@@ -612,3 +613,13 @@ a.fchip{text-decoration:none;display:inline-block}
   font-size:8px;line-height:1;padding:4px 6px;cursor:pointer;flex:1}
 .stepcol .step:first-child{border-bottom:1px solid var(--rule)}
 .stepcol .step:hover{background:var(--surface-2);color:var(--ink)}
+
+/* Every "link" in the legacy Stock app was a click handler on a div or a
+   button, so nothing was ever underlined. These screens use real anchors —
+   better for middle-click and for the keyboard — so the underline is reset
+   here. Anchors that carry a component class keep that class's own colour;
+   only a bare one inherits. */
+a{text-decoration:none}
+.body a:not([class]){color:inherit}
+.body a:not([class]):hover{text-decoration:underline}
+a.btn,a.chip,a.code,a.fchip{text-decoration:none}

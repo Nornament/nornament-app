@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Import / Export · Nornament{% endblock %}
+{% block heading %}Import / Export{% endblock %}
+{% block content %}
+<div class="card">
+  <h3>Bulk download</h3>
+  <p class="hint">Text columns are written as text, so <b>ER00123</b> stays a jewel code and never turns
+    into a date.</p>
+  <div class="row">
+    <a class="btn primary" href="{% url 'stock:piece_export' %}">⇩ Pieces (.csv)</a>
+    <a class="btn" href="{% url 'crm:customer_export' %}">⇩ Customers (.csv)</a>
+  </div>
+  <table style="margin-top:14px"><thead><tr><th>Sheet</th><th>One row per</th><th class="num">Rows</th><th>Notes</th></tr></thead><tbody>
+    <tr><td><b>Pieces</b></td><td>jewel code</td><td class="num">{{ counts.pieces }}</td>
+      <td class="dim">weights, dimensions, HUID, vendor, planning — masked to your role</td></tr>
+    <tr><td><b>BOM</b></td><td>material line, every version</td><td class="num">{{ counts.bom_lines }}</td>
+      <td class="dim">superseded versions included, so a repair or correction is auditable</td></tr>
+    <tr><td><b>Media</b></td><td>asset</td><td class="num">{{ counts.media }}</td>
+      <td class="dim">media_id, filename and checksum</td></tr>
+    <tr><td><b>Movements</b></td><td>ledger event</td><td class="num">{{ counts.movements }}</td>
+      <td class="dim">full stock history</td></tr>
+    <tr><td><b>Sales</b></td><td>sale</td><td class="num">{{ counts.sales }}</td>
+      <td class="dim">frozen price at sale</td></tr>
+    <tr><td><b>Reference</b></td><td>style / material</td>
+      <td class="num">{{ counts.styles }} / {{ counts.materials }}</td>
+      <td class="dim">the design library and the material register</td></tr>
+  </tbody></table>
+  <div class="note"><b>The join key is media_id, and it is inside the filename.</b>
+    Never join a spreadsheet back to media on the URL — original links are signed and expire, so a
+    workbook you exported last month points at nothing. media_id does not expire and is never reused.</div>
+</div>
+
+<div class="card">
+  <h3>Bringing a spreadsheet in</h3>
+  <p class="hint">The legacy importer read Gati and generic workbooks in the browser. Here the load runs
+    on the server through <span class="code">manage.py load_legacy</span>, against the restored dump —
+    one transaction, wipe-and-reload, so it is idempotent by construction and a half-finished import
+    cannot leave the catalogue in a state nobody can describe.</p>
+  <div class="note">Run <span class="code">manage.py parity_check</span> after every load. It compares
+    row counts, the sum of every money column and the min/max of every timestamp, table by table, and
+    exits non-zero on any mismatch. See <span class="code">docs/RUNBOOK.md</span>.</div>
+</div>
+{% endblock %}

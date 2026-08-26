@@ -1,4 +1,14 @@
 {% load static %}<!doctype html>
+{% comment %}
+The legacy Stock app's shell, rebuilt: the same sidebar with the same four
+groups and the same icons, the same padlock on a tab the role cannot open, the
+same editable metal-rate ticker in the top bar, and the same signed-out gate.
+
+`legacy/Stock/app/nornament.html` lines 551-589 are the markup; `renderNav`,
+`renderTicker` and `renderBrand` are the behaviour. CRM screens do not extend
+this — they have their own shell in `crm_base.html`, because the two old apps
+did not look alike.
+{% endcomment %}
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -7,7 +17,7 @@
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
   <script>document.documentElement.dataset.theme = localStorage.theme ??
     (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : '');</script>
-  <script src="/static/vendor/htmx.min.js" defer></script>
+  <script src="{% static 'vendor/htmx.min.js' %}" defer></script>
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
 {% if user.is_authenticated %}
@@ -17,33 +27,43 @@
       <img class="brandimg" src="{% static 'img/logo.png' %}" alt="Nornament">
     </div>
     <nav class="nav">
-      <div class="navgrp">Operations</div>
-      {% url 'stock:dashboard' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">▦</span>Dashboard</a>
-      {% url 'stock:piece_list' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">◈</span>Pieces</a>
-      {% if caps.edit_bom %}{% url 'stock:count_list' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">☑</span>Stock Count</a>{% endif %}
-      {% if caps.view_sale %}{% url 'stock:sale_list' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">▤</span>Sales</a>{% endif %}
-      {% if caps.view_sale or caps.view_cost %}{% url 'stock:rate_list' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">↝</span>Rates</a>{% endif %}
-      {% if caps.manage_materials %}{% url 'stock:material_list' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">◇</span>Materials</a>{% endif %}
-      <div class="navgrp">Workshop</div>
-      {% url 'stock:repair_list' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">⚒</span>Repairs</a>
-      <div class="navgrp">CRM</div>
-      {% url 'crm:dashboard' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">▦</span>Pipeline</a>
-      {% url 'crm:customer_list' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">☺</span>Customers</a>
-      {% url 'crm:order_list' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">✎</span>Orders</a>
-      {% url 'crm:fon' as u %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">₹</span>FoN</a>
-      {% if is_admin %}
-      <div class="navgrp">Admin</div>
-      <a href="{% url 'admin:index' %}"><span class="ico">⚙</span>Users &amp; Settings</a>
-      {% endif %}
+      {% include "stock/_nav.html" %}
     </nav>
-    <div class="whoami"><b style="color:var(--ink)">{{ user }}</b></div>
+    <div class="whoami">
+      <b style="color:var(--ink)">{{ role_name }}</b><br>
+      {{ tabs|length }} of 10 tabs visible
+    </div>
   </aside>
+
   <div class="main">
     <div class="top">
-      <h2></h2>
+      <h2>{% block heading %}{% endblock %}</h2>
+      {% if caps.view_sale or caps.view_cost %}
+      {% comment %}The ticker is one input per metal: the pure rate, from which
+      every karat derives. It used to be a single gold field, which is exactly
+      how silver ended up priced from gold — so one form per metal, never one
+      form that posts both.{% endcomment %}
+      <div class="ticker">
+        {% for metal in nav_metals %}
+        {% if not forloop.first %}<span class="msep"></span>{% endif %}
+        <form class="tgroup" method="post" action="{% url 'stock:set_rate' %}">{% csrf_token %}
+          <input type="hidden" name="code" value="{{ metal.code }}">
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <span class="tl">{{ metal.name }} {% if metal.code == 'GOLD' %}24K{% else %}999{% endif %}</span>
+          <input type="number" name="pure_rate" value="{{ metal.pure_rate|floatformat:0 }}"
+                 step="{% if metal.code == 'GOLD' %}50{% else %}1{% endif %}"
+                 title="Pure rate per gram for {{ metal.name }}"
+                 {% if not caps.edit_bom %}disabled{% endif %}
+                 onchange="this.form.requestSubmit()">
+          <span class="tl" style="letter-spacing:0">/g</span>
+        </form>
+        {% endfor %}
+      </div>
+      {% endif %}
       <button class="iconbtn" title="Toggle light / dark"
         onclick="const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'':'dark';localStorage.theme=r.dataset.theme">◐</button>
-      <form method="post" action="{% url 'accounts:logout' %}" class="inline">{% csrf_token %}<button class="iconbtn">Sign out</button></form>
+      <form method="post" action="{% url 'accounts:logout' %}" class="inline">{% csrf_token %}
+        <button class="iconbtn" title="Signed in as {{ user }} · {{ role_name }}">Sign out</button></form>
     </div>
     <div class="body">
       {% if messages %}<ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>{% endif %}

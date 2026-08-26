@@ -52,7 +52,7 @@ POSTGRES_DB=nornament
 POSTGRES_USER=nornament
 POSTGRES_PASSWORD=<a long random password>
 
-MEDIA_BUCKET=nornament-media
+MEDIA_BUCKET=nornamentbucket
 MEDIA_ENDPOINT_URL=https://eu2.contabostorage.com
 MEDIA_ACCESS_KEY=<contabo key>
 MEDIA_SECRET_KEY=<contabo secret>

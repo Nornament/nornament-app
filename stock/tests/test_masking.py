@@ -12,6 +12,7 @@ from decimal import Decimal
 
 import pytest
 from django.urls import URLPattern, URLResolver, get_resolver, reverse
+from django.utils import timezone
 
 from stock import services
 from stock.models import Sale
@@ -41,6 +42,53 @@ def secret_values(piece):
     }
 
 
+@pytest.fixture
+def crm_world(priced_and_sold):
+    """One of everything in the CRM, carrying numbers a SALES login must not see.
+
+    The CRM screens grew detail views with a vendor field and repair costs on
+    them; without a row to render, the walk below would pass by rendering
+    nothing. This gives it something to leak.
+    """
+    from crm.models import ClientMaterial, Customer, Enquiry, Order, Repair
+    from stock.models import Sale
+
+    customer = Customer.objects.create(
+        customer_code="NOR-001", name="Meera Iyer", mobile="9876543210", is_fon=True, fon_level=1
+    )
+    enquiry = Enquiry.objects.create(
+        enquiry_code="ENQ-001", customer=customer, status="New Enquiry",
+        item_of_interest="Emerald drops", estimated_budget=Decimal("250000"),
+    )
+    order = Order.objects.create(
+        order_code="ORD-001", customer=customer, status="Designing", item_description="Emerald drops",
+        vendor="Sharma Karigars", total_amount=Decimal("250000"), advance_paid=Decimal("50000"),
+    )
+    repair = Repair.objects.create(
+        repair_code="REP-001", customer=customer, status="In Workshop", item_description="Bangle",
+        estimated_cost=CRM_REPAIR_COST, final_cost=CRM_REPAIR_COST,
+    )
+    material = ClientMaterial.objects.create(
+        cm_code="CM-001", customer=customer, status="Received",
+        jewellery_description="Old gold chain", estimated_value=Decimal("88000"),
+    )
+    Sale.objects.create(
+        customer=customer, customer_name=customer.name, sold_on=timezone.localdate(),
+        sold_price=Decimal("250000"), product_category="cat1", source=Sale.CRM, cost_at_sale=None,
+    )
+    return {
+        "customer": customer.pk,
+        "enquiry": enquiry.pk,
+        "order": order.pk,
+        "repair": repair.pk,
+        "material": material.pk,
+    }
+
+
+#: a number that exists only on CRM repair rows, so a leak there is unambiguous
+CRM_REPAIR_COST = Decimal("13579")
+
+
 SALES_SCREENS = [
     ("stock:dashboard", {}),
     ("stock:piece_list", {}),
@@ -51,11 +99,40 @@ SALES_SCREENS = [
     ("stock:repair_list", {}),
     ("stock:sale_list", {}),
     ("stock:piece_export", {}),
+    ("stock:style_list", {}),
     ("crm:dashboard", {}),
     ("crm:customer_list", {}),
+    ("crm:customer_rows", {}),
+    ("crm:customer_detail", {"pk": "customer"}),
+    ("crm:customer_new", {}),
+    ("crm:customer_edit", {"pk": "customer"}),
+    ("crm:customer_export", {}),
+    ("crm:enquiry_list", {}),
+    ("crm:enquiry_detail", {"pk": "enquiry"}),
+    ("crm:order_list", {}),
+    ("crm:order_detail", {"pk": "order"}),
+    ("crm:repair_list", {}),
+    ("crm:repair_detail", {"pk": "repair"}),
+    ("crm:client_material_list", {}),
+    ("crm:client_material_detail", {"pk": "material"}),
+    ("crm:pipeline_new", {"kind": "enquiry"}),
+    ("crm:pipeline_edit", {"kind": "order", "pk": "order"}),
+    ("crm:fon", {}),
+    ("crm:fon_detail", {"pk": "customer"}),
+    ("crm:search", {}),
+    ("crm:settings", {}),
     ("crm:reports", {}),
     ("crm:calculator", {}),
 ]
+
+
+def _resolve(kwargs, world):
+    """A ``"customer"``/``"order"`` placeholder pk becomes that row's real pk.
+
+    Hardcoding 1 works when the CRM test runs alone and breaks the moment the
+    sequence has moved on, which is every full-suite run.
+    """
+    return {key: (world[value] if key == "pk" else value) for key, value in kwargs.items()}
 
 
 def _login(client, user):
@@ -63,13 +140,14 @@ def _login(client, user):
     return client
 
 
-def test_a_sales_login_sees_no_cost_vendor_or_margin_anywhere(client, sales_user, priced_and_sold):
+def test_a_sales_login_sees_no_cost_vendor_or_margin_anywhere(client, sales_user, priced_and_sold, crm_world):
     services.sell_piece(_admin(), priced_and_sold, sold_price=Decimal("300000"))
     _login(client, sales_user)
     secrets = secret_values(priced_and_sold)
+    secrets["crm_repair_cost"] = [str(CRM_REPAIR_COST), f"{CRM_REPAIR_COST:,.0f}"]
 
     for name, kwargs in SALES_SCREENS:
-        response = client.get(reverse(name, kwargs=kwargs))
+        response = client.get(reverse(name, kwargs=_resolve(kwargs, crm_world)))
         assert response.status_code in (200, 302), f"{name} returned {response.status_code}"
         if response.status_code != 200:
             continue
@@ -92,6 +170,25 @@ def test_the_material_breakup_is_closed_to_a_role_without_the_capability(client,
     _login(client, graphic_user)
     response = client.get(reverse("stock:piece_bom", kwargs={"jewel_code": "ER00738"}))
     assert response.status_code == 403
+
+
+def test_the_locked_tabs_refuse_a_sales_login(client, sales_user, priced_and_sold):
+    """The nav shows a padlock; the view is what actually refuses.
+
+    The legacy said it plainly: the gate lives in the database function, "not
+    just hidden in the interface — a bug in the UI cannot let it through".
+    """
+    _login(client, sales_user)
+    for name in ("stock:melt_list", "stock:data", "stock:audit", "stock:settings", "stock:reports"):
+        assert client.get(reverse(name)).status_code == 403, f"{name} let a SALES login in"
+
+
+def test_the_write_screens_refuse_a_login_without_edit_bom(client, sales_user, priced_and_sold):
+    _login(client, sales_user)
+    assert client.get(reverse("stock:piece_new")).status_code == 403
+    assert client.get(reverse("stock:piece_edit", kwargs={"jewel_code": "ER00738"})).status_code == 403
+    assert client.get(reverse("stock:piece_bom_edit", kwargs={"jewel_code": "ER00738"})).status_code == 403
+    assert client.get(reverse("stock:style_new")).status_code == 403
 
 
 def test_margin_and_admin_are_closed_to_sales(client, sales_user, priced_and_sold):
@@ -145,13 +242,20 @@ def test_every_stock_and_crm_screen_is_in_the_sales_walk():
         # POST-only endpoints; their permission gates are tested in test_ledger
         "stock:sell_piece", "stock:melt_piece", "stock:move_piece", "stock:set_rate",
         "stock:count_open", "stock:count_scan", "stock:count_unscan", "stock:count_close",
-        "stock:repair_complete", "crm:add_purchase", "crm:order_status",
+        "stock:repair_complete", "stock:repair_open", "stock:reserve_piece", "crm:add_purchase",
+        "crm:customer_delete", "crm:customer_temperature", "crm:delete_purchase",
+        "crm:add_gift", "crm:delete_gift", "crm:add_occasion", "crm:delete_occasion",
+        "crm:add_person", "crm:delete_person", "crm:add_outreach", "crm:delete_outreach",
+        "crm:pipeline_status", "crm:pipeline_delete", "crm:enquiry_convert", "crm:material_convert",
         # gated whole, and asserted to 403 above
         "stock:piece_bom", "stock:margin_report",
         # need an object that this fixture does not create
-        "stock:count_detail", "stock:count_list", "crm:customer_detail", "crm:fon", "crm:fon_detail",
-        "crm:enquiry_list", "crm:order_list", "crm:repair_list", "crm:client_material_list",
-        "stock:piece_rows", "crm:customer_rows",
+        "stock:count_detail", "stock:count_list", "stock:piece_rows",
+        # asserted to 403 for SALES in test_the_locked_tabs_refuse_a_sales_login
+        "stock:melt_list", "stock:data", "stock:audit", "stock:settings", "stock:reports",
+        # gated on edit_bom, and asserted to 403 below
+        "stock:piece_new", "stock:piece_edit", "stock:piece_bom_edit",
+        "stock:style_new", "stock:style_edit",
     }
     named = set()
     for resolver in get_resolver().url_patterns:

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{% if piece %}Edit {{ piece.jewel_code }}{% else %}Add a piece{% endif %} · Nornament{% endblock %}
+{% block heading %}{% if piece %}Edit — {{ piece.jewel_code }}{% else %}Add a piece{% endif %}{% endblock %}
+{% block content %}
+<div class="crumb"><a href="{% url 'stock:piece_list' %}">← Stock</a>{% if piece %} / <a href="{% url 'stock:piece_detail' piece.jewel_code %}">{{ piece.jewel_code }}</a>{% endif %}</div>
+<div class="card" style="max-width:900px">
+  <form method="post">{% csrf_token %}
+    {% if form.non_field_errors %}<div class="note bad">{{ form.non_field_errors }}</div>{% endif %}
+    <h3>Identity</h3>
+    <div class="row">
+      <div>{{ form.jewel_code.label_tag }}{{ form.jewel_code }}{{ form.jewel_code.errors }}
+        {% if form.jewel_code.help_text %}<div class="hint">{{ form.jewel_code.help_text }}</div>{% endif %}</div>
+      <div>{{ form.style.label_tag }}{{ form.style }}{{ form.style.errors }}</div>
+      <div>{{ form.sub_category.label_tag }}{{ form.sub_category }}</div>
+    </div>
+    <div class="row">
+      <div>{{ form.metal_purity.label_tag }}{{ form.metal_purity }}</div>
+      <div>{{ form.metal_colour.label_tag }}{{ form.metal_colour }}</div>
+      <div>{{ form.size_label.label_tag }}{{ form.size_label }}</div>
+      <div>{{ form.diamond_quality.label_tag }}{{ form.diamond_quality }}</div>
+    </div>
+
+    <h3 style="margin-top:18px">Weights &amp; dimensions</h3>
+    <div class="row">
+      <div>{{ form.measured_gross_wt_gm.label_tag }}{{ form.measured_gross_wt_gm }}{{ form.measured_gross_wt_gm.errors }}</div>
+      <div>{{ form.length_mm.label_tag }}{{ form.length_mm }}</div>
+      <div>{{ form.breadth_mm.label_tag }}{{ form.breadth_mm }}</div>
+      <div>{{ form.height_mm.label_tag }}{{ form.height_mm }}</div>
+    </div>
+
+    <h3 style="margin-top:18px">Compliance</h3>
+    <div class="row">
+      <div>{{ form.huid.label_tag }}{{ form.huid }}{{ form.huid.errors }}</div>
+      <div>{{ form.hallmarked_on.label_tag }}{{ form.hallmarked_on }}</div>
+      <div>{{ form.hallmark_centre.label_tag }}{{ form.hallmark_centre }}</div>
+    </div>
+    <p class="hint">HUID is engraved per individual article by BIS rule — it is the one identifier that
+      legally cannot live at design level.</p>
+
+    <h3 style="margin-top:18px">Availability</h3>
+    <div class="row">
+      <div>{{ form.location.label_tag }}{{ form.location }}{{ form.location.errors }}</div>
+      <div>{{ form.received_on.label_tag }}{{ form.received_on }}</div>
+      <div>{{ form.fg_date.label_tag }}{{ form.fg_date }}</div>
+      {% if caps.view_vendor %}<div>{{ form.vendor.label_tag }}{{ form.vendor }}</div>{% endif %}
+      <div>{{ form.scenario.label_tag }}{{ form.scenario }}</div>
+    </div>
+
+    <h3 style="margin-top:18px">Marketing</h3>
+    <div class="row">
+      <div>{{ form.on_website.label_tag }}{{ form.on_website }}</div>
+      <div style="flex:1">{{ form.website_url.label_tag }}{{ form.website_url }}</div>
+    </div>
+    <div>{{ form.remarks.label_tag }}{{ form.remarks }}</div>
+
+    <div class="row" style="margin-top:18px">
+      <button class="btn primary">Save</button>
+      <a class="btn" href="{% if piece %}{% url 'stock:piece_detail' piece.jewel_code %}{% else %}{% url 'stock:piece_list' %}{% endif %}">Cancel</a>
+    </div>
+    {% if not piece %}
+    <p class="hint">A new piece is <b>received</b> into its location through the ledger, so it arrives
+      with a movement row rather than appearing somewhere with no history of getting there. Its bill of
+      materials starts empty — add it next, or the piece values at zero.</p>
+    {% endif %}
+  </form>
+</div>
+{% endblock %}

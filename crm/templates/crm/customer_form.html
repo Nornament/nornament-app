@@ -1,0 +1,90 @@
+{% extends "crm_base.html" %}
+{% block title %}{% if customer %}Edit {{ customer.name }}{% else %}New Customer{% endif %} · Nornament CRM{% endblock %}
+{% block back %}<a class="btn btn-s btn-sm" style="margin-right:8px" href="{% if customer %}{% url 'crm:customer_detail' customer.pk %}{% else %}{% url 'crm:customer_list' %}{% endif %}">← Back</a>{% endblock %}
+{% block heading %}{% if customer %}Edit — {{ customer.name }}{% else %}New Customer{% endif %}{% endblock %}
+{% block subheading %}{% if customer %}{{ customer.customer_code }}{% else %}Basic info, dates, preferences, relationships, personal, FoN{% endif %}{% endblock %}
+
+{% block content %}
+{% comment %}The legacy form's six tabs, as six sections. Tabs on a form that
+posts in one go would hide validation errors on the tabs you are not looking
+at, which is how a required field goes missing without anyone noticing.
+{% endcomment %}
+<div class="card" style="max-width:920px">
+  <form method="post">{% csrf_token %}
+    {% if form.non_field_errors %}<div class="al al-b">{{ form.non_field_errors }}</div>{% endif %}
+
+    <div class="it mb12">Basic Info</div>
+    <div class="fr2">
+      {% include "crm/_field.html" with field=form.customer_code %}
+      {% include "crm/_field.html" with field=form.name %}
+      {% include "crm/_field.html" with field=form.mobile %}
+      {% include "crm/_field.html" with field=form.landline %}
+      {% include "crm/_field.html" with field=form.preferred_phone %}
+      {% include "crm/_field.html" with field=form.email %}
+    </div>
+    {% include "crm/_field.html" with field=form.address %}
+    <div class="fr2">
+      {% include "crm/_field.html" with field=form.location %}
+      {% include "crm/_field.html" with field=form.customer_type %}
+    </div>
+
+    <div class="divL"></div>
+    <div class="it mb12">Dates &amp; Source</div>
+    <div class="fr2">
+      {% include "crm/_field.html" with field=form.birth_date %}
+      {% include "crm/_field.html" with field=form.anniversary_date %}
+      {% include "crm/_field.html" with field=form.engagement_date %}
+      {% include "crm/_field.html" with field=form.wedding_date %}
+      {% include "crm/_field.html" with field=form.reference_type %}
+      {% include "crm/_field.html" with field=form.referrer %}
+    </div>
+
+    <div class="divL"></div>
+    <div class="it mb12">Preferences</div>
+    <div class="fg"><label>{{ form.metal_preference.label }}</label>
+      <div class="cbg">{% for choice in form.metal_preference %}<label class="ci">{{ choice.tag }} {{ choice.choice_label }}</label>{% endfor %}</div>
+      {% for error in form.metal_preference.errors %}<div class="sm mt4" style="color:var(--hot)">{{ error }}</div>{% endfor %}
+    </div>
+    <div class="fr3">
+      {% include "crm/_field.html" with field=form.salesperson_preference %}
+      {% include "crm/_field.html" with field=form.payment_preference %}
+      {% include "crm/_field.html" with field=form.temperature %}
+    </div>
+
+    <div class="divL"></div>
+    <div class="it mb12">Personal &amp; Tags</div>
+    {% include "crm/_field.html" with field=form.personal_observation %}
+    {% include "crm/_field.html" with field=form.client_personal_info %}
+
+    <div class="divL"></div>
+    <div class="it mb12">Outreach</div>
+    <div class="fr3">
+      {% include "crm/_field.html" with field=form.outreach_done %}
+      {% include "crm/_field.html" with field=form.outreach_last_date %}
+      {% include "crm/_field.html" with field=form.outreach_notes %}
+    </div>
+
+    <div class="divL"></div>
+    <div class="it mb12">FoN Setup</div>
+    {% include "crm/_field.html" with field=form.is_fon %}
+    <div class="fr2">
+      {% include "crm/_field.html" with field=form.fon_level %}
+      {% include "crm/_field.html" with field=form.fon_parent %}
+    </div>
+    <p class="sm mu">A level 1 earns on their whole downline; levels 2 and 3 earn a flat override on their own billing.
+      Commission is computed off the sale ledger, so the payout follows whatever the shop actually billed.</p>
+
+    <div class="fl g8 mt16">
+      <button class="btn btn-p">Save</button>
+      <a class="btn btn-s" href="{% if customer %}{% url 'crm:customer_detail' customer.pk %}{% else %}{% url 'crm:customer_list' %}{% endif %}">Cancel</a>
+    </div>
+  </form>
+</div>
+
+{% if customer %}
+<div class="card mt16" style="max-width:920px">
+  <div class="it mb12">📷 Photos</div>
+  {% include "crm/_media.html" with media=customer_media media_scope="customer" media_id=customer.pk %}
+</div>
+{% endif %}
+{% endblock %}

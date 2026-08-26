@@ -1,0 +1,16 @@
+{% comment %}The legacy photo grid plus its uploader. Upload goes through
+mediahub: presign, PUT, confirm — the same three calls the stock side uses.{% endcomment %}
+<div class="photo-grid">
+  {% for asset, url in media %}
+  <div class="photo-thumb">
+    {% if url %}<img src="{{ url }}" alt="{{ asset.caption|default:asset.file_name }}" loading="lazy">
+    {% else %}<div class="pip" style="width:100%;height:100%;border:none">{{ asset.kind }}</div>{% endif %}
+    {% if caps.edit_bom %}<button type="button" class="photo-del" data-detach="{% url 'mediahub:detach' asset.pk %}" title="Remove">✕</button>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+<label class="drop-zone mt8" style="display:block">
+  <input type="file" accept="image/*,video/*" multiple data-upload-scope="{{ media_scope }}" data-upload-id="{{ media_id }}">
+  <span class="sm mu">Drop photos here, or tap to choose</span>
+</label>
+<div class="sm mu mt4" data-upload-status></div>

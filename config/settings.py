@@ -79,6 +79,8 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "accounts.context_processors.capabilities",
+                "crm.context_processors.nav_counts",
+                "stock.context_processors.ticker",
             ],
         },
     },
@@ -171,7 +173,7 @@ if not DEBUG:
     SECURE_HSTS_PRELOAD = env_bool("DJANGO_HSTS_PRELOAD", True)
 
 # ── media (Contabo S3, keys unchanged from R2) ───────────────────────────
-MEDIA_BUCKET = env("MEDIA_BUCKET", "nornament-media")
+MEDIA_BUCKET = env("MEDIA_BUCKET", "nornamentbucket")
 MEDIA_ENDPOINT_URL = env("MEDIA_ENDPOINT_URL", "")
 MEDIA_REGION = env("MEDIA_REGION", "auto")
 MEDIA_ACCESS_KEY = env("MEDIA_ACCESS_KEY", "")

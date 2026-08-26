@@ -39,6 +39,7 @@ CUSTOMER_CONSUMED = set(CUSTOMER_FIELDS) | set(CUSTOMER_DATES) | {
     "occasions",
     "relatedPeople",
     "gifting",
+    "outreachLog",
     "statusLog",
     "media",
     "createdAt",

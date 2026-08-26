@@ -1,0 +1,26 @@
+{% load crm_extras %}
+{% comment %}One of the four pipeline tabs on a customer profile — the legacy
+layout: a heading with a "+ New" button, then a row per record.{% endcomment %}
+<div class="fl jb ia mb14">
+  <div class="it">{{ label }} ({{ rows|length }})</div>
+  <a class="btn btn-p btn-sm" href="{% url new_url kind %}?customer={{ customer.pk }}">+ New</a>
+</div>
+{% for row in rows %}
+<a class="pc" href="{% url detail row.pk %}" style="color:inherit">
+  <div class="pip">{{ icon }}</div>
+  <div style="flex:1">
+    <div class="fl ia jb">
+      <div class="pa">{{ row|pipeline_code }}</div>
+      {% include "crm/_status_chip.html" with status=row.status %}
+    </div>
+    <div class="pm">{{ row|pipeline_title|default:"—" }}</div>
+    {% if row.expected_delivery %}<div class="pm">Due {{ row.expected_delivery|date:"d M Y" }}</div>
+    {% elif row.follow_up_date %}<div class="pm">Follow-up {{ row.follow_up_date|date:"d M Y" }}</div>
+    {% elif row.expected_return %}<div class="pm">Return {{ row.expected_return|date:"d M Y" }}</div>
+    {% elif row.received_date %}<div class="pm">Received {{ row.received_date|date:"d M Y" }}</div>{% endif %}
+  </div>
+  <span class="mu">›</span>
+</a>
+{% empty %}
+<div class="es"><div class="ei">{{ icon }}</div><p>No {{ label|lower }} yet</p></div>
+{% endfor %}

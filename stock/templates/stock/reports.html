@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Reports &amp; Margin · Nornament{% endblock %}
+{% block heading %}Reports &amp; Margin{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="spread">
+    <div><h3>Stock by location</h3>
+      <p class="hint" style="margin:0">Unpriced pieces are listed separately because they contribute zero
+        to the value — without that column a partly-imported catalogue looks healthy while being understated.</p></div>
+    {% if caps.view_margin %}<a class="btn" href="{% url 'stock:margin_report' %}">Margin report →</a>{% endif %}
+  </div>
+  <table style="margin-top:14px"><thead><tr><th>Location</th><th class="num">Live pieces</th>
+    {% if caps.view_cost %}<th class="num">Value at cost</th>{% endif %}
+    <th class="num">Unpriced</th></tr></thead><tbody>
+    {% for row in rows %}
+    <tr><td>{{ row.location }}</td><td class="num">{{ row.pieces }}</td>
+      {% if caps.view_cost %}<td class="num">₹{{ row.value|floatformat:0 }}</td>{% endif %}
+      <td class="num">{% if row.unpriced %}<span class="chip c-ser">{{ row.unpriced }}</span>{% else %}0{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="4"><div class="empty">Nothing live.</div></td></tr>{% endfor %}
+  </tbody></table>
+</div>
+{% endblock %}

@@ -1,0 +1,1 @@
+{% if ctype == 'VIP' %}<span class="badge bv">⭐ VIP</span>{% elif ctype == 'Regular' %}<span class="badge br">Regular</span>{% else %}<span class="badge bo">{{ ctype|default:"Occasional" }}</span>{% endif %}

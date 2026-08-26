@@ -1,29 +1,49 @@
-{% extends "base.html" %}
-{% block title %}CRM repairs · Nornament{% endblock %}
+{% extends "crm_base.html" %}
+{% load crm_extras %}
+{% block title %}Repairs · Nornament CRM{% endblock %}
+{% block heading %}Repairs{% endblock %}
+{% block subheading %}{{ kpis.open }} in progress{% endblock %}
+{% block actions %}<a class="btn btn-p" href="{% url 'crm:pipeline_new' 'repair' %}">+ New Repair</a>{% endblock %}
+
 {% block content %}
-<h1>Repairs</h1>
-<div class="kpis">
-  <div class="kpi"><div class="lbl">Total</div><div class="val">{{ kpis.total }}</div></div>
-  <div class="kpi"><div class="lbl">Open</div><div class="val">{{ kpis.open }}</div></div>
-  <div class="kpi"><div class="lbl">Ready</div><div class="val">{{ kpis.ready }}</div></div>
-  <div class="kpi"><div class="lbl">Delivered</div><div class="val">{{ kpis.delivered }}</div></div>
+<div class="g4 mb16">
+  <div class="sc"><div class="sv">{{ kpis.total }}</div><div class="sl">Total</div></div>
+  <div class="sc"><div class="sv c-warm">{{ kpis.open }}</div><div class="sl">Open</div></div>
+  <div class="sc"><div class="sv c-ok">{{ kpis.ready }}</div><div class="sl">Ready</div></div>
+  <div class="sc"><div class="sv" style="color:var(--mu)">{{ kpis.delivered }}</div><div class="sl">Delivered</div></div>
 </div>
-{% include "crm/_pipeline_filter.html" %}
-<div class="card">
-<table>
-  <tr><th>Code</th><th>Customer</th><th>Item</th><th>Karigar</th><th>Return</th><th>Status</th><th class="num">Cost</th></tr>
-  {% for row in rows %}
-  <tr>
-    <td class="code">{{ row.repair_code }}</td>
-    <td>{% if row.customer %}<a href="{% url 'crm:customer_detail' row.customer.pk %}">{{ row.customer.name }}</a>{% else %}<span class="dim">unlinked</span>{% endif %}</td>
-    <td>{{ row.item_description|truncatechars:40 }}
-        {% if row.issue %}<div class="dim small">{{ row.issue|truncatechars:60 }}</div>{% endif %}</td>
-    <td>{{ row.karigar|default:"—" }}</td>
-    <td class="small dim">{{ row.expected_return|default:"—" }}</td>
-    <td>{% include "crm/_status_chip.html" with status=row.status kind="repair" %}</td>
-    <td class="num">{{ row.estimated_cost|default_if_none:"—"|floatformat:0 }}</td>
-  </tr>
-  {% empty %}<tr><td colspan="7" class="empty">No repairs.</td></tr>{% endfor %}
-</table>
+
+{% include "crm/_pipeline_toolbar.html" %}
+
+{% if view_mode == 'kanban' %}
+  {% include "crm/_kanban.html" %}
+{% else %}
+<div class="card" style="padding:0">
+  <div style="overflow-x:auto">
+    <table>
+      <thead><tr><th style="width:44px;padding:6px 8px"></th><th>Code</th><th>Customer</th><th>Item</th>
+        <th>Karigar</th><th>Return</th><th>Status</th>{% if caps.view_cost %}<th class="tr">Cost</th>{% endif %}</tr></thead>
+      <tbody>
+      {% for row in rows %}
+      <tr onclick="location='{% url 'crm:repair_detail' row.pk %}'">
+        <td style="padding:6px 8px;width:44px">{% with url=thumbs|lookup:row.pk %}
+          {% if url %}<img src="{{ url }}" style="width:36px;height:36px;object-fit:cover;border-radius:5px;display:block" alt="">
+          {% else %}<div style="width:36px;height:36px;border-radius:5px;background:#f0ebe2;display:flex;align-items:center;justify-content:center;font-size:13px;color:#c9a84c">📷</div>{% endif %}
+        {% endwith %}</td>
+        <td class="fw">{{ row.repair_code }}</td>
+        <td>{% if row.customer %}<div class="nc"><div class="av" style="width:26px;height:26px;font-size:10px">{{ row.customer.name|initials }}</div>
+            <span style="color:var(--acc)" onclick="event.stopPropagation();location='{% url 'crm:customer_detail' row.customer.pk %}'">{{ row.customer.name }}</span></div>
+          {% else %}<span class="mu">—</span>{% endif %}</td>
+        <td>{{ row.item_description|truncatechars:40 }}{% if row.issue %}<div class="sm mu">{{ row.issue|truncatechars:60 }}</div>{% endif %}</td>
+        <td class="sm">{{ row.karigar|default:"—" }}</td>
+        <td class="sm">{{ row.expected_return|date:"d M Y"|default:"—" }}</td>
+        <td>{% include "crm/_status_chip.html" with status=row.status %}</td>
+        {% if caps.view_cost %}<td class="tr">{{ row.estimated_cost|inr }}</td>{% endif %}
+      </tr>
+      {% empty %}<tr><td colspan="8"><div class="es"><div class="ei">🔧</div><p>No repairs</p></div></td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
+{% endif %}
 {% endblock %}

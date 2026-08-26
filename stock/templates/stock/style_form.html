@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{% if style %}Edit {{ style.style_code }}{% else %}Add a design{% endif %} · Nornament{% endblock %}
+{% block heading %}{% if style %}Edit — {{ style.style_code }}{% else %}Add a design{% endif %}{% endblock %}
+{% block content %}
+<div class="crumb"><a href="{% url 'stock:style_list' %}">← Design Library</a></div>
+<div class="card" style="max-width:760px">
+  <form method="post">{% csrf_token %}
+    {% if form.non_field_errors %}<div class="note bad">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="row">
+      <div>{{ form.style_code.label_tag }}{{ form.style_code }}{{ form.style_code.errors }}</div>
+      <div style="flex:1">{{ form.name.label_tag }}{{ form.name }}</div>
+    </div>
+    <div class="row">
+      <div>{{ form.category.label_tag }}{{ form.category }}{{ form.category.errors }}</div>
+      <div>{{ form.collection.label_tag }}{{ form.collection }}</div>
+      <div>{{ form.state.label_tag }}{{ form.state }}</div>
+      <div>{{ form.designed_on.label_tag }}{{ form.designed_on }}</div>
+    </div>
+    <div class="row">
+      <div>{{ form.nos_min_qty.label_tag }}{{ form.nos_min_qty }}
+        <div class="hint">{{ form.nos_min_qty.help_text }}</div></div>
+      <div>{{ form.is_active.label_tag }}{{ form.is_active }}</div>
+    </div>
+    <div>{{ form.story.label_tag }}{{ form.story }}</div>
+    <div>{{ form.website_description.label_tag }}{{ form.website_description }}</div>
+    <div class="row" style="margin-top:18px">
+      <button class="btn primary">Save</button>
+      <a class="btn" href="{% url 'stock:style_list' %}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

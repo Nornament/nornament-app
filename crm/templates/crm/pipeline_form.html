@@ -1,0 +1,20 @@
+{% extends "crm_base.html" %}
+{% block title %}{% if row %}Edit {{ row }}{% else %}New{% endif %} · Nornament CRM{% endblock %}
+{% block back %}<a class="btn btn-s btn-sm" style="margin-right:8px" href="{% if row %}{% url spec.detail_url row.pk %}{% else %}{% url spec.list_url %}{% endif %}">← Back</a>{% endblock %}
+{% block heading %}{% if row %}Edit — {{ row }}{% else %}New {{ spec.singular }}{% endif %}{% endblock %}
+{% block subheading %}{{ spec.title }}{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:860px">
+  <form method="post">{% csrf_token %}
+    {% if form.non_field_errors %}<div class="al al-b">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="fr2">
+      {% for field in form %}{% include "crm/_field.html" %}{% endfor %}
+    </div>
+    <div class="fl g8 mt16">
+      <button class="btn btn-p">Save</button>
+      <a class="btn btn-s" href="{% if row %}{% url spec.detail_url row.pk %}{% else %}{% url spec.list_url %}{% endif %}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

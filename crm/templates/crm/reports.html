@@ -1,73 +1,87 @@
-{% extends "base.html" %}
-{% block title %}Reports · Nornament{% endblock %}
+{% extends "crm_base.html" %}
+{% load crm_extras %}
+{% block title %}Reports · Nornament CRM{% endblock %}
+{% block heading %}Reports{% endblock %}
+{% block subheading %}{{ year }} analytics{% endblock %}
+
 {% block content %}
-<h1>Reports</h1>
-<p class="muted small">Financial year from {{ financial_year_start }}.</p>
+<div class="g4 mb16">
+  {% if revenue %}
+  <div class="sc"><div class="sv c-acc" style="font-size:20px">{{ total_revenue|inr }}</div><div class="sl">Total Revenue</div></div>
+  <div class="sc"><div class="sv c-ok" style="font-size:20px">{{ revenue.all|inr }}</div><div class="sl">FY Revenue</div></div>
+  <div class="sc"><div class="sv">{{ purchase_count }}</div><div class="sl">Total Purchases</div></div>
+  {% else %}
+  <div class="sc"><div class="sv">{{ pipeline.enquiries }}</div><div class="sl">Open Enquiries</div></div>
+  <div class="sc"><div class="sv">{{ pipeline.orders }}</div><div class="sl">Open Orders</div></div>
+  <div class="sc"><div class="sv">{{ pipeline.repairs }}</div><div class="sl">Open Repairs</div></div>
+  {% endif %}
+  <div class="sc"><div class="sv c-gold">{{ fon_members }}</div><div class="sl">FoN Members</div></div>
+</div>
 
 {% if revenue %}
-<div class="kpis">
-  <div class="kpi"><div class="lbl">Revenue, all sources</div><div class="val">₹{{ revenue.all|floatformat:0 }}</div></div>
-  <div class="kpi"><div class="lbl">From stock</div><div class="val">₹{{ revenue.stock|floatformat:0 }}</div></div>
-  <div class="kpi"><div class="lbl">From CRM</div><div class="val">₹{{ revenue.crm|floatformat:0 }}</div></div>
-  {% if margin %}<div class="kpi"><div class="lbl">Margin (stock sales)</div><div class="val">₹{{ margin.margin|default:0|floatformat:0 }}</div></div>{% endif %}
-</div>
-<p class="small muted">One number, three ways of arriving at it. The old apps disagreed here because commission
-  was paid off a typed array and revenue came from the stock ledger.</p>
-{% elif margin %}
-<div class="kpis">
-  <div class="kpi"><div class="lbl">Margin (stock sales)</div><div class="val">₹{{ margin.margin|default:0|floatformat:0 }}</div></div>
-</div>
-{% endif %}
-
-{% if monthly %}
-<div class="card">
-  <h2>Monthly revenue <span class="muted small">last 12 months</span></h2>
-  {% for row in monthly %}
-  <div class="rbar">
-    <span class="rlbl">{{ row.month|date:"M y" }}</span>
-    <div class="rtrack"><div class="rfill" style="width:{% widthratio row.revenue monthly_peak 100 %}%"></div></div>
-    {% if row.revenue %}<span class="rval">₹{{ row.revenue|floatformat:0 }}</span>{% else %}<span class="rval dim">—</span>{% endif %}
+<div class="card mb16">
+  <div class="it mb12">One number, three ways of arriving at it</div>
+  <div class="g3">
+    <div><div class="il">All sources</div><div class="iv fw" style="font-size:16px">{{ revenue.all|inr }}</div></div>
+    <div><div class="il">From stock</div><div class="iv fw" style="font-size:16px">{{ revenue.stock|inr }}</div></div>
+    <div><div class="il">From CRM</div><div class="iv fw" style="font-size:16px">{{ revenue.crm|inr }}</div></div>
   </div>
-  {% endfor %}
+  {% if margin %}<div class="divL"></div>
+  <div><div class="il">Margin (stock sales only)</div><div class="iv fw" style="font-size:16px">{{ margin.margin|default:0|inr }}</div>
+    <div class="sm mu mt4">A CRM purchase has no cost, so it carries no margin and is excluded rather than counted at zero.</div></div>{% endif %}
+  <p class="sm mu mt8">Financial year from {{ financial_year_start|date:"d M Y" }}.
+    The old apps disagreed here because commission was paid off a typed array and revenue came from the stock ledger.</p>
 </div>
 {% endif %}
 
-<div class="grid cols-3">
+<div class="g2">
+  {% if monthly %}
   <div class="card">
-    <h2>Pipeline</h2>
-    <table>
-      <tr><td>Enquiries</td><td class="num">{{ pipeline.enquiries }}</td></tr>
-      <tr><td>Orders</td><td class="num">{{ pipeline.orders }}</td></tr>
-      <tr><td>Repairs</td><td class="num">{{ pipeline.repairs }}</td></tr>
-      <tr><td>Client materials</td><td class="num">{{ pipeline.client_materials }}</td></tr>
-    </table>
-  </div>
-  <div class="card">
-    <h2>Orders by status</h2>
-    <table>
-      {% for row in by_status %}
-      <tr><td>{% include "crm/_status_chip.html" with status=row.status kind="order" %}</td>
-          <td class="num">{{ row.orders }}</td></tr>
-      {% endfor %}
-    </table>
-  </div>
-  {% if by_category %}
-  <div class="card">
-    <h2>Revenue by category</h2>
-    <table>
-      {% for label, revenue in by_category %}
-      <tr><td class="small">{{ label }}</td><td class="num">₹{{ revenue|floatformat:0 }}</td></tr>
-      {% endfor %}
-    </table>
+    <div class="it mb14">{{ year }} Monthly Revenue</div>
+    {% for row in monthly %}
+    <div class="fl ia g10" style="margin-bottom:6px">
+      <span style="width:28px;font-size:11px;color:var(--mu);text-align:right">{{ row.month|date:"M" }}</span>
+      <div style="flex:1;height:18px;background:var(--bg);border-radius:4px;overflow:hidden">
+        <div style="height:100%;background:var(--acc);border-radius:4px;width:{% widthratio row.revenue monthly_peak 100 %}%"></div>
+      </div>
+      <span style="width:96px;text-align:right;font-size:12px;font-weight:{% if row.revenue %}700{% else %}400{% endif %};color:{% if row.revenue %}var(--acc){% else %}var(--mu){% endif %}">{% if row.revenue %}{{ row.revenue|inr }}{% else %}—{% endif %}</span>
+    </div>
+    {% endfor %}
   </div>
   {% endif %}
-  <div class="card">
-    <h2>Customer source</h2>
-    <table>
+
+  <div>
+    {% if by_category %}
+    <div class="card mb14">
+      <div class="it mb12">Revenue by Category</div>
+      {% for label, amount in by_category %}
+      <div class="fl ia jb mb8"><span class="sm">{{ label }}</span><span class="fw">{{ amount|inr }}</span></div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="card mb14">
+      <div class="it mb12">Customer Source</div>
       {% for row in by_source %}
-      <tr><td class="small">{{ row.reference_type|default:"Unknown" }}</td><td class="num">{{ row.n }}</td></tr>
-      {% empty %}<tr><td class="dim">No customers yet.</td></tr>{% endfor %}
-    </table>
+      <div class="fl ia jb" style="margin-bottom:6px"><span class="sm">{{ row.reference_type|default:"Unknown" }}</span>
+        <span class="sm fw">{{ row.n }}</span></div>
+      {% empty %}<div class="sm mu">No customers yet.</div>{% endfor %}
+    </div>
+
+    <div class="card mb14">
+      <div class="it mb12">Orders by Status</div>
+      {% for row in by_status %}
+      <div class="fl ia jb mb8">{% include "crm/_status_chip.html" with status=row.status %}<span class="fw">{{ row.orders }}</span></div>
+      {% empty %}<div class="sm mu">No orders yet.</div>{% endfor %}
+    </div>
+
+    <div class="card">
+      <div class="it mb12">Open Pipeline</div>
+      <div class="fl ia jb mb8"><span class="sm">Enquiries</span><span class="fw">{{ pipeline.enquiries }}</span></div>
+      <div class="fl ia jb mb8"><span class="sm">Orders</span><span class="fw">{{ pipeline.orders }}</span></div>
+      <div class="fl ia jb mb8"><span class="sm">Repairs</span><span class="fw">{{ pipeline.repairs }}</span></div>
+      <div class="fl ia jb"><span class="sm">Client materials</span><span class="fw">{{ pipeline.client_materials }}</span></div>
+    </div>
   </div>
 </div>
 {% endblock %}

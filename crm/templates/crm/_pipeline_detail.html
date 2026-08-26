@@ -1,0 +1,82 @@
+{% extends "crm_base.html" %}
+{% load crm_extras %}
+{% block title %}{{ code }} · Nornament CRM{% endblock %}
+{% block back %}<a class="btn btn-s btn-sm" style="margin-right:8px" href="{% url spec.list_url %}">← Back</a>{% endblock %}
+{% block heading %}{{ code }}{% endblock %}
+{% block subheading %}{{ row|pipeline_title }}{% if row.customer %} · {{ row.customer.name }}{% endif %}{% endblock %}
+{% block actions %}
+{% block extra_actions %}{% endblock %}
+<a class="btn btn-p btn-sm" href="{% url 'crm:pipeline_edit' kind row.pk %}">✏️ Edit</a>
+<form method="post" action="{% url 'crm:pipeline_delete' kind row.pk %}" onsubmit="return confirm('Delete {{ code }}?')">{% csrf_token %}
+  <button class="btn btn-d btn-sm">🗑</button></form>
+{% endblock %}
+
+{% block body %}
+{# ── Stage pipeline ──────────────────────────────────────────────────── #}
+<div class="pipeline-wrap">
+  {% if lost %}
+  <div style="color:#dc2626;font-weight:700;display:flex;align-items:center;gap:6px"><span>❌</span> {{ code }} — {{ row.status }}</div>
+  {% else %}
+  <div class="pipeline">
+    {% for stage in stages %}
+    <div class="pl-seg{% if stage.state %} {{ stage.state }}{% endif %}">
+      <div class="pl-dot">{% if stage.state == 'done' %}✓{% else %}{{ stage.icon }}{% endif %}</div>
+      <div class="pl-lbl">{{ stage.name }}</div>
+    </div>
+    {% if not forloop.last %}<div class="pl-conn{% if stage.state == 'done' %} done{% elif stage.state == 'active' %} half{% endif %}"></div>{% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="ca">
+  <div class="g2 mb16">
+    <div class="card">
+      <div class="it mb12">{{ spec.singular }} Details</div>
+      <div class="ii">
+        <div><div class="il">Customer</div><div class="iv">{% if row.customer %}
+          <a href="{% url 'crm:customer_detail' row.customer.pk %}" style="color:var(--acc)">{{ row.customer.name }} ({{ row.customer.customer_code }})</a>
+          {% else %}Unknown{% endif %}</div></div>
+        {% block detail_fields %}{% endblock %}
+        <div><div class="il">Salesperson</div><div class="iv">{{ row.salesperson|default:"—" }}</div></div>
+      </div>
+      {% block detail_prose %}{% endblock %}
+      {% if row.notes %}<div class="il mt12 mb4">Notes</div><div class="iv" style="line-height:1.6">{{ row.notes|linebreaksbr }}</div>{% endif %}
+    </div>
+
+    <div>
+      {% block detail_side %}{% endblock %}
+      <div class="card">
+        <div class="it mb12">📷 Media</div>
+        {% include "crm/_media.html" with media=media media_scope=spec.media_scope media_id=row.pk %}
+      </div>
+    </div>
+  </div>
+
+  {# ── Status update + timeline ──────────────────────────────────────── #}
+  <div class="g2">
+    <div class="card">
+      <div class="ih"><div class="it">＋ Update Status</div></div>
+      <form method="post" action="{% url 'crm:pipeline_status' kind row.pk %}">{% csrf_token %}
+        <div class="fr2">{% for field in status_form %}{% if field.name != 'note' %}{% include "crm/_field.html" %}{% endif %}{% endfor %}</div>
+        {% for field in status_form %}{% if field.name == 'note' %}{% include "crm/_field.html" %}{% endif %}{% endfor %}
+        <button class="btn btn-p">Add Update</button>
+      </form>
+    </div>
+    <div class="card">
+      <div class="ih"><div class="it">📋 Status Timeline</div></div>
+      {% if log %}
+      <div class="tl">
+        {% for event in log %}
+        <div class="tl-it"><div class="tl-dot"></div>
+          <div class="tl-d">{{ event.date|date:"d M Y" }}{% if event.by %} · {{ event.by }}{% endif %}</div>
+          <div class="tl-t"><strong>{{ event.status }}</strong></div>
+          {% if event.note %}<div style="font-size:12px;color:var(--mu);margin-top:1px">{{ event.note }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}<div class="sm mu">No updates</div>{% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

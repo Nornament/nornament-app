@@ -1,0 +1,13 @@
+{% comment %}One form row in the legacy modal's shape: label above, control below,
+error underneath. The inputs need no classes — the legacy stylesheet targets the
+elements themselves.{% endcomment %}
+<div class="fg">
+  {% if field.field.widget.input_type == 'checkbox' %}
+    <label class="ci" style="text-transform:none;font-size:13px;font-weight:400;color:var(--txt)">{{ field }} {{ field.label }}</label>
+  {% else %}
+    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {{ field }}
+  {% endif %}
+  {% if field.help_text %}<div class="sm mu mt4">{{ field.help_text }}</div>{% endif %}
+  {% for error in field.errors %}<div class="sm mt4" style="color:var(--hot)">{{ error }}</div>{% endfor %}
+</div>

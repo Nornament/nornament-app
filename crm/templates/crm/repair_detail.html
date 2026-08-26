@@ -1,0 +1,26 @@
+{% extends "crm/_pipeline_detail.html" %}
+{% load crm_extras %}
+
+{% block detail_fields %}
+<div><div class="il">Received</div><div class="iv">{{ row.received_date|date:"d M Y"|default:"—" }}</div></div>
+<div><div class="il">Karigar / Workshop</div><div class="iv">{{ row.karigar|default:"—" }}</div></div>
+<div><div class="il">Expected Return</div><div class="iv">{{ row.expected_return|date:"d M Y"|default:"—" }}</div></div>
+<div><div class="il">Actual Return</div><div class="iv">{{ row.actual_return|date:"d M Y"|default:"—" }}</div></div>
+<div><div class="il">Customer Approved</div><div class="iv">{% if row.customer_approved %}Yes{% if row.customer_approval_date %} · {{ row.customer_approval_date|date:"d M Y" }}{% endif %}{% else %}No{% endif %}</div></div>
+{% endblock %}
+
+{% block detail_prose %}
+{% if row.jewellery_received %}<div class="il mt12 mb4">Jewellery Received</div><div class="iv">{{ row.jewellery_received|linebreaksbr }}</div>{% endif %}
+{% if row.issue %}<div class="il mt12 mb4">Issue</div><div class="iv" style="line-height:1.6">{{ row.issue|linebreaksbr }}</div>{% endif %}
+{% endblock %}
+
+{% block detail_side %}
+{% if caps.view_cost %}
+<div class="card mb14"><div class="it mb12">Cost</div>
+  <div class="ii">
+    <div><div class="il">Estimated</div><div class="iv">{{ row.estimated_cost|inr }}</div></div>
+    <div><div class="il">Final</div><div class="iv fw">{{ row.final_cost|inr }}</div></div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

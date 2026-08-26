@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% load stock_extras %}
+{% block title %}Melt · Nornament{% endblock %}
+{% block heading %}Melt{% endblock %}
+{% block content %}
+<div class="card">
+  <h3>Melt register</h3>
+  <p class="hint">Admin only. A reason of at least 10 characters is mandatory, and melting is terminal —
+    a melted jewel code refuses every further movement forever.</p>
+  {% if melts %}
+  <table><thead><tr><th>Jewel code</th><th>Reason</th>
+    {% if caps.view_cost %}<th class="num">Written off</th>{% endif %}
+    <th>Date</th><th>Authorised by</th></tr></thead><tbody>
+    {% for melt in melts %}
+    <tr>
+      <td><span class="cellrow">
+        {% with url=thumbs|get:melt.piece_id %}{% if url %}<span class="th" style="width:40px;height:40px"><img src="{{ url }}" alt="" loading="lazy"></span>{% endif %}{% endwith %}
+        <a class="code" href="{% url 'stock:piece_detail' melt.piece.jewel_code %}">{{ melt.piece.jewel_code }}</a></span></td>
+      <td>{{ melt.reason }}</td>
+      {% if caps.view_cost %}<td class="num">₹{{ melt.cost_written_off|default:0|floatformat:0 }}</td>{% endif %}
+      <td class="dim">{{ melt.melted_on|date:"d M Y" }}</td>
+      <td class="dim">{{ melt.authorised_by|default:"—" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody></table>
+  {% else %}<div class="empty">Nothing melted yet.</div>{% endif %}
+</div>
+{% endblock %}

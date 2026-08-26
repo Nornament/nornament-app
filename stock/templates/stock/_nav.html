@@ -1,0 +1,45 @@
+{% comment %}`renderNav` — the legacy NAV list, in order, with its groups and its
+icons. A tab the role cannot open renders disabled with a padlock rather than
+disappearing, so nobody has to guess why a colleague sees more screens.{% endcomment %}
+<div class="navgrp">Operations</div>
+{% url 'stock:dashboard' as u %}
+{% if 'dash' in tabs %}<a href="{{ u }}" {% if request.path == u %}aria-current="page"{% endif %}><span class="ico">▦</span>Dashboard</a>
+{% else %}<button disabled><span class="ico">▦</span>Dashboard<span class="lockicon">🔒</span></button>{% endif %}
+{% url 'stock:piece_list' as u %}
+{% if 'stock' in tabs %}<a href="{{ u }}" {% if nav == 'stock' %}aria-current="page"{% endif %}><span class="ico">◈</span>Stock</a>
+{% else %}<button disabled><span class="ico">◈</span>Stock<span class="lockicon">🔒</span></button>{% endif %}
+{% url 'stock:count_list' as u %}
+{% if 'count' in tabs %}<a href="{{ u }}" {% if nav == 'count' %}aria-current="page"{% endif %}><span class="ico">☑</span>Stock Count</a>
+{% else %}<button disabled><span class="ico">☑</span>Stock Count<span class="lockicon">🔒</span></button>{% endif %}
+
+<div class="navgrp">Workshop</div>
+{% url 'stock:repair_list' as u %}
+{% if 'repairs' in tabs %}<a href="{{ u }}" {% if nav == 'repairs' %}aria-current="page"{% endif %}><span class="ico">⚒</span>Repairs</a>
+{% else %}<button disabled><span class="ico">⚒</span>Repairs<span class="lockicon">🔒</span></button>{% endif %}
+{% url 'stock:melt_list' as u %}
+{% if 'melt' in tabs %}<a href="{{ u }}" {% if nav == 'melt' %}aria-current="page"{% endif %}><span class="ico">♨</span>Melt</a>
+{% else %}<button disabled><span class="ico">♨</span>Melt<span class="lockicon">🔒</span></button>{% endif %}
+
+<div class="navgrp">Catalogue</div>
+{% url 'stock:style_list' as u %}
+{% if 'styles' in tabs %}<a href="{{ u }}" {% if nav == 'styles' %}aria-current="page"{% endif %}><span class="ico">✎</span>Design Library</a>
+{% else %}<button disabled><span class="ico">✎</span>Design Library<span class="lockicon">🔒</span></button>{% endif %}
+
+<div class="navgrp">Admin</div>
+{% url 'stock:reports' as u %}
+{% if 'reports' in tabs %}<a href="{{ u }}" {% if nav == 'reports' %}aria-current="page"{% endif %}><span class="ico">▤</span>Reports &amp; Margin</a>
+{% else %}<button disabled><span class="ico">▤</span>Reports &amp; Margin<span class="lockicon">🔒</span></button>{% endif %}
+{% url 'stock:data' as u %}
+{% if 'data' in tabs %}<a href="{{ u }}" {% if nav == 'data' %}aria-current="page"{% endif %}><span class="ico">⇅</span>Import / Export</a>
+{% else %}<button disabled><span class="ico">⇅</span>Import / Export<span class="lockicon">🔒</span></button>{% endif %}
+{% url 'stock:audit' as u %}
+{% if 'audit' in tabs %}<a href="{{ u }}" {% if nav == 'audit' %}aria-current="page"{% endif %}><span class="ico">⎔</span>Audit Log</a>
+{% else %}<button disabled><span class="ico">⎔</span>Audit Log<span class="lockicon">🔒</span></button>{% endif %}
+{% url 'stock:settings' as u %}
+{% if 'admin' in tabs %}<a href="{{ u }}" {% if nav == 'admin' %}aria-current="page"{% endif %}><span class="ico">⚙</span>Users &amp; Settings</a>
+{% else %}<button disabled><span class="ico">⚙</span>Users &amp; Settings<span class="lockicon">🔒</span></button>{% endif %}
+
+{% comment %}The legacy Stock app was a separate deployment with nowhere else
+to go. This one is half of an app, so the other half has to be reachable.{% endcomment %}
+<div class="navgrp">CRM</div>
+<a href="{% url 'crm:dashboard' %}"><span class="ico">☺</span>Customers &amp; Orders</a>

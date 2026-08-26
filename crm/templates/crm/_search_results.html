@@ -1,0 +1,14 @@
+{% for group in results %}
+<div class="srch-sec">{{ group.section }}</div>
+{% for row in group.rows %}
+<a class="srch-row" href="{% url row.url_name row.pk %}">
+  <div style="flex:1;min-width:0">
+    <div class="fw" style="font-size:13.5px">{{ row.title }}</div>
+    {% if row.sub %}<div class="sm mu" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.sub }}</div>{% endif %}
+  </div>
+  <span class="mu">›</span>
+</a>
+{% endfor %}
+{% empty %}
+<div class="es"><div class="ei">🔍</div><p>{% if q %}Nothing matches “{{ q }}”{% else %}Type to search{% endif %}</p></div>
+{% endfor %}

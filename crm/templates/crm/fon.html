@@ -1,29 +1,88 @@
-{% extends "base.html" %}
+{% extends "crm_base.html" %}
 {% load crm_extras %}
-{% block title %}Friends of Nornament · Nornament{% endblock %}
+{% block title %}Friends of Nornament · Nornament CRM{% endblock %}
+{% block heading %}Friends of Nornament{% endblock %}
+{% block subheading %}{{ payouts|length }} member{{ payouts|length|pluralize }}{% if total %} · {{ total|inr }} payable this month{% endif %}{% endblock %}
+
 {% block content %}
-<h1>Friends of Nornament</h1>
-<p class="muted small">Commission is computed from the sale ledger — the same rows the margin report reads.
+<div class="g3 mb16">
+  <div class="sc"><div class="sv c-gold">{{ levels.1 }}</div><div class="sl">Level 1 (FON1)</div></div>
+  <div class="sc"><div class="sv" style="color:var(--warm)">{{ levels.2 }}</div><div class="sl">Level 2 (FON2)</div></div>
+  <div class="sc"><div class="sv c-pur">{{ levels.3 }}</div><div class="sl">Level 3 (FON3)</div></div>
+</div>
+
+<p class="sm mu mb16">Commission is computed from the sale ledger — the same rows the margin report reads.
   A level 1 earns on their whole downline; levels 2 and 3 earn a flat override on their own billing.</p>
 
-<div class="kpis">
-  <div class="kpi"><div class="lbl">Payable this month</div><div class="val">₹{{ total|floatformat:0 }}</div></div>
-  <div class="kpi"><div class="lbl">Members</div><div class="val">{{ payouts|length }}</div></div>
-</div>
+{% for node in tree %}
+<div class="card mb14">
+  <div class="fl ia g12 mb14">
+    <div class="av" style="width:42px;height:42px;font-size:15px">{{ node.member.name|initials }}</div>
+    <div>
+      <div style="font-weight:700;font-size:15px"><a href="{% url 'crm:fon_detail' node.member.pk %}" style="color:inherit">{{ node.member.name }}</a>
+        {% include "crm/_fon_badge.html" with level=1 %}</div>
+      <div class="sm mu">{{ node.member.customer_code }}{% if node.payout %} · {{ node.payout.total|inr }} billed this month{% endif %}</div>
+    </div>
+    {% if node.payout and caps.view_sale %}
+    <div style="margin-left:auto;text-align:right">
+      <div class="sl">Est. Month Payout</div>
+      <div style="font-size:18px;font-weight:700;color:var(--ok)">{{ node.payout.total_payout|inr }}</div>
+    </div>
+    {% endif %}
+  </div>
 
-<div class="card">
-<table>
-  <tr><th>Member</th><th>Level</th>{% for key, label in categories.items %}<th class="num">{{ label }}</th>{% endfor %}
-      <th class="num">Billing</th><th class="num">Payout</th></tr>
-  {% for payout in payouts %}
-  <tr>
-    <td><a href="{% url 'crm:fon_detail' payout.customer.pk %}"><b>{{ payout.customer.name }}</b></a></td>
-    <td><span class="chip {% if payout.level == 1 %}c-warn{% else %}c-neutral{% endif %}"><span class="dot"></span>Level {{ payout.level }}</span></td>
-    {% for key, label in categories.items %}<td class="num">{{ payout.billing|lookup:key|floatformat:0 }}</td>{% endfor %}
-    <td class="num">{{ payout.total|floatformat:0 }}</td>
-    <td class="num"><strong>{{ payout.total_payout|floatformat:0 }}</strong></td>
-  </tr>
-  {% empty %}<tr><td colspan="7" class="empty">No FoN members.</td></tr>{% endfor %}
-</table>
+  {% for second in node.children %}
+  <div style="margin-left:32px;margin-bottom:8px;padding-left:16px;border-left:2px solid var(--bdr)">
+    <div class="fl ia g8 mb8">
+      <div class="av" style="width:30px;height:30px;font-size:11px">{{ second.member.name|initials }}</div>
+      <div><div class="fw sm"><a href="{% url 'crm:fon_detail' second.member.pk %}" style="color:inherit">{{ second.member.name }}</a>
+        {% include "crm/_fon_badge.html" with level=2 %}</div>
+        <div style="font-size:11px;color:var(--mu)">{{ second.member.customer_code }}</div></div>
+    </div>
+    {% for third in second.children %}
+    <div style="margin-left:28px;margin-bottom:4px;padding-left:12px;border-left:2px solid var(--bdr)">
+      <div class="fl ia g6">
+        <div class="av" style="width:22px;height:22px;font-size:8px">{{ third.name|initials }}</div>
+        <span class="sm"><a href="{% url 'crm:fon_detail' third.pk %}" style="color:inherit">{{ third.name }}</a>
+          {% include "crm/_fon_badge.html" with level=3 %}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+  {% if node.payout and caps.view_sale %}
+  <div class="card mt12" style="background:var(--bg)">
+    <div class="sm fw mb8">This Month Payout Breakdown</div>
+    <table style="font-size:12px">
+      <thead><tr><th>Cat</th><th>Billing</th><th>Rate</th><th class="tr">Payout</th></tr></thead>
+      <tbody>
+      {% for key, label in categories.items %}
+      <tr><td>{{ label }}</td><td>{{ node.payout.billing|lookup:key|inr }}</td>
+          <td>{{ node.payout.pct|lookup:key }}%</td>
+          <td class="tr fw">{{ node.payout.payout|lookup:key|inr }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
 </div>
+{% empty %}
+<div class="es"><div class="ei">🤝</div><p>No FoN members yet. Edit a customer and enable FoN to get started.</p></div>
+{% endfor %}
+
+{% if orphans %}
+<div class="card">
+  <div class="it mb12">⚠️ Unparented members</div>
+  <p class="sm mu mb12">A level 2 or 3 with no parent earns their own override but rolls up to nobody.
+    The legacy app allowed this silently; it is surfaced here so it can be fixed.</p>
+  <table>
+    {% for member in orphans %}
+    <tr><td><a href="{% url 'crm:customer_detail' member.pk %}">{{ member.name }}</a></td>
+        <td>{% include "crm/_fon_badge.html" with level=member.fon_level %}</td>
+        <td class="tr"><a class="btn btn-s btn-xs" href="{% url 'crm:customer_edit' member.pk %}">Set parent</a></td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
 {% endblock %}

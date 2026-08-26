@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Audit Log · Nornament{% endblock %}
+{% block heading %}Audit Log{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="spread">
+    <div><h3>Audit log</h3>
+      <p class="hint" style="margin:0">Append only. Nothing here can be edited or deleted from the
+        interface — including by you.</p></div>
+    <form method="get" class="row">
+      <select name="action" onchange="this.form.submit()">
+        <option value="">Every action</option>
+        {% for name in actions %}<option value="{{ name }}" {% if name == action %}selected{% endif %}>{{ name|lower }}</option>{% endfor %}
+      </select>
+    </form>
+  </div>
+  {% if page.object_list %}
+  <table style="margin-top:12px"><thead><tr><th>When</th><th>Who</th><th>Action</th>
+    <th>On</th><th>Detail</th></tr></thead><tbody>
+    {% for entry in page %}
+    <tr>
+      <td class="dim mono" style="font-size:12px">{{ entry.changed_at|date:"d M Y H:i" }}</td>
+      <td>{{ entry.user|default:"system" }}</td>
+      <td><span class="chip {% if 'EXPORT' in entry.action %}c-warn{% elif 'REVERSE' in entry.action or 'MELT' in entry.action %}c-crit{% else %}c-neutral{% endif %}">{{ entry.action|lower }}</span></td>
+      <td class="code" style="font-size:12px">{{ entry.table_name }}{% if entry.record_pk %} · {{ entry.record_pk }}{% endif %}</td>
+      <td style="font-size:12.5px">{{ entry.detail|default:"" }}
+        {% if entry.export_id %}<br><span class="dim" style="font-size:11.5px"><b>{{ entry.export_id }}</b> · {{ entry.row_count|default:0 }} rows</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody></table>
+  {% if page.has_other_pages %}
+  <p class="hint">Page {{ page.number }} of {{ page.paginator.num_pages }} ·
+    {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&amp;action={{ action|urlencode }}">Previous</a>{% endif %}
+    {% if page.has_next %}<a href="?page={{ page.next_page_number }}&amp;action={{ action|urlencode }}">Next</a>{% endif %}</p>
+  {% endif %}
+  {% else %}<div class="empty">Nothing logged yet.</div>{% endif %}
+  <div class="note"><b>“Who downloaded” on its own is close to useless.</b> Knowing that someone exported
+    at 3pm does not tell you whether they took five rows or your entire cost book — so an export row
+    records the row count and whether cost and margin columns were in the file.</div>
+</div>
+{% endblock %}

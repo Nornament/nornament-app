@@ -1,53 +1,63 @@
-{% extends "base.html" %}
+{% extends "crm_base.html" %}
 {% load crm_extras %}
 {% block title %}{{ customer.name }} · FoN{% endblock %}
+{% block back %}<a class="btn btn-s btn-sm" style="margin-right:8px" href="{% url 'crm:fon' %}">← Back</a>{% endblock %}
+{% block heading %}{{ customer.name }}{% endblock %}
+{% block subheading %}{{ customer.customer_code }} · FoN level {{ customer.fon_level }}{% endblock %}
+{% block actions %}<a class="btn btn-s btn-sm" href="{% url 'crm:customer_detail' customer.pk %}">Profile →</a>{% endblock %}
+
 {% block content %}
-
-<div class="spread">
-  <div>
-    <h1>{{ customer.name }}</h1>
-    <div class="tagrow">
-      <span class="chip c-warn"><span class="dot"></span>FoN level {{ customer.fon_level }}</span>
-      {% if customer.fon_parent %}<span class="tagchip">under {{ customer.fon_parent.name }}</span>{% endif %}
-    </div>
-  </div>
-  <a class="btn" href="{% url 'crm:fon' %}">← FoN register</a>
+<div class="fl ia g8 mb16" style="flex-wrap:wrap">
+  {% include "crm/_fon_badge.html" with level=customer.fon_level %}
+  {% if customer.fon_parent %}<span class="sm mu">under <a href="{% url 'crm:fon_detail' customer.fon_parent.pk %}">{{ customer.fon_parent.name }}</a></span>{% endif %}
 </div>
 
-{% if payout %}
-<div class="kpis" style="margin-top:14px">
-  <div class="kpi"><div class="lbl">Month billing</div><div class="val">₹{{ payout.total|floatformat:0 }}</div>
-    <div class="sub">{{ payout.start }} – {{ payout.end }}</div></div>
-  <div class="kpi"><div class="lbl">Est. payout</div><div class="val">₹{{ payout.total_payout|floatformat:0 }}</div></div>
+{% if not payout %}
+<div class="es"><div class="ei">🤝</div><p>Not a FoN member.</p></div>
+{% elif not caps.view_sale %}
+<div class="es"><div class="ei">🔒</div><p>Payout figures are not shown to this login.</p></div>
+{% else %}
+<div class="g2 mb16">
+  <div class="sc"><div class="sl mb4">Month billing</div>
+    <div style="font-size:18px;font-weight:700;color:var(--acc)">{{ payout.total|inr }}</div>
+    <div class="sm mu mt4">{{ payout.start|date:"d M Y" }} – {{ payout.end|date:"d M Y" }}</div></div>
+  <div class="sc"><div class="sl mb4">Est. payout</div>
+    <div style="font-size:18px;font-weight:700;color:var(--ok)">{{ payout.total_payout|inr }}</div></div>
 </div>
 
-<div class="card">
-  <h2>This month's payout breakdown</h2>
+<div class="card mb16">
+  <div class="it mb12">This month’s payout breakdown</div>
   <table>
-    <tr><th>Category</th><th class="num">Billing</th><th class="num">Rate</th><th class="num">Payout</th></tr>
+    <thead><tr><th>Category</th><th class="tr">Billing</th><th class="tr">Rate</th><th class="tr">Payout</th></tr></thead>
+    <tbody>
     {% for key, label in categories.items %}
     <tr><td>{{ label }}</td>
-        <td class="num">{{ payout.billing|lookup:key|floatformat:0 }}</td>
-        <td class="num">{{ payout.pct|lookup:key }}%</td>
-        <td class="num">{{ payout.payout|lookup:key|floatformat:0 }}</td></tr>
+        <td class="tr">{{ payout.billing|lookup:key|inr }}</td>
+        <td class="tr">{{ payout.pct|lookup:key }}%</td>
+        <td class="tr fw">{{ payout.payout|lookup:key|inr }}</td></tr>
     {% endfor %}
-    <tr><th>Total</th><th class="num">{{ payout.total|floatformat:0 }}</th><th></th>
-        <th class="num">{{ payout.total_payout|floatformat:0 }}</th></tr>
+    <tr><th>Total</th><th class="tr">{{ payout.total|inr }}</th><th></th><th class="tr">{{ payout.total_payout|inr }}</th></tr>
+    </tbody>
   </table>
-  {% if payout.slab %}<p class="small muted">Slab reached: cat1 {{ payout.slab.cat1 }}% · cat2 {{ payout.slab.cat2 }}% · cat3 {{ payout.slab.cat3 }}%</p>{% endif %}
+  {% if payout.slab %}<p class="sm mu mt8">Slab reached: cat1 {{ payout.slab.cat1 }}% · cat2 {{ payout.slab.cat2 }}% · cat3 {{ payout.slab.cat3 }}%</p>{% endif %}
 </div>
-{% else %}<div class="card"><p class="muted">Not a FoN member.</p></div>{% endif %}
+{% endif %}
 
 {% if downline %}
 <div class="card">
-  <h2>Downline</h2>
+  <div class="it mb12">Downline</div>
   <table>
-    <tr><th>Member</th><th>Level</th><th class="num">Below them</th></tr>
+    <thead><tr><th>Member</th><th>Level</th><th class="tr">Below them</th></tr></thead>
+    <tbody>
     {% for member in downline %}
-    <tr><td><a href="{% url 'crm:fon_detail' member.pk %}"><b>{{ member.name }}</b></a></td>
-        <td><span class="chip c-neutral"><span class="dot"></span>Level {{ member.fon_level }}</span></td>
-        <td class="num">{{ member.children }}</td></tr>
+    <tr onclick="location='{% url 'crm:fon_detail' member.pk %}'">
+      <td><div class="nc"><div class="av">{{ member.name|initials }}</div>
+        <div><div class="fw">{{ member.name }}</div><div class="ncode">{{ member.customer_code }}</div></div></div></td>
+      <td>{% include "crm/_fon_badge.html" with level=member.fon_level %}</td>
+      <td class="tr fw">{{ member.children }}</td>
+    </tr>
     {% endfor %}
+    </tbody>
   </table>
 </div>
 {% endif %}

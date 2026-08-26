@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Users &amp; Settings · Nornament{% endblock %}
+{% block heading %}Users &amp; Settings{% endblock %}
+{% block content %}
+<div class="tabs">
+  {% for id, label in setting_tabs %}<a href="?tab={{ id }}" aria-selected="{% if tab == id %}true{% else %}false{% endif %}">{{ label }}</a>{% endfor %}
+</div>
+
+{% if tab == 'cats' %}
+<div class="card">
+  <div class="spread" style="margin-bottom:4px">
+    <div><h3>Categories</h3><p class="hint" style="margin:0">The code prefix is what new jewel codes are
+      built from — change it and only future codes are affected. Existing codes never move.</p></div>
+  </div>
+  <table style="margin-top:14px"><thead><tr><th>Code</th><th>Category</th><th>Code prefix</th>
+    <th class="num">Designs</th><th class="num">Pieces</th></tr></thead><tbody>
+    {% for row in categories %}
+    <tr><td class="code">{{ row.code }}</td><td>{{ row.name }}</td><td class="mono">{{ row.code_prefix|default:"—" }}</td>
+      <td class="num">{{ row.designs }}</td><td class="num">{{ row.pieces }}</td></tr>
+    {% endfor %}
+  </tbody></table>
+  {% if caps.edit_bom %}
+  <form method="post" class="row" style="margin-top:14px">{% csrf_token %}
+    {% for field in form %}<div>{{ field.label_tag }}{{ field }}</div>{% endfor %}
+    <div class="tight"><button class="btn primary">Add category</button></div>
+  </form>
+  {% endif %}
+  <div class="note">A category in use is not offered for removal. Deleting it would orphan every design
+    under it, and the pieces below those.</div>
+</div>
+
+{% elif tab == 'locs' %}
+<div class="card">
+  <div class="spread" style="margin-bottom:4px">
+    <div><h3>Locations</h3><p class="hint" style="margin:0">Showrooms, godowns and the workshop.
+      Stock always sits at exactly one of these.</p></div>
+  </div>
+  <table style="margin-top:14px"><thead><tr><th>Code</th><th>Name</th><th>Kind</th>
+    <th class="num">Live pieces</th><th>Status</th><th></th></tr></thead><tbody>
+    {% for row in locations %}
+    <tr><td class="code">{{ row.code }}</td><td>{{ row.name }}</td><td>{{ row.get_kind_display }}</td>
+      <td class="num">{{ row.live }}</td>
+      <td>{% if row.is_active %}<span class="chip c-good">active</span>{% else %}<span class="chip c-neutral">retired</span>{% endif %}</td>
+      <td>{% if caps.edit_bom %}
+        <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="retire" value="{{ row.pk }}">
+          <button class="btn sm">{% if row.is_active %}Retire{% else %}Reinstate{% endif %}</button></form>
+      {% endif %}</td></tr>
+    {% endfor %}
+  </tbody></table>
+  {% if caps.edit_bom %}
+  <form method="post" class="row" style="margin-top:14px">{% csrf_token %}
+    {% for field in form %}<div>{{ field.label_tag }}{{ field }}</div>{% endfor %}
+    <div class="tight"><button class="btn primary">Add location</button></div>
+  </form>
+  {% endif %}
+  <div class="note">A location is <b>retired</b>, never deleted. Movements and old pieces still point at
+    it, so deleting would leave history referring to somewhere that no longer exists. One holding live
+    stock cannot be retired at all — move the stock first.</div>
+</div>
+
+{% elif tab == 'mats' %}
+<div class="card">
+  <div class="spread" style="margin-bottom:4px">
+    <div><h3>Materials</h3><p class="hint" style="margin:0;max-width:76ch">Every item code that has
+      appeared on a bill of materials. A code arriving from an import lands in <b>Other Materials</b>
+      and is flagged — never guessed into a category that would change how it prices.</p></div>
+    <form method="get" class="row"><input type="hidden" name="tab" value="mats">
+      <input type="search" name="q" value="{{ q }}" placeholder="Code or description" style="max-width:240px">
+      <button class="btn sm">Search</button></form>
+  </div>
+  <table style="margin-top:12px"><thead><tr><th style="width:120px">Code</th><th>Description</th>
+    <th style="width:96px">Size</th><th style="width:150px">Category</th><th style="width:64px">Unit</th>
+    <th class="num" style="width:74px">Lines</th></tr></thead><tbody>
+    {% for row in materials %}
+    <tr><td class="code">{{ row.item_code }}</td><td>{{ row.item_name }}
+        {% if row.needs_review %}<span class="chip c-warn">needs review</span>{% endif %}</td>
+      <td>{{ row.size|default:"—" }}</td><td>{{ row.category }}</td><td>{{ row.default_uom }}</td>
+      <td class="num">{{ row.used_on_lines }}</td></tr>
+    {% empty %}<tr><td colspan="6"><div class="empty">No materials match.</div></td></tr>{% endfor %}
+  </tbody></table>
+  {% if caps.edit_bom %}
+  <form method="post" class="row" style="margin-top:14px">{% csrf_token %}
+    {% for field in form %}<div>{{ field.label_tag }}{{ field }}</div>{% endfor %}
+    <div class="tight"><button class="btn primary">Add material</button></div>
+  </form>
+  {% endif %}
+  <div class="note">The <b>code</b> is what a bill of materials points at, so changing it moves every
+    line that uses it. Description and size are free text.</div>
+</div>
+
+{% elif tab == 'charts' %}
+<div class="card">
+  <div class="spread" style="margin-bottom:4px">
+    <div><h3>Rate charts</h3><p class="hint" style="margin:0;max-width:78ch">Cost and sale for every
+      material, on one line. Metal is deliberately absent — it prices from its live rate and a chart
+      must not be able to override that.</p></div>
+    <form method="get" class="row"><input type="hidden" name="tab" value="charts">
+      <select name="chart" onchange="this.form.submit()">
+        {% for c in charts %}<option value="{{ c.pk }}" {% if chart and c.pk == chart.pk %}selected{% endif %}>{{ c.code }} v{{ c.version_no }}{% if c.is_default %} · default{% endif %}</option>{% endfor %}
+      </select></form>
+  </div>
+  <table style="margin-top:12px"><thead><tr><th>Material</th><th style="width:96px">Size</th>
+    {% if caps.view_cost %}<th class="num" style="width:118px">Cost rate</th>{% endif %}
+    {% if caps.view_sale %}<th class="num" style="width:118px">Sale rate</th>{% endif %}</tr></thead><tbody>
+    {% for line in lines %}
+    <tr><td class="code">{{ line.material.item_code }} <span class="dim">{{ line.material.item_name }}</span></td>
+      <td>{{ line.size_band|default:"—" }}</td>
+      {% if caps.view_cost %}<td class="num mono">{{ line.cost_rate|default_if_none:"—"|floatformat:0 }}</td>{% endif %}
+      {% if caps.view_sale %}<td class="num mono">{{ line.sale_rate|default_if_none:"—"|floatformat:0 }}</td>{% endif %}</tr>
+    {% empty %}<tr><td colspan="4"><div class="empty">This chart has no lines.</div></td></tr>{% endfor %}
+  </tbody></table>
+  <div class="note">A chart that has priced live stock cannot be edited — fork it, so a quote from
+    March still reconciles in September.{% if chart_in_use %} <b>This one has priced live stock.</b>{% endif %}</div>
+</div>
+
+{% elif tab == 'scen' %}
+<div class="card">
+  <h3>Scenarios</h3>
+  <p class="hint">A scenario is a pricing arrangement — who takes what share of the sale. The piece
+    points at one, and its scenario page shows the arithmetic.</p>
+  <table><thead><tr><th>Code</th><th>Name</th><th>Roles</th></tr></thead><tbody>
+    {% for scenario in scenarios %}
+    <tr><td class="code">{{ scenario.code }}</td><td>{{ scenario.name }}</td>
+      <td class="dim">{% for role in scenario.roles.all %}{{ role.group.name }}{% if not forloop.last %} · {% endif %}{% empty %}—{% endfor %}</td></tr>
+    {% empty %}<tr><td colspan="3"><div class="empty">No scenarios.</div></td></tr>{% endfor %}
+  </tbody></table>
+</div>
+
+{% elif tab == 'users' %}
+<div class="card">
+  <div class="spread">
+    <div><h3>Users</h3><p class="hint" style="margin:0">One role group each. An empty home location
+      means <b>every</b> location is visible — the rule <span class="code">app.visible_locations()</span> had.</p></div>
+    <a class="btn" href="{% url 'admin:accounts_user_changelist' %}">Manage in admin →</a>
+  </div>
+  <table style="margin-top:12px"><thead><tr><th>User</th><th>Email</th><th>Role</th>
+    <th>Home location</th><th>Status</th></tr></thead><tbody>
+    {% for row in users %}
+    <tr><td>{{ row.full_name|default:row.username }}<div class="dim mono" style="font-size:12px">{{ row.username }}</div></td>
+      <td class="dim">{{ row.email|default:"—" }}</td>
+      <td>{% for group in row.groups.all %}<span class="chip c-neutral">{{ group.name }}</span>{% empty %}<span class="dim">none</span>{% endfor %}</td>
+      <td class="dim">{{ row.home_location|default:"all" }}</td>
+      <td>{% if not row.is_active %}<span class="chip c-crit">disabled</span>
+        {% elif row.must_change_password %}<span class="chip c-warn">must change password</span>
+        {% else %}<span class="chip c-good">active</span>{% endif %}</td></tr>
+    {% endfor %}
+  </tbody></table>
+  <div class="note">Passwords, group membership and the must-change flag are Django's own. A second
+    half-implementation of user administration here is how a role quietly gains a capability.</div>
+</div>
+
+{% elif tab == 'perms' %}
+<div class="card">
+  <h3>Permissions</h3>
+  <p class="hint">What each role may see and do. These are Django permissions, checked by
+    <span class="code">user.has_perm</span> in the services and by
+    <span class="code">stock/masking.py</span> on every screen.</p>
+  <table><thead><tr><th>Capability</th><th>What it means</th>
+    {% for code, name, caps_of in roles %}<th class="num">{{ code }}</th>{% endfor %}</tr></thead><tbody>
+    {% for cap, label, meaning in matrix %}
+    <tr><td><b>{{ label }}</b><div class="dim mono" style="font-size:11.5px">{{ cap }}</div></td>
+      <td class="dim">{{ meaning }}</td>
+      {% for code, name, caps_of in roles %}
+      <td class="num">{% if cap in caps_of %}<span class="chip c-good">yes</span>{% else %}<span class="dim">—</span>{% endif %}</td>
+      {% endfor %}</tr>
+    {% endfor %}
+  </tbody></table>
+  <div class="note">The nav shows a padlock on a screen a role cannot open, but the refusal is in the
+    view, not the template — a bug in the interface cannot let it through.</div>
+</div>
+
+{% elif tab == 'rates' %}
+<div class="card">
+  <h3>Rates</h3>
+  <p class="hint">One live rate per metal. Every karat derives from it: the <b>sale</b> factor is a
+    commercial number, deliberately above true fineness, and that spread is margin. Never conflate the
+    two columns.</p>
+  <table><thead><tr><th>Metal</th><th class="num">Pure rate / g</th><th>As on</th></tr></thead><tbody>
+    {% for metal in metals %}
+    <tr><td>{{ metal.name }}</td><td class="num mono">{{ metal.pure_rate|floatformat:0 }}</td>
+      <td class="dim">{{ metal.rate_as_on|date:"d M Y H:i" }}</td></tr>
+    {% endfor %}
+  </tbody></table>
+  <table style="margin-top:14px"><thead><tr><th>Karat</th><th>Metal</th>
+    <th class="num">Sale factor</th><th class="num">True fineness</th></tr></thead><tbody>
+    {% for purity in purities %}
+    <tr><td class="code">{{ purity.karat }}</td><td>{{ purity.metal.name }}</td>
+      <td class="num mono">{{ purity.sale_factor }}</td><td class="num mono">{{ purity.true_fineness }}</td></tr>
+    {% endfor %}
+  </tbody></table>
+  <p class="hint">Set a rate from the ticker in the top bar, or from <a href="{% url 'stock:rate_list' %}">Rates</a>.</p>
+</div>
+{% endif %}
+{% endblock %}

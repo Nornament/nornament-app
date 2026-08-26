@@ -42,6 +42,17 @@ LEGACY_NAMES = {
     "editBom": EDIT_BOM,
 }
 
+#: which stock tabs a role may open — the legacy app's ``ROLES[role].tabs``,
+#: copied across. A tab it does not list is rendered locked, not hidden: the
+#: legacy nav showed a padlock so people could see what the role withheld.
+ROLE_TABS = {
+    "ADMIN": ("dash", "stock", "repairs", "melt", "count", "styles", "reports", "data", "audit", "admin"),
+    "ACCOUNTS": ("dash", "stock", "repairs", "count", "styles", "reports"),
+    "SALES": ("dash", "stock", "count", "styles"),
+    "GRAPHIC": ("styles",),
+    "PRODUCTION": ("stock", "repairs", "styles"),
+}
+
 #: app.role seed (migration 0004), as groups
 ROLE_GROUPS = {
     "ADMIN": {

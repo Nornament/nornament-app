@@ -1,7 +1,10 @@
 {% extends "base.html" %}
+{% load stock_extras %}
 {% block title %}{{ piece.jewel_code }} · Nornament{% endblock %}
+{% block heading %}{{ piece.jewel_code }}{% endblock %}
 {% block content %}
 <div class="crumb"><a href="{% url 'stock:piece_list' %}">← Stock</a> / {{ piece.jewel_code }}</div>
+
 <div class="spread" style="margin-bottom:14px">
   <div class="hero">
     <div>
@@ -10,9 +13,24 @@
         {% include "stock/_chip.html" with state=piece.stock_state label=row.stock_state_display %}</div>
     </div>
   </div>
+  <div class="row">
+    {% if caps.edit_bom %}<a class="btn" href="{% url 'stock:piece_edit' piece.jewel_code %}">✎ Edit details</a>{% endif %}
+    {% if not piece.is_terminal %}
+      {% if caps.edit_bom and not open_repair %}<a class="btn" href="?tab=overview#repair">⚒ Send for repair</a>{% endif %}
+      {% if caps.melt %}<a class="btn danger" href="?tab=overview#melt">♨ Melt</a>{% endif %}
+    {% endif %}
+  </div>
 </div>
-{% if gaps %}<div class="gaps" style="margin-bottom:14px">{% for gap in gaps %}<span class="gap">{{ gap }}</span>{% endfor %}</div>{% endif %}
 
+{% if gaps %}<div class="gaps" style="margin-bottom:14px">{% for gap in gaps %}<span class="gap">{{ gap }}</span>{% endfor %}</div>{% endif %}
+{% if open_repair %}<div class="note"><b>{{ open_repair.job_no }}</b> is open on this piece — it is at the workshop.</div>{% endif %}
+
+<div class="tabs">
+  {% for id, label in detail_tabs %}<a href="?tab={{ id }}" aria-selected="{% if tab == id %}true{% else %}false{% endif %}">{{ label }}</a>{% endfor %}
+</div>
+
+{# ── Overview ─────────────────────────────────────────────────────────── #}
+{% if tab == 'overview' %}
 {% if caps.view_sale or caps.view_cost %}
 <div class="card">
   <div class="pricerow">
@@ -55,23 +73,26 @@
   <div class="note">The frozen figure is what this piece <b>did</b> cost. The one beside it is what an
     identical piece would cost to make this morning — the only one worth quoting against. Neither cost
     figure is ever written back.</div>
-  <p style="margin:10px 0 0;font-size:12.5px"><a href="{% url 'stock:piece_scenarios' piece.jewel_code %}">Scenarios</a>
-    {% if caps.manage_materials %}· <a href="{% url 'stock:piece_bom' piece.jewel_code %}">Material breakup</a>{% endif %}</p>
 </div>
 {% endif %}
 
 <div class="card"><h3>Identity</h3>
   <div class="bio">
     <dl>
-      <div class="biorow"><dt>Jewel code</dt><dd class="mono">{{ piece.jewel_code }}</dd></div>
+      <div class="biorow"><dt>Jewel code</dt><dd class="mono">{{ piece.jewel_code }}
+        <span class="dim" style="font-size:11px">· cannot be changed</span></dd></div>
       <div class="biorow"><dt>Style / design no</dt><dd class="mono">{{ piece.style.style_code }}</dd></div>
       <div class="biorow"><dt>Design name</dt><dd>{{ row.design_name|default:"—" }}</dd></div>
       <div class="biorow"><dt>Category</dt><dd>{{ row.category|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Collection</dt><dd>{{ row.collection|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Sub category</dt><dd>{{ row.sub_category|default:"—" }}</dd></div>
     </dl>
     <dl>
       <div class="biorow"><dt>Karat</dt><dd>{{ row.karat|default:"—" }}</dd></div>
       <div class="biorow"><dt>Colour</dt><dd>{{ row.metal_colour|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Quality</dt><dd>{{ row.diamond_quality|default:"—" }}</dd></div>
       <div class="biorow"><dt>Size</dt><dd>{{ row.size_label|default:"—" }}</dd></div>
+      <div class="biorow"><dt>FG date</dt><dd>{{ row.received_on|default:"—" }}</dd></div>
       {% if caps.view_vendor %}<div class="biorow"><dt>Vendor</dt><dd>{{ row.vendor_name|default:"—" }}</dd></div>{% endif %}
     </dl>
   </div>
@@ -90,11 +111,12 @@
       {% endif %}
     </dl>
     <dl>
+      <div class="biorow"><dt>Length</dt><dd class="mono">{{ piece.length_mm|default_if_none:"—" }}</dd></div>
+      <div class="biorow"><dt>Breadth</dt><dd class="mono">{{ piece.breadth_mm|default_if_none:"—" }}</dd></div>
+      <div class="biorow"><dt>Height</dt><dd class="mono">{{ piece.height_mm|default_if_none:"—" }}</dd></div>
       <div class="biorow"><dt>HUID</dt><dd class="mono">{{ row.huid|default:"—" }}</dd></div>
     </dl>
   </div>
-  <div class="note">HUID is engraved per individual article by BIS rule — it is the one identifier
-    that legally cannot live at design level.</div>
 </div>
 
 <div class="card"><h3>Compliance</h3>
@@ -120,6 +142,7 @@
     </dl>
     <dl>
       <div class="biorow"><dt>Received on</dt><dd>{{ row.received_on|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Disposed on</dt><dd>{{ row.disposed_on|default:"—" }}</dd></div>
     </dl>
   </div>
 </div>
@@ -150,6 +173,7 @@
 </div>
 {% endif %}
 
+{# ── the actions, each its own ledger write ──────────────────────────── #}
 <div class="card">
   <div class="spread" style="margin-bottom:10px">
     <div><h3>Move</h3>
@@ -181,30 +205,159 @@
     <button class="btn primary" style="margin-top:10px">Record sale</button>
   </form>
   {% endif %}
+</div>
 
-  {% if caps.melt and not piece.is_terminal %}
-  <h3 style="margin-top:16px">Melt</h3>
-  <p class="hint">This is permanent. A melted jewel code refuses every further movement.</p>
+{% if caps.edit_bom and not piece.is_terminal and not open_repair %}
+<div class="card" id="repair">
+  <h3>Send for repair</h3>
+  <p class="hint">A repair is not a note on a record — it forks the bill of materials. Removing a stone
+    and fitting a different one changes what the piece physically contains, so it changes its cost.</p>
+  <form method="post" action="{% url 'stock:repair_open' piece.jewel_code %}">{% csrf_token %}
+    {% for field in repair_form %}<div>{{ field.label_tag }}{{ field }}{{ field.errors }}</div>{% endfor %}
+    <button class="btn" style="margin-top:10px">⚒ Open the job</button>
+  </form>
+</div>
+{% endif %}
+
+{% if caps.melt and not piece.is_terminal %}
+<div class="card" id="melt" style="border-color:var(--critical)">
+  <h3>Melt</h3>
+  <p class="hint">This is permanent. A melted jewel code refuses every further movement forever, and the
+    reason is what anyone auditing this in a year will read.</p>
   <form method="post" action="{% url 'stock:melt_piece' piece.jewel_code %}">{% csrf_token %}
     <label for="reason">Reason (at least 10 characters)</label>
     <textarea id="reason" name="reason" rows="2" required minlength="10"></textarea>
     <button class="btn danger" style="margin-top:8px">♨ Melt permanently</button>
   </form>
-  {% endif %}
-</div>
-
-{% if sale %}
-<div class="card">
-  <div class="spread" style="margin-bottom:10px">
-    <div><h3>Sale details</h3>
-      <p class="hint" style="margin:0">Price is whatever was actually received on that day —
-        never re-derived from today's gold rate.</p></div>
-  </div>
-  <p>Sold on {{ sale.sold_on }} for <span class="mono">{{ sale.sold_price|floatformat:0 }}</span>
-     {% if caps.view_margin %}· margin <span class="mono">{{ sale.margin_amt|default_if_none:"—"|floatformat:0 }}</span>{% endif %}</p>
 </div>
 {% endif %}
 
+{# ── Sale BOM & Breakup ───────────────────────────────────────────────── #}
+{% elif tab == 'bom' %}
+<div class="card">
+  <div class="spread">
+    <div><h3>Bill of materials</h3>
+      <p class="hint" style="margin:0">Current version is v{{ row.bom_version|default:"—" }}. A change forks
+        a new version; the old one is superseded, never overwritten.</p></div>
+    <div class="row">
+      {% if caps.manage_materials %}<a class="btn" href="{% url 'stock:piece_bom' piece.jewel_code %}">Material breakup →</a>{% endif %}
+      {% if caps.edit_bom %}<a class="btn primary" href="{% url 'stock:piece_bom_edit' piece.jewel_code %}">✎ Edit BOM</a>{% endif %}
+    </div>
+  </div>
+  {% if not caps.manage_materials %}
+  <div class="empty">🔒 Your role does not see the material breakup.</div>
+  {% endif %}
+</div>
+
+{# ── Pricing ──────────────────────────────────────────────────────────── #}
+{% elif tab == 'pricing' %}
+<div class="card">
+  <div class="spread">
+    <div><h3>Pricing</h3>
+      <p class="hint" style="margin:0">Sale follows the live metal rate. Neither cost figure is ever
+        written back.</p></div>
+    <a class="btn" href="{% url 'stock:piece_scenarios' piece.jewel_code %}">Scenarios →</a>
+  </div>
+  <div class="bio" style="margin-top:12px">
+    <dl>
+      <div class="biorow"><dt>Sale price</dt><dd class="mono">{{ row.sale_price|default_if_none:"—"|floatformat:0 }}</dd></div>
+      <div class="biorow"><dt>Rate used</dt><dd class="mono">{{ row.gold_rate_used|default_if_none:"—"|floatformat:0 }} /g</dd></div>
+      {% if caps.view_cost %}
+      <div class="biorow"><dt>Cost — frozen</dt><dd class="mono">{{ row.cost_price|default_if_none:"—"|floatformat:0 }}</dd></div>
+      <div class="biorow"><dt>Cost — today</dt><dd class="mono">{{ row.current_cost|default_if_none:"—"|floatformat:0 }}</dd></div>
+      {% endif %}
+    </dl>
+    <dl>
+      {% if caps.view_margin %}
+      <div class="biorow"><dt>Margin on frozen cost</dt><dd class="mono">{{ row.margin|default_if_none:"—"|floatformat:0 }}</dd></div>
+      <div class="biorow"><dt>Margin at today's metal</dt><dd class="mono">{{ row.current_margin|default_if_none:"—"|floatformat:0 }}</dd></div>
+      {% endif %}
+      <div class="biorow"><dt>Scenario</dt><dd>{{ piece.scenario|default:"—" }}</dd></div>
+    </dl>
+  </div>
+</div>
+
+{# ── Media ────────────────────────────────────────────────────────────── #}
+{% elif tab == 'media' %}
+<div class="card">
+  <h3>Assets</h3>
+  <p class="hint">The <b>display picture</b> is what every list and the catalogue pull.</p>
+  {% if media %}
+  <div class="mediagrid">
+    {% for asset in media %}
+    <div class="mtile">
+      {% with url=media_urls|get:asset.pk %}
+      {% if url %}<img class="art" src="{{ url }}" alt="{{ asset.file_name }}" loading="lazy">
+      {% else %}<div class="empty" style="min-height:120px">{{ asset.kind }}</div>{% endif %}
+      {% endwith %}
+      <div class="cap"><b style="color:var(--ink)">{{ asset.kind }}</b><br>
+        {{ asset.file_name|default:asset.media_ref }}{% if asset.rank_order %} · rank {{ asset.rank_order }}{% endif %}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}<div class="empty">No media on this piece.</div>{% endif %}
+</div>
+<div class="card"><h3>Social &amp; web</h3>
+  <div class="bio"><dl>
+    <div class="biorow"><dt>On website</dt><dd>{% if piece.on_website %}<span class="chip c-good">live</span>{% else %}<span class="chip c-neutral">not published</span>{% endif %}</dd></div>
+    <div class="biorow"><dt>URL</dt><dd class="mono">{% if piece.website_url %}<a href="{{ piece.website_url }}" target="_blank" rel="noopener">{{ piece.website_url }}</a>{% else %}—{% endif %}</dd></div>
+  </dl></div>
+</div>
+
+{# ── Similar ──────────────────────────────────────────────────────────── #}
+{% elif tab == 'similar' %}
+<div class="card">
+  <h3>Suggested automatically</h3>
+  <p class="hint">Matched on category, then price, then metal — live pieces only, with location shown.
+    These are guesses.</p>
+  {% if similar %}
+  <div class="simgrid">
+    {% for entry in similar %}
+    <article class="dcard">
+      <a href="{% url 'stock:piece_detail' entry.piece.jewel_code %}">
+        {% if entry.thumb %}<img class="art" src="{{ entry.thumb }}" alt="{{ entry.piece.jewel_code }}" loading="lazy">{% endif %}</a>
+      <div class="m">
+        <div style="font-family:var(--mono);font-size:12.5px;font-weight:600">
+          <a href="{% url 'stock:piece_detail' entry.piece.jewel_code %}">{{ entry.piece.jewel_code }}</a></div>
+        <div style="font-size:12px;color:var(--muted)">{{ entry.row.design_name|default:entry.row.style_code }}</div>
+        <div style="margin-top:7px;display:flex;justify-content:space-between;align-items:center;gap:6px">
+          {% if caps.view_sale %}<span style="font-family:var(--mono);font-size:12.5px;font-weight:600">₹{{ entry.row.sale_price|default_if_none:0|floatformat:0 }}</span>{% else %}<span></span>{% endif %}
+          <span class="chip c-neutral" style="font-size:10.5px">{{ entry.row.location|default:"—" }}</span>
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}<div class="empty">Nothing else live in this category.</div>{% endif %}
+  <div class="note">The legacy screen also had a <b>Linked by your team</b> list. The Supabase schema has
+    no table behind it — it was demo data in the mock — so there is nothing to port and nothing was lost.</div>
+</div>
+
+{# ── Marketing ────────────────────────────────────────────────────────── #}
+{% elif tab == 'marketing' %}
+<div class="card">
+  <h3>Story &amp; copy</h3>
+  <div class="bio" style="grid-template-columns:1fr">
+    <dl>
+      <div class="biorow" style="align-items:flex-start"><dt>Story of the jewellery</dt>
+        <dd style="max-width:60ch">{{ piece.style.story|default:"—"|linebreaksbr }}</dd></div>
+      <div class="biorow" style="align-items:flex-start"><dt>Website description</dt>
+        <dd style="max-width:60ch">{{ piece.style.website_description|default:"—"|linebreaksbr }}</dd></div>
+      <div class="biorow"><dt>Design name</dt><dd>{{ piece.style.name|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Collection</dt><dd>{{ piece.style.collection|default:"—" }}</dd></div>
+      <div class="biorow" style="align-items:flex-start"><dt>Remarks</dt>
+        <dd style="max-width:60ch">{{ piece.remarks|default:"—"|linebreaksbr }}</dd></div>
+    </dl>
+  </div>
+  {% if caps.edit_bom %}
+  <p style="margin-top:12px"><a class="btn sm" href="{% url 'stock:style_edit' piece.style.style_code %}">✎ Edit the design copy</a></p>
+  {% endif %}
+  <div class="note">Story and website copy belong to the <b>design</b>, not the piece — every jewel code
+    of this style shares them, which is why they are edited on the style and not here.</div>
+</div>
+
+{# ── History ──────────────────────────────────────────────────────────── #}
+{% elif tab == 'history' %}
 <div class="card"><h3>Movement ledger</h3>
   <table><thead><tr><th>Event</th><th>From</th><th>To</th><th>Resulting state</th><th>Date</th><th>By</th><th>Reason</th></tr></thead><tbody>
     {% for movement in movements %}
@@ -220,4 +373,45 @@
     {% empty %}<tr><td colspan="7"><div class="empty">Never moved.</div></td></tr>{% endfor %}
   </tbody></table>
 </div>
+
+<div class="card"><h3>BOM versions</h3>
+  <p class="hint">A repair or a correction forks a version. The superseded one stays, which is what makes
+    the change auditable.</p>
+  <table><thead><tr><th>Version</th><th>Reason</th>
+    {% if caps.view_cost %}<th class="num">Cost</th>{% endif %}<th>Note</th><th>Current</th></tr></thead><tbody>
+    {% for version in bom_versions %}
+    <tr><td class="code">v{{ version.version_no }}</td><td>{{ version.reason|lower }}</td>
+      {% if caps.view_cost %}<td class="num mono">{{ version.total_cost_price|default_if_none:"—"|floatformat:0 }}</td>{% endif %}
+      <td class="dim">{{ version.note|default:"—" }}</td>
+      <td>{% if version.is_current %}<span class="chip c-good">current</span>{% else %}<span class="chip c-neutral">superseded</span>{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="5"><div class="empty">No versions.</div></td></tr>{% endfor %}
+  </tbody></table>
+</div>
+
+<div class="card"><h3>Repairs</h3>
+  <table><thead><tr><th>Job</th><th>Fault</th><th>BOM</th><th>Status</th><th>Opened</th></tr></thead><tbody>
+    {% for job in repairs %}
+    <tr><td class="code">{{ job.job_no }}</td><td>{{ job.fault_description|truncatechars:60 }}</td>
+      <td class="dim">v{{ job.from_bom_version }} → {% if job.to_bom_version %}v{{ job.to_bom_version }}{% else %}—{% endif %}</td>
+      <td>{% if job.status == 'DONE' %}<span class="chip c-good">done</span>{% else %}<span class="chip c-ser">open</span>{% endif %}</td>
+      <td class="dim">{{ job.opened_on }}</td></tr>
+    {% empty %}<tr><td colspan="5"><div class="empty">Never repaired.</div></td></tr>{% endfor %}
+  </tbody></table>
+</div>
+
+{% if caps.view_sale %}
+<div class="card"><h3>Sales</h3>
+  <p class="hint">Price is whatever was actually received on that day — never re-derived from today's
+    gold rate.</p>
+  <table><thead><tr><th>Date</th><th class="num">Sold price</th>
+    {% if caps.view_margin %}<th class="num">Margin</th>{% endif %}<th>Invoice</th><th>Source</th></tr></thead><tbody>
+    {% for entry in sales %}
+    <tr><td class="dim">{{ entry.sold_on }}</td><td class="num mono">{{ entry.sold_price|floatformat:0 }}</td>
+      {% if caps.view_margin %}<td class="num mono">{{ entry.margin_amt|default_if_none:"—"|floatformat:0 }}</td>{% endif %}
+      <td class="dim">{{ entry.invoice_no|default:"—" }}</td><td class="dim">{{ entry.source }}</td></tr>
+    {% empty %}<tr><td colspan="5"><div class="empty">Not sold.</div></td></tr>{% endfor %}
+  </tbody></table>
+</div>
+{% endif %}
+{% endif %}
 {% endblock %}

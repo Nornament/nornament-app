@@ -1,42 +1,41 @@
-{% extends "base.html" %}
-{% block title %}Customers · Nornament{% endblock %}
-{% block content %}
-<h1>Customers <span class="muted small">{{ total }}</span></h1>
+{% extends "crm_base.html" %}
+{% load crm_extras %}
+{% block title %}Customers · Nornament CRM{% endblock %}
+{% block heading %}Customers{% endblock %}
+{% block subheading %}{{ grand_total }} total{% endblock %}
+{% block actions %}
+<a class="BI" href="{% url 'crm:search' %}" title="Search everything" style="min-width:38px;min-height:38px;display:flex;align-items:center;justify-content:center">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 21l-4.35-4.35"/><path d="M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"/></svg>
+</a>
+<a class="btn btn-s btn-sm" href="{% url 'crm:customer_export' %}">⬇️ Export</a>
+<a class="btn btn-p" href="{% url 'crm:customer_new' %}">+ Add Customer</a>
+{% endblock %}
 
-<form class="filterbar" method="get">
-  <div class="frow">
-    <span class="flabel">Search</span>
-    <div class="fchips" style="align-items:center">
-      <input id="q" type="search" name="q" value="{{ q }}" placeholder="Name, code, phone, email"
-             style="flex:1;min-width:220px;width:auto"
-             hx-get="{% url 'crm:customer_rows' %}" hx-target="#customer-rows" hx-trigger="keyup changed delay:300ms"
-             hx-include="closest form">
-      <label class="fchip" style="display:inline-flex;align-items:center;gap:6px;margin:0">
-        <input id="fon" type="checkbox" name="fon" value="1" style="width:auto" {% if request.GET.fon %}checked{% endif %}> FoN only
-      </label>
-      <button class="btn sm">Search</button>
-      <input type="hidden" name="temp" value="{{ temp }}">
-      <input type="hidden" name="type" value="{{ ctype }}">
-      <input type="hidden" name="loc" value="{{ loc }}">
-    </div>
-  </div>
-  <div class="frow">
-    <span class="flabel">Filter</span>
-    <div class="fchips">
-      <a class="fchip" href="?q={{ q|urlencode }}{% if request.GET.fon %}&amp;fon=1{% endif %}"
-         aria-pressed="{% if not temp and not ctype and not loc %}true{% else %}false{% endif %}">All</a>
+{% block content %}
+<form class="fl ia jb mb16 g8" method="get" style="flex-wrap:wrap">
+  <div class="fl ia g8" style="flex:1;flex-wrap:wrap">
+    <input type="search" name="q" value="{{ q }}" placeholder="🔍  Name, code, phone…"
+           style="padding:7px 12px;border:1px solid var(--bdr);border-radius:6px;font-size:13px;min-width:220px;outline:none;width:auto"
+           hx-get="{% url 'crm:customer_rows' %}" hx-target="#customer-rows" hx-trigger="keyup changed delay:300ms"
+           hx-include="closest form">
+    <div class="fl ia g8" style="flex-wrap:wrap">
       {% for t in temperatures %}
-      <a class="fchip" href="?temp={% if temp != t %}{{ t|urlencode }}{% endif %}&amp;type={{ ctype|urlencode }}&amp;loc={{ loc|urlencode }}&amp;q={{ q|urlencode }}{% if request.GET.fon %}&amp;fon=1{% endif %}"
-         aria-pressed="{% if temp == t %}true{% else %}false{% endif %}">{{ t }}</a>
+      <a class="chip{% if temp == t %} act act-{{ t|lower }}{% endif %}"
+         href="?{% if temp != t %}temp={{ t|urlencode }}&amp;{% endif %}type={{ ctype|urlencode }}&amp;loc={{ loc|urlencode }}&amp;q={{ q|urlencode }}{% if request.GET.fon %}&amp;fon=1{% endif %}">
+        {% if t == 'Hot' %}🔥{% elif t == 'Warm' %}☀️{% else %}❄️{% endif %} {{ t }}</a>
       {% endfor %}
       {% for t in types %}
-      <a class="fchip" href="?type={% if ctype != t %}{{ t|urlencode }}{% endif %}&amp;temp={{ temp|urlencode }}&amp;loc={{ loc|urlencode }}&amp;q={{ q|urlencode }}{% if request.GET.fon %}&amp;fon=1{% endif %}"
-         aria-pressed="{% if ctype == t %}true{% else %}false{% endif %}">{{ t }}</a>
+      <a class="chip{% if ctype == t %} act{% if t == 'VIP' %} act-gold{% endif %}{% endif %}"
+         href="?{% if ctype != t %}type={{ t|urlencode }}&amp;{% endif %}temp={{ temp|urlencode }}&amp;loc={{ loc|urlencode }}&amp;q={{ q|urlencode }}{% if request.GET.fon %}&amp;fon=1{% endif %}">
+        {% if t == 'VIP' %}⭐ {% endif %}{{ t }}</a>
       {% endfor %}
+      <a class="chip{% if request.GET.fon %} act{% endif %}"
+         href="?{% if not request.GET.fon %}fon=1&amp;{% endif %}temp={{ temp|urlencode }}&amp;type={{ ctype|urlencode }}&amp;loc={{ loc|urlencode }}&amp;q={{ q|urlencode }}">🤝 FoN</a>
       {% for l in locations %}
-      <a class="fchip" href="?loc={% if loc != l %}{{ l|urlencode }}{% endif %}&amp;temp={{ temp|urlencode }}&amp;type={{ ctype|urlencode }}&amp;q={{ q|urlencode }}{% if request.GET.fon %}&amp;fon=1{% endif %}"
-         aria-pressed="{% if loc == l %}true{% else %}false{% endif %}">{{ l }}</a>
+      <a class="chip{% if loc == l %} act{% endif %}"
+         href="?{% if loc != l %}loc={{ l|urlencode }}&amp;{% endif %}temp={{ temp|urlencode }}&amp;type={{ ctype|urlencode }}&amp;q={{ q|urlencode }}{% if request.GET.fon %}&amp;fon=1{% endif %}">📍{{ l }}</a>
       {% endfor %}
+      {% if temp or ctype or loc or request.GET.fon or q %}<a class="chip" href="{% url 'crm:customer_list' %}">Clear</a>{% endif %}
     </div>
   </div>
 </form>

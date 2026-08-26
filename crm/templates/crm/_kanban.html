@@ -1,0 +1,45 @@
+{% load crm_extras %}
+{% comment %}The legacy KanbanBoard. React moved a card by drag; here each card
+carries a one-click move to the next and previous stage, which is what the
+mobile MobileStages view did and works the same with no drag library.{% endcomment %}
+<div class="kanban-board" style="padding:0">
+  {% for status, items in columns %}
+  <div class="kanban-col">
+    <div class="kanban-hdr"><span>{{ status }}</span>
+      <span style="background:var(--acc);color:#fff;border-radius:10px;font-size:10px;font-weight:700;padding:1px 7px">{{ items|length }}</span></div>
+    <div class="kanban-body">
+      {% for row in items %}
+      <div class="kanban-card">
+        <a href="{% url spec.detail_url row.pk %}" style="display:block;color:inherit;text-decoration:none">
+          {% with thumb=thumbs|lookup:row.pk %}
+          {% if thumb %}<img src="{{ thumb }}" alt="" style="width:100%;height:120px;object-fit:cover;display:block">
+          {% else %}<div style="height:60px;background:linear-gradient(135deg,#f0f4ff,#e8f0fe);display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--acc)">💎</div>{% endif %}
+          {% endwith %}
+          <div style="padding:8px 10px">
+            <div style="font-weight:700;font-size:13px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{% firstof row|pipeline_title row|pipeline_code %}</div>
+            <div style="font-size:11px;color:var(--mu);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row|pipeline_code }}</div>
+            {% if row.customer %}<div class="fl ia" style="gap:5px">
+              <div class="av" style="width:18px;height:18px;font-size:7px">{{ row.customer.name|initials }}</div>
+              <span style="font-size:11px;color:var(--mu)">{{ row.customer.name }}</span></div>{% endif %}
+          </div>
+        </a>
+        <div class="fl g8" style="padding:0 8px 8px">
+          {% with back=status|prev_status:statuses forward=status|next_status:statuses %}
+          <form method="post" action="{% url 'crm:pipeline_status' kind row.pk %}" style="flex:1">{% csrf_token %}
+            <input type="hidden" name="status" value="{{ back }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button class="mv-btn" style="width:100%;height:32px" {% if not back %}disabled{% endif %} title="Back a stage">‹</button>
+          </form>
+          <form method="post" action="{% url 'crm:pipeline_status' kind row.pk %}" style="flex:1">{% csrf_token %}
+            <input type="hidden" name="status" value="{{ forward }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button class="mv-btn" style="width:100%;height:32px" {% if not forward %}disabled{% endif %} title="On a stage">›</button>
+          </form>
+          {% endwith %}
+        </div>
+      </div>
+      {% empty %}
+      <div style="padding:16px 8px;text-align:center;color:var(--mu);font-size:12px;border:2px dashed var(--bdr);border-radius:8px">Empty</div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>

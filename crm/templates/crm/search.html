@@ -1,0 +1,15 @@
+{% extends "crm_base.html" %}
+{% block title %}Search · Nornament CRM{% endblock %}
+{% block heading %}Search{% endblock %}
+{% block subheading %}Customers, enquiries, orders, repairs and materials{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:640px;padding:0">
+  <form class="srch-in" method="get" action="{% url 'crm:search' %}">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 21l-4.35-4.35"/><path d="M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"/></svg>
+    <input type="search" name="q" value="{{ q }}" autofocus placeholder="Name, code, phone, item…"
+           hx-get="{% url 'crm:search' %}" hx-target="#search-results" hx-trigger="keyup changed delay:250ms">
+  </form>
+  <div class="srch-res" id="search-results">{% include "crm/_search_results.html" %}</div>
+</div>
+{% endblock %}

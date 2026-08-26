@@ -100,6 +100,53 @@ class Customer(LegacyBacked):
         return self.mobile or self.landline
 
 
+class Location(models.Model):
+    """The showroom/city list the legacy Settings modal maintained.
+
+    The customer's location stays a plain string — the legacy data has values
+    that were never in the list, and dropping them to make a foreign key fit
+    would lose data. This table only drives the pickers.
+    """
+
+    name = models.CharField(max_length=120, unique=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class OutreachEntry(models.Model):
+    """One entry of the old ``customer.data.outreachLog[]``."""
+
+    PHONE, WHATSAPP, PICS, INSTORE, EMAIL = "phone", "whatsapp", "pics", "instore", "email"
+    TYPES = [
+        (PHONE, "📞 Phone Call"),
+        (WHATSAPP, "💬 WhatsApp"),
+        (PICS, "📸 Pics Sent"),
+        (INSTORE, "🏪 In-Store"),
+        (EMAIL, "✉️ Email"),
+    ]
+
+    customer = models.ForeignKey("Customer", on_delete=models.CASCADE, related_name="outreach_log")
+    date = models.DateField(default=timezone.localdate)
+    type = models.CharField(max_length=16, choices=TYPES, default=PHONE)
+    outcome = models.CharField(max_length=120, blank=True)
+    notes = models.TextField(blank=True)
+    next_follow_up = models.DateField(null=True, blank=True)
+    by = models.CharField(max_length=120, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-date", "-id"]
+        verbose_name_plural = "outreach entries"
+
+    def __str__(self):
+        return f"{self.get_type_display()} {self.date}"
+
+
 class Occasion(models.Model):
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name="occasions")
     occasion_type = models.CharField(max_length=60)

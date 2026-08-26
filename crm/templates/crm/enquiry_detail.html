@@ -1,0 +1,40 @@
+{% extends "crm/_pipeline_detail.html" %}
+{% load crm_extras %}
+
+{% block extra_actions %}
+{% if row.status == 'Order Confirmed' %}
+<form method="post" action="{% url 'crm:enquiry_convert' row.pk %}">{% csrf_token %}
+  <button class="btn btn-p btn-sm">→ Convert to Order</button></form>
+{% endif %}
+{% endblock %}
+
+{% block detail_fields %}
+<div><div class="il">Date</div><div class="iv">{{ row.enquiry_date|date:"d M Y"|default:"—" }}</div></div>
+<div><div class="il">Metal Type</div><div class="iv">{{ row.metal_type|default:"—" }}</div></div>
+{% if caps.view_sale %}<div><div class="il">Est. Budget</div><div class="iv">{{ row.estimated_budget|inr }}</div></div>{% endif %}
+<div><div class="il">Follow-up</div><div class="iv">{{ row.follow_up_date|date:"d M Y"|default:"—" }}</div></div>
+<div><div class="il">Temperature</div><div class="iv">{% include "crm/_temp_badge.html" with temp=row.temperature %}</div></div>
+{% endblock %}
+
+{% block detail_prose %}
+{% if row.stone_details %}<div class="il mt12 mb4">Stone / Diamond Details</div><div class="iv">{{ row.stone_details|linebreaksbr }}</div>{% endif %}
+{% if row.design_brief %}<div class="il mt12 mb4">Design Brief</div><div class="iv" style="line-height:1.6">{{ row.design_brief|linebreaksbr }}</div>{% endif %}
+{% endblock %}
+
+{% block detail_side %}
+{% if row.client_feedback or row.salesperson_feedback %}
+<div class="card mb14">
+  <div class="it mb12">Feedback</div>
+  {% if row.client_feedback %}<div class="il mb4">Client Feedback</div><div class="iv mb12" style="line-height:1.6">{{ row.client_feedback|linebreaksbr }}</div>{% endif %}
+  {% if row.salesperson_feedback %}<div class="il mb4">Salesperson Notes</div><div class="iv" style="line-height:1.6">{{ row.salesperson_feedback|linebreaksbr }}</div>{% endif %}
+</div>
+{% endif %}
+{% if row.orders.all %}
+<div class="card mb14"><div class="it mb12">Became</div>
+  {% for order in row.orders.all %}<a class="pc" href="{% url 'crm:order_detail' order.pk %}" style="color:inherit">
+    <div class="pip">📦</div><div style="flex:1"><div class="pa">{{ order.order_code }}</div>
+    <div class="pm">{{ order.item_description|truncatechars:40 }}</div></div>
+    {% include "crm/_status_chip.html" with status=order.status %}</a>{% endfor %}
+</div>
+{% endif %}
+{% endblock %}

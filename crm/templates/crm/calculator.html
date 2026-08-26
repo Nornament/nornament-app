@@ -1,108 +1,86 @@
-{% extends "base.html" %}
-{% block title %}Quote calculator · Nornament{% endblock %}
-{% block content %}
-<h1>Quote calculator</h1>
-<p class="muted small">Rates come from the database, not from a table baked into the page.
-  Each purity prices off the metal it belongs to — which is what the old calculator got wrong for silver.</p>
+{% extends "crm_base.html" %}
+{% load crm_extras %}
+{% block title %}Quote Calculator · Nornament CRM{% endblock %}
+{% block heading %}Quote Calculator{% endblock %}
+{% block subheading %}Live rates from the database{% endblock %}
 
-<div class="card">
-  <h2>Gold &amp; metal rates</h2>
-  <div class="row">
+{% block content %}
+<div class="card mb16">
+  <div class="it mb12">Gold &amp; metal rates</div>
+  <div class="fl g8" style="flex-wrap:wrap">
     {% for purity in purities %}
-    <span class="ticker">
-      <span class="tl">{{ purity.karat }} {{ purity.metal_name }}</span>
-      <span class="tv">{{ purity.sale_rate|floatformat:0 }}/g</span>
-      {% if caps.view_cost %}<span class="derived">cost {{ purity.cost_rate|floatformat:0 }}</span>{% endif %}
-    </span>
+    <span class="mt-tag" style="font-size:12px;padding:6px 12px">{{ purity.karat }} {{ purity.metal_name }} · {{ purity.sale_rate|inr }}/g{% if caps.view_cost %}&nbsp;<span class="mu">(cost {{ purity.cost_rate|inr }})</span>{% endif %}</span>
     {% endfor %}
   </div>
+  <p class="sm mu mt8">Each purity prices off the metal it belongs to — which is what the old calculator got wrong for silver.</p>
 </div>
 
-<div class="card">
-  <h2>Item</h2>
+<div class="card mb16">
+  <div class="it mb12">Item</div>
   <form method="post">{% csrf_token %}
-    <div class="row">
-      <div><label for="name">Item</label><input id="name" name="name" placeholder="Earrings"></div>
-      <div><label for="code">Code</label><input id="code" name="code" placeholder="ER00738"></div>
-      <div><label for="karat">Karat</label>
+    <div class="fr3">
+      <div class="fg"><label for="name">Item</label><input id="name" name="name" type="text" placeholder="Earrings"></div>
+      <div class="fg"><label for="code">Code</label><input id="code" name="code" type="text" placeholder="ER00738"></div>
+      <div class="fg"><label for="karat">Karat</label>
         <select id="karat" name="karat">{% for purity in purities %}<option value="{{ purity.karat }}">{{ purity.karat }} ({{ purity.metal_name }})</option>{% endfor %}</select></div>
-      <div><label for="grams">Metal grams</label><input id="grams" name="grams" inputmode="decimal" value="0"></div>
-      <div><label for="making_rate">Making / g</label><input id="making_rate" name="making_rate" inputmode="decimal" value="1500"></div>
     </div>
+    <div class="fr2">
+      <div class="fg"><label for="grams">Metal grams</label><input id="grams" name="grams" type="number" step="0.001" value="0"></div>
+      <div class="fg"><label for="making_rate">Making / g</label><input id="making_rate" name="making_rate" type="number" step="1" value="1500"></div>
+    </div>
+
+    <div class="divL"></div>
+    <div class="it mb12">Stones</div>
     {% for i in "12345" %}
-    <div class="row">
-      <div><label for="stone_material_{{ forloop.counter }}">Stone {{ forloop.counter }} material</label>
-           <input id="stone_material_{{ forloop.counter }}" name="stone_material_{{ forloop.counter }}" placeholder="Material code"></div>
-      <div><label for="stone_ct_{{ forloop.counter }}">Carats</label>
-           <input id="stone_ct_{{ forloop.counter }}" name="stone_ct_{{ forloop.counter }}" inputmode="decimal"></div>
-      <div><label for="stone_band_{{ forloop.counter }}">Size band</label>
-           <input id="stone_band_{{ forloop.counter }}" name="stone_band_{{ forloop.counter }}"></div>
+    <div class="fr3">
+      <div class="fg"><label for="stone_material_{{ forloop.counter }}">Stone {{ forloop.counter }} material</label>
+        <input id="stone_material_{{ forloop.counter }}" name="stone_material_{{ forloop.counter }}" type="text" placeholder="Material code"></div>
+      <div class="fg"><label for="stone_ct_{{ forloop.counter }}">Carats</label>
+        <input id="stone_ct_{{ forloop.counter }}" name="stone_ct_{{ forloop.counter }}" type="number" step="0.001"></div>
+      <div class="fg"><label for="stone_band_{{ forloop.counter }}">Size band</label>
+        <input id="stone_band_{{ forloop.counter }}" name="stone_band_{{ forloop.counter }}" type="text"></div>
     </div>
     {% endfor %}
-    <div class="row">
-      <div><label for="target_total">Item total — type a target to back-solve (optional)</label>
-           <input id="target_total" name="target_total" inputmode="decimal"></div>
-      <div class="tight"><button class="primary">Calculate</button></div>
+
+    <div class="divL"></div>
+    <div class="fr2">
+      <div class="fg"><label for="target_total">Item total — type a target to back-solve (optional)</label>
+        <input id="target_total" name="target_total" type="number" step="1"></div>
+      <div class="fg" style="display:flex;align-items:flex-end"><button class="btn btn-p wf">Calculate</button></div>
     </div>
-    <p class="small muted">Rounding to a total moves the making charge, never a stone rate —
+    <p class="sm mu">Rounding to a total moves the making charge, never a stone rate —
       a stone rate no chart agrees with is a quote nobody can reconcile later.</p>
   </form>
 </div>
 
 {% for item in items %}
-<div class="card">
-  <h2>{{ item.name }} <span class="muted mono small">{{ item.code }}</span></h2>
+<div class="card mb16" style="padding:0">
+  <div class="fl ia jb" style="padding:12px 14px;border-bottom:1px solid var(--bdr)">
+    <div class="it">{{ item.name }}</div><div class="ncode">{{ item.code }}</div>
+  </div>
   <table>
-    <tr><th>Component</th><th class="num">Weight</th><th class="num">Rate</th><th class="num">Amount</th></tr>
+    <thead><tr><th>Component</th><th class="tr">Weight</th><th class="tr">Rate</th><th class="tr">Amount</th></tr></thead>
+    <tbody>
     {% for component in item.components %}
-    <tr><td>{{ component.label }}
-            {% if component.detail %}<div class="dim small">{{ component.detail }}</div>{% endif %}</td>
-        <td class="num">{{ component.weight }} {{ component.unit }}</td>
-        <td class="num">{{ component.rate|floatformat:0 }}</td>
-        <td class="num">{{ component.amount|floatformat:0 }}</td></tr>
+    <tr><td>{{ component.label }}{% if component.detail %}<div class="sm mu">{{ component.detail }}</div>{% endif %}</td>
+        <td class="tr">{{ component.weight }} {{ component.unit }}</td>
+        <td class="tr">{{ component.rate|floatformat:0 }}</td>
+        <td class="tr fw">{{ component.amount|inr }}</td></tr>
     {% endfor %}
-    <tr><td>Making Charges
-            <div class="dim small">{{ item.metal_grams }} g × ₹{{ item.making_rate|floatformat:2 }}/g</div></td>
-        <td></td><td></td>
-        <td class="num">{{ item.making|floatformat:0 }}</td></tr>
-    <tr><th colspan="3">Item Total</th><th class="num">{{ item.total|floatformat:0 }}</th></tr>
+    <tr><td>Making Charges<div class="sm mu">{{ item.metal_grams }} g × {{ item.making_rate|floatformat:2 }}/g</div></td>
+        <td></td><td></td><td class="tr fw">{{ item.making|inr }}</td></tr>
+    </tbody>
   </table>
+  <div class="fl ia jb" style="padding:10px 14px;background:#fbfcfd">
+    <span class="sl">Item Total</span><span class="fw" style="font-size:16px">{{ item.total|inr }}</span>
+  </div>
 </div>
 {% endfor %}
 
 {% if items %}
-<div class="card stat">
-  <div class="value">₹{{ total|floatformat:0 }}</div>
-  <div class="label">Grand Total</div>
+<div style="background:#111;border-radius:12px;margin-top:4px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between">
+  <span style="font-size:13px;color:rgba(255,255,255,.7);letter-spacing:.04em;text-transform:uppercase">Grand Total</span>
+  <span style="font-size:26px;font-weight:800;color:var(--gold);letter-spacing:-.02em">{{ total|inr }}</span>
 </div>
 {% endif %}
-
-<script>
-// The legacy calculator's nudge steppers, without its client-side quote engine:
-// every decimal field gains up/down arrows. Weights step by 0.1, money by 50.
-document.querySelectorAll('form [inputmode=decimal]').forEach(function (input) {
-  var wrap = document.createElement('span');
-  wrap.className = 'stepwrap';
-  input.parentNode.insertBefore(wrap, input);
-  wrap.appendChild(input);
-  var col = document.createElement('span');
-  col.className = 'stepcol';
-  wrap.appendChild(col);
-  var money = input.id === 'making_rate' || input.id === 'target_total' || input.id === 'amount';
-  var step = money ? 50 : 0.1;
-  ['▲', '▼'].forEach(function (arrow, index) {
-    var button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'step';
-    button.textContent = arrow;
-    button.setAttribute('aria-label', (index ? 'decrease ' : 'increase ') + input.id);
-    button.addEventListener('click', function () {
-      var value = parseFloat(input.value) || 0;
-      value = Math.max(0, value + (index ? -step : step));
-      input.value = +value.toFixed(3);
-    });
-    col.appendChild(button);
-  });
-});
-</script>
 {% endblock %}

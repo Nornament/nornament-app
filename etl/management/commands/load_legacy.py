@@ -13,6 +13,7 @@ from decimal import Decimal
 from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.db.models import F
 
 from accounts.models import User, sync_role_groups
 from crm.models import (
@@ -24,10 +25,15 @@ from crm.models import (
     Gift,
     Occasion,
     Order,
+    OutreachEntry,
     RelatedPerson,
     Repair,
+    Salesperson,
     StatusEvent,
 )
+# crm.Location and stock.Location are different tables with the same class
+# name; stock's is imported below and would silently win.
+from crm.models import Location as CrmLocation
 from etl import legacy
 from etl.crm_shapes import (
     blob_of,
@@ -229,6 +235,12 @@ class Command(BaseCommand):
             if objects:
                 model.objects.bulk_create(objects, batch_size=1000)
                 counts[model._meta.label] = counts.get(model._meta.label, 0) + len(objects)
+
+        # Legacy has no confirmed_at — the column is this schema's. Every media
+        # row just loaded is an object that has been in the bucket for months,
+        # but an unconfirmed row reads as an upload nobody finished and every
+        # media query hides it. Backfill, or the migrated photos never render.
+        MediaAsset.objects.filter(confirmed_at=None).update(confirmed_at=F("uploaded_at"))
         return counts
 
     def map_row(self, model, row):
@@ -263,7 +275,7 @@ class Command(BaseCommand):
         ``EtlException`` row rather than a silent null.
         """
         counts = {}
-        for model in (StatusEvent, Occasion, RelatedPerson, Gift, Enquiry, Order, Repair, ClientMaterial):
+        for model in (StatusEvent, Occasion, RelatedPerson, Gift, OutreachEntry, Enquiry, Order, Repair, ClientMaterial):
             model.objects.all().delete()
         Sale.objects.filter(source=Sale.CRM).delete()
         Customer.objects.all().delete()
@@ -320,6 +332,18 @@ class Command(BaseCommand):
             CrmSetting.objects.all().delete()
             for row in legacy.rows("SELECT * FROM public.settings"):
                 CrmSetting.objects.create(key=row["key"], value=_json_value(row.get("value")))
+            # The legacy Settings modal kept its two pickers inside the `app`
+            # settings blob. They are real lists a user maintains, so they land
+            # in real tables rather than staying buried in JSON.
+            app_settings = CrmSetting.objects.filter(key="app").values_list("value", flat=True).first() or {}
+            CrmLocation.objects.all().delete()
+            Salesperson.objects.all().delete()
+            for name in app_settings.get("locations") or []:
+                CrmLocation.objects.create(name=name)
+            for name in app_settings.get("salespersons") or []:
+                Salesperson.objects.create(name=name)
+            counts["crm.Location"] = CrmLocation.objects.count()
+            counts["crm.Salesperson"] = Salesperson.objects.count()
         return counts
 
     def load_customer_children(self, customer, blob):
@@ -344,8 +368,18 @@ class Command(BaseCommand):
                 customer=customer,
                 date=gift.get("date") or None,
                 occasion=gift.get("occasion") or "",
-                description=gift.get("description") or "",
+                description=gift.get("item") or gift.get("description") or "",
                 amount=_money(gift.get("amount")),
+            )
+        for entry in blob.get("outreachLog") or []:
+            OutreachEntry.objects.create(
+                customer=customer,
+                date=entry.get("date") or None,
+                type=entry.get("type") or OutreachEntry.PHONE,
+                outcome=entry.get("outcome") or "",
+                notes=entry.get("notes") or "",
+                next_follow_up=entry.get("nextFollowUp") or None,
+                by=entry.get("by") or "",
             )
 
     def load_purchases(self, by_legacy_id):

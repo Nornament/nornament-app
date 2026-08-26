@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import pytest
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.urls import reverse
 
 from stock import services
 from stock.enums import MovementType, StockState
@@ -126,3 +127,26 @@ def test_visible_to_hides_other_locations(received_piece, locations, accounts_us
     # the received piece sits in MUM and is invisible; an unreceived one has no
     # location at all and stays visible, exactly as the RLS policy read
     assert received_piece not in visible
+
+
+@pytest.mark.parametrize(
+    "target",
+    ["//evil.example", "/\\evil.example", "https://evil.example/x", "http:/evil.example"],
+)
+def test_setting_a_rate_never_redirects_off_site(client, admin_user_, target):
+    """The ticker posts a ``next`` so you land back where you were. Off-site is
+    not where you were."""
+    client.force_login(admin_user_)
+    response = client.post(
+        reverse("stock:set_rate"), {"code": "GOLD", "pure_rate": "15500", "next": target}
+    )
+    assert response.status_code == 302
+    assert "evil.example" not in response["Location"]
+
+
+def test_setting_a_rate_does_honour_a_local_next(client, admin_user_):
+    client.force_login(admin_user_)
+    response = client.post(
+        reverse("stock:set_rate"), {"code": "GOLD", "pure_rate": "15500", "next": "/pieces/"}
+    )
+    assert response["Location"] == "/pieces/"
