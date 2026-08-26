@@ -175,9 +175,13 @@ class Command(BaseCommand):
                 continue
             hashed = row.get("password_hash") or ""
             password = f"bcrypt${hashed}" if hashed.startswith("$2") else ""
+            # Keyed on the immutable legacy id, not username — a rename in the
+            # old system between loads must update the same user, not insert a
+            # duplicate that trips the legacy_auth_uid unique constraint.
             user, _ = User.objects.update_or_create(
-                username=row["username"],
+                legacy_user_id=row["user_id"],
                 defaults={
+                    "username": row["username"],
                     "email": row.get("email") or "",
                     "full_name": row.get("full_name") or "",
                     "phone": row.get("phone") or "",
@@ -185,7 +189,6 @@ class Command(BaseCommand):
                     "password": password,
                     "must_change_password": bool(row.get("must_change_password", True)) or not password,
                     "legacy_auth_uid": row.get("auth_uid"),
-                    "legacy_user_id": row.get("user_id"),
                     "home_location_id": row.get("home_location_id"),
                 },
             )

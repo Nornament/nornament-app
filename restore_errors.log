@@ -1,0 +1,210 @@
+pg_restore: error: could not execute query: ERROR:  extension "supabase_vault" is not available
+DETAIL:  Could not open extension control file "/Applications/Postgres.app/Contents/Versions/17/share/postgresql/extension/supabase_vault.control": No such file or directory.
+HINT:  The extension must first be installed on the system where PostgreSQL is running.
+Command was: CREATE EXTENSION IF NOT EXISTS supabase_vault WITH SCHEMA vault;
+
+
+pg_restore: error: could not execute query: ERROR:  extension "supabase_vault" does not exist
+Command was: COMMENT ON EXTENSION supabase_vault IS 'Supabase Vault Extension';
+
+
+pg_restore: error: could not execute query: ERROR:  relation "vault.secrets" does not exist
+Command was: COPY vault.secrets (id, name, description, secret, key_id, nonce, created_at, updated_at) FROM stdin;
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY audit_read ON app.activity_log FOR SELECT TO authenticated USING (app.is_admin());
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY bom_read ON app.jewel_material_line FOR SELECT TO authenticated USING (app.has_cap('materials'::text));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY bom_write ON app.jewel_material_line TO authenticated USING (app.has_cap('editBom'::text)) WITH CHECK (app.has_cap('editBom'::text));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY bomver_read ON app.bom_version FOR SELECT TO authenticated USING (app.has_cap('materials'::text));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY bomver_write ON app.bom_version TO authenticated USING (app.has_cap('editBom'::text)) WITH CHECK (app.has_cap('editBom'::text));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY count_read ON app.stock_count FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY jewel_visible ON app.jewel_code FOR SELECT TO authenticated USING (((location_id IS NULL) OR (location_id IN ( SELECT app.visible_locations() AS visible_locations))));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY jewel_write ON app.jewel_code FOR UPDATE TO authenticated USING ((app.has_cap('editBom'::text) OR app.has_cap('adjust'::text))) WITH CHECK ((app.has_cap('editBom'::text) OR app.has_cap('adjust'::text)));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY mat_read ON app.material_inventory FOR SELECT TO authenticated USING (app.has_cap('materials'::text));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY melt_read ON app.melt_record FOR SELECT TO authenticated USING ((app.has_cap('melt'::text) OR app.has_cap('cost'::text)));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY melt_write ON app.melt_record FOR INSERT TO authenticated WITH CHECK (app.has_cap('melt'::text));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY module_read ON app.module FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY prod_read ON app.job_card FOR SELECT TO authenticated USING (app.has_cap('materials'::text));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY ratecard_read ON app.rate_card FOR SELECT TO authenticated USING ((((card_type = 'SALE'::text) AND app.has_cap('sale'::text)) OR ((card_type = 'COST'::text) AND app.has_cap('cost'::text))));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY ratecardline_read ON app.rate_card_line FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1
+   FROM app.rate_card c
+  WHERE ((c.rate_card_id = rate_card_line.rate_card_id) AND (((c.card_type = 'SALE'::text) AND app.has_cap('sale'::text)) OR ((c.card_type = 'COST'::text) AND app.has_cap('cost'::text)))))));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY ref_read ON app.catalogue FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY ref_read ON app.catalogue_item FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY ref_read ON app.catalogue_template FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY ref_read ON app.category FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY ref_read ON app.collection FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY ref_read ON app.jewel_code_certificate FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY ref_read ON app.location FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY ref_read ON app.material FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY ref_read ON app.media_asset FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY ref_read ON app.metal_purity FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY ref_read ON app.stock_movement FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY ref_read ON app.style FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY ref_read ON app.style_tag FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY ref_read ON app.system_setting FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY ref_read ON app.tag FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY ref_read ON app.uom_conversion FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY repair_chg_read ON app.repair_material_change FOR SELECT TO authenticated USING (app.has_cap('materials'::text));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY repair_read ON app.repair_job FOR SELECT TO authenticated USING (app.has_cap('materials'::text));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY rmp_read ON app.role_module_permission FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY role_read ON app.role FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY sale_read ON app.sale FOR SELECT TO authenticated USING (app.has_cap('sale'::text));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY sale_write ON app.sale FOR INSERT TO authenticated WITH CHECK (app.has_cap('adjust'::text));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY scan_read ON app.stock_count_scan FOR SELECT TO authenticated USING (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY self_read ON app.user_location FOR SELECT TO authenticated USING (((user_id = app.current_user_id()) OR app.is_admin()));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY user_self ON app.app_user FOR SELECT TO authenticated USING (((auth_uid = auth.uid()) OR app.is_admin()));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY vendor_read ON app.vendor FOR SELECT TO authenticated USING (app.has_cap('vendor'::text));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY "auth users all" ON public.client_materials TO authenticated USING (true) WITH CHECK (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY auth_all ON public.enquiries TO authenticated USING (true) WITH CHECK (true);
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY "nornament brand admin" ON storage.objects TO authenticated USING (((bucket_id = 'brand'::text) AND app.is_admin())) WITH CHECK (((bucket_id = 'brand'::text) AND app.is_admin()));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY "nornament derived read" ON storage.objects FOR SELECT TO authenticated USING ((bucket_id = 'derived'::text));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY "nornament media upload" ON storage.objects FOR INSERT TO authenticated WITH CHECK (((bucket_id = ANY (ARRAY['originals'::text, 'derived'::text])) AND (EXISTS ( SELECT 1
+   FROM (app.app_user u
+     JOIN app.role r USING (role_id))
+  WHERE ((u.auth_uid = auth.uid()) AND u.is_active AND (r.is_system OR (r.code = 'GRAPHIC'::text)))))));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY "nornament originals read" ON storage.objects FOR SELECT TO authenticated USING (((bucket_id = 'originals'::text) AND app.has_cap('materials'::text)));
+
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: CREATE POLICY rm_photos_auth_write ON storage.objects FOR INSERT TO authenticated WITH CHECK ((bucket_id = 'rm-photos'::text));
+
+
+pg_restore: warning: errors ignored on restore: 51

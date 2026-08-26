@@ -40,6 +40,12 @@ services:
       MEDIA_ACCESS_KEY: ${MEDIA_ACCESS_KEY}
       MEDIA_SECRET_KEY: ${MEDIA_SECRET_KEY}
       MEDIA_DIRECT_UPLOAD: ${MEDIA_DIRECT_UPLOAD:-true}
+      # Set these three only while migrating: each deploy then restores the
+      # dump from BACKUP_BUCKET and re-runs load_legacy. Remove at cutover.
+      BACKUP_BUCKET: ${BACKUP_BUCKET}
+      LEGACY_DB_NAME: ${LEGACY_DB_NAME:-}
+      LEGACY_DUMP_KEY: ${LEGACY_DUMP_KEY:-}
+      LOGINS_KEY: ${LOGINS_KEY:-}
     expose:
       - "8000"
     healthcheck:

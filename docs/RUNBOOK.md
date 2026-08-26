@@ -68,7 +68,12 @@ Docker creates it as a directory and the app boots without its settings.
    `ResponseContentType`, path-style addressing. If the browser PUT fails, set
    `MEDIA_DIRECT_UPLOAD=false` — uploads then proxy through Django. One flag.
 4. `rclone copy r2:nornament-media contabo:<bucket>` — idempotent, re-run at cutover.
-5. Export `logins.csv` (`id, lower(email), encrypted_password` from `auth.users`).
+5. Export `logins.csv` — the header row is required, `import_logins` reads by
+   column name, and the `AS email` matters (`lower(email)`'s default column
+   name is `lower`):
+   ```sh
+   psql -c "\copy (SELECT id, lower(email) AS email, encrypted_password FROM auth.users) TO 'logins.csv' CSV HEADER"
+   ```
    Encrypt at rest, move over ssh, shred after import.
 
 ### Restoring the dump beside the new database

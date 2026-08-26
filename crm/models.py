@@ -265,7 +265,10 @@ class Repair(PipelineEntity):
 class ClientMaterial(PipelineEntity):
     STATUSES = ["Received", "Design Pending", "Design Approved", "Moved to Order", "Moved to Repair", "Returned"]
 
-    cm_code = models.CharField(max_length=32, unique=True)
+    # Not unique: the legacy system really did issue CM-019 twice (two distinct
+    # materials, 4 Aug 2026), and the decision was to load that data faithfully
+    # rather than rewrite it. The new app never auto-generates these codes.
+    cm_code = models.CharField(max_length=32, db_index=True)
     received_date = models.DateField(null=True, blank=True)
     jewellery_description = models.TextField(blank=True)
     metal_type = models.CharField(max_length=60, blank=True)

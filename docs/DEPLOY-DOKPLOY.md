@@ -109,23 +109,38 @@ before any import.
 
 ## 6. Migrating the real data
 
-Only after the app is up and you have the Supabase dump. From the `web`
-container's terminal:
+The entrypoint automates the import. Upload the artifacts to the backup
+bucket (any S3 client, or the Contabo panel):
 
 ```sh
-# restore the dump into its own database on the same cluster
-pg_restore --host db --username $POSTGRES_USER --dbname postgres \
-           --create --no-owner /tmp/supabase.dump
+aws s3 cp supabase.dump s3://nornament-backups/supabase.dump --endpoint-url $MEDIA_ENDPOINT_URL
+aws s3 cp logins.csv    s3://nornament-backups/logins.csv    --endpoint-url $MEDIA_ENDPOINT_URL
+```
 
-# then, with LEGACY_DB_NAME=legacy added to the Environment tab and redeployed
-python manage.py load_legacy
-python manage.py parity_check          # nonzero exit = do not go live
-python manage.py import_logins /tmp/logins.csv
+then add to the Environment tab and deploy:
+
+```
+LEGACY_DB_NAME=legacy
+LEGACY_DUMP_KEY=supabase.dump
+LOGINS_KEY=logins.csv
+```
+
+Every deploy while those are set re-restores the dump and re-runs
+`load_legacy` (wipe-and-reload, so idempotent) and `import_logins` — the
+runbook's "run it nightly until cutover", but on push. `parity_check` runs
+last and prints its verdict in the deploy log without blocking boot: a
+mismatch means do not cut over, not do not boot.
+
+Device backups stay manual — from the `web` container's terminal:
+
+```sh
 python manage.py import_device_backup /tmp/backups/*.json
 ```
 
-`docs/RUNBOOK.md` has the full sequence including the golden gate. Remove
-`LEGACY_DB_NAME` once you have cut over.
+`docs/RUNBOOK.md` has the full sequence including the golden gate. **At
+cutover, remove `LEGACY_DUMP_KEY`, `LOGINS_KEY` and `LEGACY_DB_NAME` from the
+Environment tab and delete `logins.csv` from the bucket** — a later deploy
+with the flags still set would overwrite live data with the old dump.
 
 ## 7. Backups
 
