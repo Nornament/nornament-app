@@ -219,16 +219,88 @@ function rateEdit(button) {
 
 {% elif tab == 'scen' %}
 <div class="card">
-  <h3>Scenarios</h3>
-  <p class="hint">A scenario is a pricing arrangement — who takes what share of the sale. The piece
-    points at one, and its scenario page shows the arithmetic.</p>
-  <table><thead><tr><th>Code</th><th>Name</th><th>Roles</th></tr></thead><tbody>
+  <div class="spread" style="margin-bottom:4px">
+    <div><h3>Scenarios</h3><p class="hint" style="margin:0;max-width:78ch">A scenario is a way of
+      turning cost into an asking price. One is the default for the whole catalogue; a single piece
+      can be switched to another if you allow it. Metal always prices from the live rate and making
+      always from the figure on the line — a scenario cannot touch either.</p></div>
+    {% if caps.edit_bom %}<a class="btn primary" href="?tab=scen&amp;scenario=new">+ New scenario</a>{% endif %}
+  </div>
+  <table style="margin-top:14px"><thead><tr><th>Scenario</th><th>How it prices</th><th>Visible to</th>
+    <th>Status</th><th></th></tr></thead><tbody>
     {% for scenario in scenarios %}
-    <tr><td class="code">{{ scenario.code }}</td><td>{{ scenario.name }}</td>
-      <td class="dim">{% for role in scenario.roles.all %}{{ role.group.name }}{% if not forloop.last %} · {% endif %}{% empty %}—{% endfor %}</td></tr>
-    {% empty %}<tr><td colspan="3"><div class="empty">No scenarios.</div></td></tr>{% endfor %}
+    <tr{% if not scenario.is_active %} style="opacity:.6"{% endif %}>
+      <td><b>{{ scenario.name }}</b> <span class="code dim">{{ scenario.code }}</span>
+        {% if scenario.is_default %}<span class="chip c-good">default</span>{% endif %}</td>
+      <td class="dim">{{ scenario.get_method_display }}{% if scenario.method == 'VALUE_ADDED' %}
+        · +{{ scenario.target_pct|floatformat:"-2" }}%{% elif scenario.method == 'CHART' and scenario.chart %}
+        · {{ scenario.chart.code }}{% endif %}</td>
+      <td class="dim">{% for role in scenario.roles.all %}<span class="chip">{{ role.group }}{% if role.may_switch %} ✎{% endif %}</span> {% empty %}<span class="chip">Everyone</span>{% endfor %}</td>
+      <td>{% if scenario.is_active %}<span class="chip c-good">active</span>{% else %}<span class="chip c-neutral">retired</span>{% endif %}</td>
+      <td>{% if caps.edit_bom %}<a href="?tab=scen&amp;scenario={{ scenario.pk }}">edit</a>{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="5"><div class="empty">No scenarios.</div></td></tr>{% endfor %}
   </tbody></table>
+  <div class="note">A scenario with no roles is visible to everyone who may see a sale price.
+    A ✎ marks a role that may also switch a piece onto it — that changes what the piece is quoted
+    at for everyone, and is written to the audit log with who and when.</div>
 </div>
+
+{% if caps.edit_bom and form %}
+<div class="card" style="margin-top:16px">
+  <h3>{% if editing.pk %}{{ editing.name }}{% else %}New scenario{% endif %}</h3>
+  <p class="hint" style="margin:0 0 14px">Editing a scenario never changes a stored price. It changes
+    what the app asks for from now on.</p>
+  <form method="post" id="scenform">{% csrf_token %}
+    <input type="hidden" name="pk" value="{{ editing.pk|default:'' }}">
+    <div class="grid2" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 26px;max-width:760px">
+      {% for field in form %}{% if not field.name|slice:":5" == "mult_" and not field.name == "spread_over" %}
+      <div class="field">{{ field.label_tag }}{{ field }}
+        {% if field.help_text %}<div class="hint">{{ field.help_text }}</div>{% endif %}</div>
+      {% endif %}{% endfor %}
+    </div>
+
+    <div class="field" style="margin-top:18px">
+      {{ form.spread_over.label_tag }}
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        {% for choice in form.spread_over %}<label style="display:inline-flex;gap:6px;align-items:center">{{ choice.tag }} {{ choice.choice_label }}</label>{% endfor %}
+      </div>
+      <div class="hint">{{ form.spread_over.help_text }} Metal and Making are never offered: neither
+        can carry a markup.</div>
+    </div>
+
+    <div class="field" style="margin-top:18px">
+      <label>Category multipliers</label>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        {% for field in form.multiplier_fields %}<div style="width:150px">{{ field.label_tag }}{{ field }}</div>{% endfor %}
+      </div>
+      <div class="hint">Only read by the multiplier method. A category left blank passes at 1×.</div>
+    </div>
+
+    <label style="margin-top:18px;display:block">Who may price with this</label>
+    <table style="margin-top:6px;max-width:560px"><thead><tr><th>Role</th>
+      <th style="width:110px">May see</th><th style="width:150px">May switch a piece</th></tr></thead><tbody>
+      {% for row in role_rows %}
+      <tr><td>{{ row.label }}{% if not row.may_price %}
+          <div class="dim" style="font-size:11.5px">sees no prices at all</div>{% endif %}</td>
+        <td><input type="checkbox" name="may_see" value="{{ row.group.pk }}" style="width:auto"
+          {% if row.may_see %}checked{% endif %}{% if not row.may_price %} disabled{% endif %}></td>
+        <td><input type="checkbox" name="may_switch" value="{{ row.group.pk }}" style="width:auto"
+          {% if row.may_switch %}checked{% endif %}{% if not row.may_price %} disabled{% endif %}></td></tr>
+      {% endfor %}
+    </tbody></table>
+    <div class="note">Tick no role at all and every reader who may see a sale price may price with it.
+      Switching on the piece is not a private preview — someone who can switch can discount, which is
+      why it is separate from seeing.</div>
+
+    <div class="row" style="margin-top:16px">
+      <button class="btn primary">Save scenario</button>
+      <a class="btn" href="?tab=scen">Cancel</a>
+      {% if editing.pk %}<button class="btn" name="delete" value="1"
+        formnovalidate onclick="return confirm('Delete {{ editing.name }}?')">Delete</button>{% endif %}
+    </div>
+  </form>
+</div>
+{% endif %}
 
 {% elif tab == 'users' %}
 <div class="card">

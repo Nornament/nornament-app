@@ -15,23 +15,35 @@
   <form method="post" id="bomform">{% csrf_token %}
     {{ formset.management_form }}
     <datalist id="materials">{% for material in materials %}<option value="{{ material.item_code }}">{{ material.item_name }}</option>{% endfor %}</datalist>
-    <table style="margin-top:12px"><thead><tr><th>Material</th><th style="width:110px">Size</th>
-      <th class="num" style="width:120px">Qty</th><th style="width:100px">Unit</th>
-      <th style="width:70px">Remove</th></tr></thead>
+    <table style="margin-top:12px"><thead><tr><th>Material</th><th style="width:100px">Size</th>
+      <th class="num" style="width:100px">Qty</th><th style="width:90px">Unit</th>
+      <th class="num" style="width:64px">Pcs</th>
+      <th style="width:190px">Charged</th>
+      {% if caps.view_cost %}<th class="num" style="width:110px">Cost rate</th>{% endif %}
+      {% if caps.view_sale %}<th class="num" style="width:110px">Sale rate</th>{% endif %}
+      <th style="width:64px">Remove</th></tr></thead>
       <tbody id="bomrows">
       {% for line in formset %}
       <tr>
-        {{ line.id }}
         <td>{{ line.material }}{{ line.material.errors }}</td>
         <td>{{ line.size_band }}</td>
         <td class="num">{{ line.qty_value }}{{ line.qty_value.errors }}</td>
         <td>{{ line.qty_uom }}</td>
+        <td class="num">{{ line.pcs }}</td>
+        <td>{{ line.basis }}{{ line.basis.errors }}</td>
+        {% if caps.view_cost %}<td class="num">{{ line.cost_rate }}{{ line.cost_rate.errors }}</td>{% endif %}
+        {% if caps.view_sale %}<td class="num">{{ line.sale_rate }}{{ line.sale_rate.errors }}</td>{% endif %}
         <td>{{ line.DELETE }}</td>
       </tr>
       {% endfor %}
       </tbody>
     </table>
     <button type="button" class="btn sm" id="addrow" style="margin-top:10px">+ Add a line</button>
+
+    <div class="note"><b>Making</b> is charged one of two ways: <b>per gram of net metal weight</b> —
+      the stones are not made, so only the metal lines are in that weight — or as a <b>fixed charge</b>
+      for the piece. The <i>Charged</i> column applies to making lines; every other material is charged
+      on its quantity, and the column is left alone.</div>
 
     <div style="margin-top:16px;max-width:520px">
       <label for="note">Why (goes on the version)</label>
@@ -50,24 +62,56 @@
     <td><input type="text" name="line-__N__-size_band"></td>
     <td class="num"><input type="number" step="0.0001" name="line-__N__-qty_value"></td>
     <td><select name="line-__N__-qty_uom">{% for value, label in uoms %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></td>
+    <td class="num"><input type="number" step="1" name="line-__N__-pcs"></td>
+    <td><select name="line-__N__-basis"><option value="">—</option>
+      <option value="BY_NET_METAL_WT">Per gram of net metal weight</option>
+      <option value="FLAT">Fixed charge</option></select></td>
+    {% if caps.view_cost %}<td class="num"><input type="number" step="0.0001" name="line-__N__-cost_rate"></td>{% endif %}
+    {% if caps.view_sale %}<td class="num"><input type="number" step="0.0001" name="line-__N__-sale_rate"></td>{% endif %}
     <td><input type="checkbox" name="line-__N__-DELETE"></td>
   </tr>
 </template>
 
+{{ labour_codes|json_script:"labourcodes" }}
 <script>
+// Which material codes are making, so the row can grey out what does not apply.
+var LABOUR = JSON.parse(document.getElementById('labourcodes').textContent);
+
+// A making line is charged per gram of net metal weight or as a fixed charge;
+// everything else is charged on its quantity, so the two columns swap places.
+function bomRowMode(row) {
+  var code = (row.querySelector('input[name$="-material"]').value || '').trim().toUpperCase();
+  var making = LABOUR.indexOf(code) !== -1;
+  var basis = row.querySelector('select[name$="-basis"]');
+  var qty = row.querySelector('input[name$="-qty_value"]');
+  if (basis) basis.disabled = !making;
+  if (qty) qty.disabled = making;
+  if (basis && making && !basis.value) basis.value = 'BY_NET_METAL_WT';
+}
+function bomWireRow(row) {
+  var input = row.querySelector('input[name$="-material"]');
+  if (!input) return;
+  input.setAttribute('list', 'materials');
+  input.addEventListener('input', function () { bomRowMode(row); });
+  bomRowMode(row);
+}
+// disabled inputs are not posted, so re-enable everything on the way out —
+// the server decides the basis anyway, this is only to stop a wrong entry
+document.getElementById('bomform').addEventListener('submit', function () {
+  this.querySelectorAll('input:disabled, select:disabled').forEach(function (el) { el.disabled = false; });
+});
 // Add-a-line for the formset: bump TOTAL_FORMS and stamp the index in.
 document.getElementById('addrow').addEventListener('click', function () {
   var total = document.getElementById('id_line-TOTAL_FORMS');
   var n = parseInt(total.value, 10);
   var html = document.getElementById('bomrow').innerHTML.replaceAll('__N__', n);
-  var row = document.createElement('tbody');
-  row.innerHTML = html;
-  document.getElementById('bomrows').appendChild(row.firstElementChild);
+  var holder = document.createElement('tbody');
+  holder.innerHTML = html;
+  var row = holder.firstElementChild;
+  document.getElementById('bomrows').appendChild(row);
+  bomWireRow(row);
   total.value = n + 1;
 });
-// The material column is a datalist, so give every existing input the list too.
-document.querySelectorAll('#bomrows input[name$="-material"]').forEach(function (input) {
-  input.setAttribute('list', 'materials');
-});
+document.querySelectorAll('#bomrows tr').forEach(bomWireRow);
 </script>
 {% endblock %}

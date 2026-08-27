@@ -31,7 +31,10 @@ tab and by the standalone /scenarios/ page, which is the same screen deep-linked
       <span class="chip c-neutral" style="font-size:10px">default</span>{% endif %}{% if price.capped %}
       <span class="chip c-warn" style="font-size:10px">{{ price.capped }}</span>{% endif %}
       <div class="dim" style="font-size:11.5px">{% if price.method == 'CHART' %}sale rates from the
-        chart{% else %}value added target, absorbed by stones{% endif %}</div></td>
+        chart{% elif price.method == 'MULTIPLIER' %}a factor per material category{% else %}cost
+        +{{ price.target_pct|floatformat:"-2" }}%, absorbed by the categories it names{% endif %}
+        {% if price.min_pct %}· <b>this piece cannot carry it</b> — the lowest it takes is
+        +{{ price.min_pct|floatformat:1 }}%{% endif %}</div></td>
     <td class="num">{{ price.metal_sale|inr }}</td>
     <td class="num">{{ price.stone_sale|inr }}</td>
     <td class="num">{{ price.making_sale|inr }}</td>
