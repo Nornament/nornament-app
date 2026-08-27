@@ -1,6 +1,8 @@
 """Template helpers the stock screens need."""
 from django import template
 
+from crm.templatetags import crm_extras
+
 register = template.Library()
 
 
@@ -15,3 +17,15 @@ def get(mapping, key):
         return mapping.get(key)
     except AttributeError:
         return None
+
+
+# ``₹12,34,567`` — the legacy ``inr()``. Already written for the CRM screens;
+# the stock pricing card wants the same grouping, so it is registered, not
+# rewritten.
+register.filter(crm_extras.inr)
+
+
+@register.filter
+def grouped(amount):
+    """Indian grouping without the ``₹`` — the legacy's rate columns."""
+    return crm_extras.inr(amount).replace("₹", "")

@@ -259,6 +259,25 @@ def _similar_pieces(request, piece, limit=6):
     return [{"piece": other, "row": row, "thumb": thumbs.get(other.pk)} for _, other, row in chosen]
 
 
+def _margin_panel(row):
+    """The legacy margin row: amount, share of sale, and how far metal has moved.
+
+    Derived from the already-masked row, so a role without ``view_margin`` has
+    no ``margin`` key and gets nothing here either — the gate is not repeated.
+    """
+    sale, cost, current = row.get("sale_price"), row.get("cost_price"), row.get("current_cost")
+    margin, current_margin = row.get("margin"), row.get("current_margin")
+    if None in (sale, cost, current, margin, current_margin) or not sale:
+        return None
+    return {
+        "margin_pct": Decimal(100) * margin / sale,
+        "current_margin_pct": Decimal(100) * current_margin / sale,
+        # legacy: at or below zero is bad, under a quarter of the sale is thin
+        "tone": "bad" if current_margin <= 0 else "warn" if current_margin / sale < Decimal("0.25") else "good",
+        "metal_moved": (current - cost) if current > cost else None,
+    }
+
+
 @login_required
 def piece_detail(request, jewel_code):
     piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
@@ -296,6 +315,10 @@ def piece_detail(request, jewel_code):
         context["media"] = assets
     if tab == "similar":
         context["similar"] = _similar_pieces(request, piece)
+    if tab == "pricing":
+        context |= _scenario_prices(request, piece)
+    if tab == "bom" and request.user.has_perm("accounts.manage_materials"):
+        context |= _bom_context(request, piece)
     if tab == "history":
         context["bom_versions"] = piece.bom_versions.order_by("-version_no")
         context["repairs"] = RepairJob.objects.filter(piece=piece).select_related("vendor").order_by("-opened_on")
@@ -313,14 +336,16 @@ def piece_detail(request, jewel_code):
             }
     if allowed(request.user, "vendor_name"):
         context["job_card"] = JobCard.objects.filter(piece=piece).order_by("-issued_on").first()
+    context["pricing"] = _margin_panel(row)
     return render(request, "stock/piece_detail.html", context)
 
 
-@login_required
-@permission_required("accounts.manage_materials", raise_exception=True)
-def piece_bom(request, jewel_code):
-    """The material breakup. Gated whole — this is the ``materials`` capability."""
-    piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
+def _bom_context(request, piece):
+    """The material breakup, for the detail tab and the standalone BOM page.
+
+    The sale side is priced under whatever the Pricing tab says is in use: the
+    piece's scenario if it is on one, else the rates on its own lines.
+    """
     version = piece.current_bom()
     lines = (
         BomLine.objects.filter(piece=piece, version_no=piece.current_bom_version)
@@ -331,12 +356,16 @@ def piece_bom(request, jewel_code):
     show_sale = allowed(request.user, "sale_amount")
     ldp = services.line_dp()
     metal_rate_today = services.alloy_cost_rate(piece.metal_purity)
-    sale_total = (version.total_sale_price if version else None) or None
+    scenario = piece.scenario
+    priced = {row["line"].line_no: row for row in services.sale_lines(piece, scenario=scenario)}
+    sale_total = sum((row["sale_amount"] for row in priced.values()), Decimal("0")) or None
 
     groups, breakup = [], []
     for line in lines:
         is_metal = line.material.mat_class == MaterialClass.METAL
-        share = (Decimal(100) * (line.sale_amount or 0) / sale_total) if sale_total else None
+        sale = priced.get(line.line_no, {})
+        sale_amount = sale.get("sale_amount")
+        share = (Decimal(100) * (sale_amount or 0) / sale_total) if sale_total else None
         row = {
             "line_no": line.line_no,
             "material": line.material.item_code,
@@ -355,8 +384,8 @@ def piece_bom(request, jewel_code):
             "cost_amount_today": (
                 services.round_to(metal_rate_today * (line.qty_value or 0), ldp) if is_metal else line.cost_amount
             ),
-            "sale_rate": line.sale_rate,
-            "sale_amount": line.sale_amount,
+            "sale_rate": sale.get("sale_rate"),
+            "sale_amount": sale_amount,
             "share_pct": services.round_to(share, 1) if share is not None else None,
             "share_w": max(2, int(share * Decimal("0.38"))) if share is not None else 2,
             "chart_cost": services.chart_rate(line.material.item_code, line.size_band, "COST"),
@@ -376,7 +405,7 @@ def piece_bom(request, jewel_code):
     if money:
         by_label = {group["label"]: group for group in breakup}
         for line in lines:
-            amount = line.sale_amount if money == "sale" else line.cost_amount
+            amount = priced.get(line.line_no, {}).get("sale_amount") if money == "sale" else line.cost_amount
             by_label[line.material.category.name]["amount"] += amount or 0
     context = {
         "piece": piece,
@@ -386,10 +415,12 @@ def piece_bom(request, jewel_code):
         "grp_span": 5 + (5 if show_cost else 0) + (3 if show_sale else 0),
         "breakup": breakup if money else None,
         "money": money,
-        "breakup_total": (version.total_sale_price if money == "sale" else version.total_cost_price)
+        "breakup_total": (sale_total if money == "sale" else version.total_cost_price)
         if version and money
         else None,
+        "sale_total": sale_total,
         "cost_today_total": services.current_cost(piece) if show_cost else None,
+        "active_scenario": scenario,
     }
     if money == "sale":
         purity = MetalPurity.objects.select_related("metal").filter(pk=piece.metal_purity or "").first()
@@ -400,16 +431,40 @@ def piece_bom(request, jewel_code):
                 "sale_pct": purity.sale_factor * 100,
                 "alloy_rate": services.alloy_sale_rate(piece.metal_purity),
             }
-    return render(request, "stock/piece_bom.html", context)
+    return context
 
 
 @login_required
-def piece_scenarios(request, jewel_code):
-    """``api.piece_scenarios`` — what each scenario would ask for this piece."""
+@permission_required("accounts.manage_materials", raise_exception=True)
+def piece_bom(request, jewel_code):
+    """The material breakup. Gated whole — this is the ``materials`` capability."""
     piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
-    if not (request.user.has_perm(VIEW_SALE) or request.user.has_perm(VIEW_COST)):
-        raise PermissionDenied("You cannot see pricing.")
-    show_cost = allowed(request.user, "cost_price")
+    return render(request, "stock/piece_bom.html", _bom_context(request, piece))
+
+
+def _scenario_prices(request, piece):
+    """``app.piece_scenarios`` — every scenario priced against one piece.
+
+    Feeds both the Pricing tab and the standalone ``/scenarios/`` deep link.
+    The legacy returned ``cost_today`` to anyone who could see prices at all;
+    here the margin column is gated on ``view_margin``, which is the leak this
+    rewrite exists to close.
+    """
+    show_margin = allowed(request.user, "margin")
+    cost_today = services.current_cost(piece)
+
+    def margin_of(price):
+        """The legacy chip: share of the asking price left over cost today."""
+        if not (show_margin and price and cost_today is not None):
+            return {}
+        margin = price - cost_today
+        share = margin / price
+        return {
+            "margin": margin,
+            "margin_pct": Decimal(100) * share,
+            "tone": "c-crit" if margin <= 0 else "c-ser" if share < Decimal("0.25") else "c-good",
+        }
+
     prices = []
     for scenario in Scenario.objects.filter(is_active=True).order_by("-is_default", "code"):
         if scenario.roles.exists() and not scenario.roles.filter(
@@ -421,16 +476,34 @@ def piece_scenarios(request, jewel_code):
         except ValidationError as error:
             messages.error(request, "; ".join(error.messages))
             continue
-        row = price.__dict__.copy()
-        if show_cost:
-            # margin against cost today, never the frozen figure (legacy pricing tab)
-            row["margin"] = price.price - price.cost_today
-        prices.append(row)
-    return render(
-        request,
-        "stock/piece_scenarios.html",
-        {"piece": piece, "prices": prices, "show_cost": show_cost},
-    )
+        prices.append(
+            price.__dict__
+            | margin_of(price.price)
+            | {
+                "scenario_id": scenario.pk,
+                "in_use": scenario.pk == piece.scenario_id,
+                "is_default": scenario.is_default,
+                "may_switch": services.may_switch_to(request.user, scenario),
+            }
+        )
+    stored = services.live_sale_price(piece)
+    return {
+        "prices": prices,
+        "show_margin": show_margin,
+        # the legacy's last row: until a piece is put on a scenario it is quoted
+        # at the rates written on its own lines, and that is what is in use
+        "stored": {"price": stored} | margin_of(stored),
+        "on_scenario": piece.scenario_id is not None,
+        "may_clear": request.user.is_admin(),
+    }
+
+
+@login_required
+def piece_scenarios(request, jewel_code):
+    piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
+    if not (request.user.has_perm(VIEW_SALE) or request.user.has_perm(VIEW_COST)):
+        raise PermissionDenied("You cannot see pricing.")
+    return render(request, "stock/piece_scenarios.html", {"piece": piece, **_scenario_prices(request, piece)})
 
 
 @login_required
@@ -464,6 +537,26 @@ def melt_piece_view(request, jewel_code):
     else:
         messages.success(request, f"{piece.jewel_code} melted.")
     return redirect("stock:piece_detail", jewel_code=piece.jewel_code)
+
+
+@login_required
+@require_POST
+def set_piece_scenario_view(request, jewel_code):
+    """The Pricing tab's radio: put this piece on a scenario, or back on its own lines."""
+    piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
+    try:
+        scenario = services.set_piece_scenario(request.user, piece, request.POST.get("scenario") or None)
+    except (ValidationError, PermissionDenied) as error:
+        messages.error(request, _message(error))
+    else:
+        price = services.scenario_price(piece, scenario) if scenario else None
+        messages.success(
+            request,
+            f"{piece.jewel_code} now priced on {scenario.name} — {price.price:.0f}."
+            if scenario
+            else f"{piece.jewel_code} is back on the rates on its own lines.",
+        )
+    return _redirect_back(request, reverse("stock:piece_detail", args=[piece.jewel_code]) + "?tab=pricing")
 
 
 @login_required

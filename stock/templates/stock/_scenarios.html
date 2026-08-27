@@ -1,0 +1,60 @@
+{% comment %}The legacy Pricing tab, ported from ``drawPieceScenarios`` in
+legacy/Stock/app/nornament.html: eight columns, the radio that switches the
+piece, and the piece's own lines as the last row. Rendered by the piece detail
+tab and by the standalone /scenarios/ page, which is the same screen deep-linked.
+{% endcomment %}
+{% load stock_extras %}
+<div class="card">
+  <div class="spread"><div>
+    <h3>This piece under every scenario</h3>
+    <p class="hint" style="margin:0;max-width:82ch">The scenarios kept in Settings, priced
+      against this piece as it stands now. Nothing is stored until you put the piece on one.
+      Metal and making repeat down every row because a scenario cannot touch them.</p>
+  </div></div>
+  <form method="post" action="{% url 'stock:set_piece_scenario' piece.jewel_code %}">{% csrf_token %}
+  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+  <table style="margin-top:14px"><thead><tr>
+    <th style="width:26px"></th><th>Scenario</th>
+    <th class="num" style="width:106px">Metal</th>
+    <th class="num" style="width:100px">Stones</th>
+    <th class="num" style="width:100px">Making</th>
+    <th class="num" style="width:112px">Price</th>
+    {% if show_margin %}<th class="num" style="width:86px">Margin</th>{% endif %}
+    <th class="num" style="width:78px">Stone ×</th>
+  </tr></thead><tbody>
+  {% for price in prices %}
+  <tr{% if price.in_use %} style="background:var(--brand-soft)"{% endif %}>
+    <td>{% if price.may_switch %}<input type="radio" name="scenario" value="{{ price.scenario_id }}"
+      {% if price.in_use %}checked{% endif %} onchange="this.form.requestSubmit()" style="width:auto">{% endif %}</td>
+    <td><b>{{ price.scenario_name }}</b>{% if price.in_use %}
+      <span class="chip c-good" style="font-size:10px">in use</span>{% elif price.is_default %}
+      <span class="chip c-neutral" style="font-size:10px">default</span>{% endif %}{% if price.capped %}
+      <span class="chip c-warn" style="font-size:10px">{{ price.capped }}</span>{% endif %}
+      <div class="dim" style="font-size:11.5px">{% if price.method == 'CHART' %}sale rates from the
+        chart{% else %}value added target, absorbed by stones{% endif %}</div></td>
+    <td class="num">{{ price.metal_sale|inr }}</td>
+    <td class="num">{{ price.stone_sale|inr }}</td>
+    <td class="num">{{ price.making_sale|inr }}</td>
+    <td class="num" style="font-weight:600">{{ price.price|inr }}</td>
+    {% if show_margin %}<td class="num"><span class="chip {{ price.tone }}">{{ price.margin_pct|floatformat:1 }}%</span></td>{% endif %}
+    <td class="num">{% if price.stone_multiple %}{{ price.stone_multiple|floatformat:2 }}×{% else %}—{% endif %}</td>
+  </tr>
+  {% empty %}<tr><td colspan="8"><div class="empty">No scenario is available to you.</div></td></tr>{% endfor %}
+  <tr{% if not on_scenario %} style="background:var(--brand-soft)"{% endif %}>
+    <td>{% if may_clear %}<input type="radio" name="scenario" value=""
+      {% if not on_scenario %}checked{% endif %} onchange="this.form.requestSubmit()" style="width:auto">{% endif %}</td>
+    <td><b>Rates on the piece's own lines</b>{% if not on_scenario %}
+      <span class="chip c-good" style="font-size:10px">in use</span>{% endif %}
+      <div class="dim" style="font-size:11.5px">what this piece is quoted at today</div></td>
+    <td class="num dim">—</td><td class="num dim">—</td><td class="num dim">—</td>
+    <td class="num" style="font-weight:600">{{ stored.price|inr }}</td>
+    {% if show_margin %}<td class="num"><span class="chip {{ stored.tone }}">{{ stored.margin_pct|floatformat:1 }}%</span></td>{% endif %}
+    <td class="num dim">—</td>
+  </tr>
+  </tbody></table>
+  </form>
+  <div class="note">Metal always passes through at its live rate under every scenario. Only stones move.
+    Nothing is stored until a piece is put on one.</div>
+  {% if show_margin %}<div class="note">Margin is measured against <b>cost today</b>, not the frozen
+    figure — it is what you would make if you replaced the piece at this morning's metal rate.</div>{% endif %}
+</div>

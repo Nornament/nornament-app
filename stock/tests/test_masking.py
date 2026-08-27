@@ -241,6 +241,7 @@ def test_every_stock_and_crm_screen_is_in_the_sales_walk():
     exempt = {
         # POST-only endpoints; their permission gates are tested in test_ledger
         "stock:sell_piece", "stock:melt_piece", "stock:move_piece", "stock:set_rate",
+        "stock:set_piece_scenario",
         "stock:count_open", "stock:count_scan", "stock:count_unscan", "stock:count_close",
         "stock:repair_complete", "stock:repair_open", "stock:reserve_piece", "crm:add_purchase",
         "crm:customer_delete", "crm:customer_temperature", "crm:delete_purchase",

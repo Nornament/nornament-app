@@ -150,3 +150,40 @@ def test_setting_a_rate_does_honour_a_local_next(client, admin_user_):
         reverse("stock:set_rate"), {"code": "GOLD", "pure_rate": "15500", "next": "/pieces/"}
     )
     assert response["Location"] == "/pieces/"
+
+
+# ── scenarios ────────────────────────────────────────────────────────────
+def test_a_role_that_may_only_see_a_scenario_cannot_put_a_piece_on_it(piece, sales_user, scenarios):
+    """``may_see`` and ``may_switch`` are two flags, and this is the second one."""
+    with pytest.raises(PermissionDenied):
+        services.set_piece_scenario(sales_user, piece, scenarios.pk)
+    piece.refresh_from_db()
+    assert piece.scenario_id is None
+
+
+def test_an_admin_puts_a_piece_on_a_scenario_and_takes_it_off_again(piece, admin_user_, scenarios):
+    services.set_piece_scenario(admin_user_, piece, scenarios.pk)
+    piece.refresh_from_db()
+    assert piece.scenario_id == scenarios.pk
+
+    services.set_piece_scenario(admin_user_, piece, None)
+    piece.refresh_from_db()
+    assert piece.scenario_id is None
+
+
+def test_only_an_admin_clears_a_scenario(piece, admin_user_, sales_user, scenarios):
+    services.set_piece_scenario(admin_user_, piece, scenarios.pk)
+    with pytest.raises(PermissionDenied):
+        services.set_piece_scenario(sales_user, piece, None)
+    piece.refresh_from_db()
+    assert piece.scenario_id == scenarios.pk
+
+
+def test_the_scenario_radio_never_redirects_off_site(client, admin_user_, piece, scenarios):
+    client.force_login(admin_user_)
+    response = client.post(
+        reverse("stock:set_piece_scenario", kwargs={"jewel_code": piece.jewel_code}),
+        {"scenario": scenarios.pk, "next": "//evil.example"},
+    )
+    assert response.status_code == 302
+    assert "evil.example" not in response["Location"]

@@ -261,27 +261,73 @@ def recost_piece(piece, version_no=None, user=None):
     return version
 
 
-def live_sale_price(piece, version_no=None):
-    """``app.live_sale_price`` — the frozen BOM, with metal at today's rate."""
+def _scenario_stone_rates(piece, scenario, lines):
+    """The sale rate a scenario puts on each stone line.
+
+    A chart scenario reads that chart line by line, so its total is exact. A
+    value-added one only has a target for the stones as a whole, so it is
+    spread across them in proportion to what they cost — the lines that carry
+    the most cost carry the most of the markup.
+    """
+    stones = [
+        line for line in lines if line.material.mat_class not in (MaterialClass.METAL, MaterialClass.LABOUR)
+    ]
+    if scenario.method == scenario.CHART:
+        return {
+            line.line_no: chart_rate(line.material.item_code, line.size_band, "SALE", scenario.chart_id)
+            or line.sale_rate
+            for line in stones
+        }
+    cost_total = sum(((l.cost_rate or ZERO) * Decimal(l.qty_value or 0) for l in stones), ZERO)
+    if not cost_total:
+        return {}
+    stone_sale = scenario_price(piece, scenario).stone_sale
+    rates = {}
+    for line in stones:
+        qty = Decimal(line.qty_value or 0)
+        if not qty:
+            continue
+        share = ((line.cost_rate or ZERO) * qty) / cost_total
+        rates[line.line_no] = stone_sale * share / qty
+    return rates
+
+
+def sale_lines(piece, version_no=None, scenario=None):
+    """``app.live_sale_price``, itemised — every line's sale rate and amount.
+
+    Metal always passes at the live alloy rate and making keeps the rate on its
+    own line, so a scenario is the one argument that changes anything here: it
+    moves the stone lines and nothing else.
+    """
     piece = _as_piece(piece)
     version_no = version_no or piece.current_bom_version
     ldp = line_dp()
     metal_gm = net_metal_weight(piece.pk, version_no)
-    rate = alloy_sale_rate(piece.metal_purity)
-    total = ZERO
-    for line in _lines_for(piece.pk, version_no):
+    metal_rate = alloy_sale_rate(piece.metal_purity)
+    lines = _lines_for(piece.pk, version_no)
+    stone_rates = _scenario_stone_rates(piece, scenario, lines) if scenario else {}
+    priced = []
+    for line in lines:
+        rate = line.sale_rate
         if line.material.mat_class == MaterialClass.METAL:
+            rate = metal_rate
             amount = rate * Decimal(line.qty_value or 0)
         elif line.basis == ChargeBasis.BY_NET_METAL_WT:
-            amount = (line.sale_rate or ZERO) * metal_gm
+            amount = (rate or ZERO) * metal_gm
         elif line.basis == ChargeBasis.BY_PIECE:
-            amount = (line.sale_rate or ZERO) * Decimal(line.pcs or 0)
+            amount = (rate or ZERO) * Decimal(line.pcs or 0)
         elif line.basis == ChargeBasis.FLAT:
-            amount = line.sale_rate or ZERO
+            amount = rate or ZERO
         else:
-            amount = (line.sale_rate or ZERO) * Decimal(line.qty_value or 0)
-        total += round_to(amount, ldp)
-    return total
+            rate = stone_rates.get(line.line_no, rate)
+            amount = (rate or ZERO) * Decimal(line.qty_value or 0)
+        priced.append({"line": line, "sale_rate": rate, "sale_amount": round_to(amount, ldp)})
+    return priced
+
+
+def live_sale_price(piece, version_no=None, scenario=None):
+    """``app.live_sale_price`` — the frozen BOM, with metal at today's rate."""
+    return sum((row["sale_amount"] for row in sale_lines(piece, version_no, scenario)), ZERO)
 
 
 def current_cost(piece, version_no=None):
@@ -328,6 +374,45 @@ class ScenarioPrice:
     cost_today: Decimal
     price: Decimal
     capped: str | None = None
+
+
+def may_switch_to(user, scenario):
+    """``app.set_piece_scenario``’s guard: ``may_switch``, not ``may_see``.
+
+    The legacy let a role compare against a scenario it could not commit a
+    piece to, so the two flags are separate and this reads the second.
+    """
+    if not (user and user.is_authenticated):
+        return False
+    return user.is_admin() or scenario.roles.filter(group__in=user.groups.all(), may_switch=True).exists()
+
+
+def set_piece_scenario(user, piece, scenario=None):
+    """``app.set_piece_scenario`` — put a piece on a scenario, or clear it.
+
+    Clearing sends the piece back to the rates on its own lines, which is what
+    it was quoted at before anyone opted in; only an admin may do that.
+    """
+    from .models import Scenario
+
+    piece = _as_piece(piece)
+    if scenario is None:
+        if not (user and user.is_authenticated and user.is_admin()):
+            raise PermissionDenied("Only an admin can clear a piece's scenario.")
+        piece.scenario = None
+        piece.save(update_fields=["scenario"])
+        log(user, "UPDATE", "jewel_code", piece.pk, "scenario cleared — back to the piece's own lines")
+        return None
+    if not isinstance(scenario, Scenario):
+        scenario = Scenario.objects.filter(pk=scenario, is_active=True).first()
+    if scenario is None:
+        raise ServiceError("No such scenario.")
+    if not may_switch_to(user, scenario):
+        raise PermissionDenied("You may see that scenario but not put a piece on it. Ask an admin.")
+    piece.scenario = scenario
+    piece.save(update_fields=["scenario"])
+    log(user, "UPDATE", "jewel_code", piece.pk, f"priced on scenario {scenario.name}")
+    return scenario
 
 
 def scenario_price(piece, scenario=None):

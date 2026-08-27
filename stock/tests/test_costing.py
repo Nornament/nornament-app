@@ -120,3 +120,33 @@ def test_value_added_floors_at_the_minimum_multiple(piece, materials, admin_user
     price = services.scenario_price(piece, scenario)
     assert price.capped == "floor"
     assert price.stone_sale == Decimal("168750") * Decimal("2.5")
+
+
+def test_the_bom_sale_side_follows_the_piece_s_scenario(piece, scenarios, chart):
+    """What the BOM tab totals is what the Pricing tab quotes for the row in use."""
+    from stock.models import Scenario
+
+    on_own_lines = services.live_sale_price(piece)
+    for code in ("RETAIL", "VA100"):
+        scenario = Scenario.objects.get(code=code)
+        assert services.live_sale_price(piece, scenario=scenario) == services.scenario_price(piece, scenario).price
+    # and with no scenario the piece stays on the rates written on its own lines
+    assert services.live_sale_price(piece) == on_own_lines
+
+
+def test_a_scenario_moves_the_stone_lines_and_nothing_else(piece, scenarios, chart):
+    """Metal passes through at the live rate and making keeps its own line."""
+    from stock.enums import MaterialClass
+    from stock.models import Scenario
+
+    value_added = Scenario.objects.get(code="VA100")
+    frozen = {row["line"].line_no: row for row in services.sale_lines(piece)}
+    under = {row["line"].line_no: row for row in services.sale_lines(piece, scenario=value_added)}
+    moved = {
+        no
+        for no, row in under.items()
+        if row["sale_amount"] != frozen[no]["sale_amount"]
+    }
+    assert moved, "the chart scenario should reprice at least one stone line"
+    for no in moved:
+        assert under[no]["line"].material.mat_class not in (MaterialClass.METAL, MaterialClass.LABOUR)

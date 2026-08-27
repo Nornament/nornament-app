@@ -16,8 +16,9 @@
   <div class="row">
     {% if caps.edit_bom %}<a class="btn" href="{% url 'stock:piece_edit' piece.jewel_code %}">✎ Edit details</a>{% endif %}
     {% if not piece.is_terminal %}
-      {% if caps.edit_bom and not open_repair %}<a class="btn" href="?tab=overview#repair">⚒ Send for repair</a>{% endif %}
-      {% if caps.melt %}<a class="btn danger" href="?tab=overview#melt">♨ Melt</a>{% endif %}
+      {% if caps.adjust_stock or caps.edit_bom %}<button class="btn" onclick="document.getElementById('movedlg').showModal()">⇄ Move</button>{% endif %}
+      {% if caps.edit_bom and not open_repair %}<button class="btn" onclick="document.getElementById('repairdlg').showModal()">⚒ Send for repair</button>{% endif %}
+      {% if caps.melt %}<button class="btn danger" onclick="document.getElementById('meltdlg').showModal()">♨ Melt</button>{% endif %}
     {% endif %}
   </div>
 </div>
@@ -31,13 +32,12 @@
 
 {# ── Overview ─────────────────────────────────────────────────────────── #}
 {% if tab == 'overview' %}
-{% if caps.view_sale or caps.view_cost %}
+{% if caps.view_sale %}
 <div class="card">
   <div class="pricerow">
-    {% if caps.view_sale %}
     <div>
       <div class="lbl">Sale price</div>
-      <div class="bignum">{{ row.sale_price|default_if_none:"—"|floatformat:0 }}</div>
+      <div class="bignum">{% if row.sale_price %}{{ row.sale_price|inr }}{% else %}—{% endif %}</div>
       {% if rate_derivation %}
       <div class="asof" style="margin-top:6px"><span class="livedot"></span>
         {{ rate_derivation.metal }} ₹{{ rate_derivation.pure_rate|floatformat:0 }}/g
@@ -48,26 +48,31 @@
         metal at ₹{{ row.gold_rate_used|default_if_none:"—"|floatformat:0 }}/g for {{ row.karat|default:"—" }}</div>
       {% endif %}
     </div>
-    {% endif %}
     {% if caps.view_cost %}
     <div class="pcell">
       <div class="lbl">Cost — frozen on BOM v{{ row.bom_version|default:"—" }}</div>
-      <div class="midnum">{{ row.cost_price|default_if_none:"—"|floatformat:0 }}</div>
+      <div class="midnum">{% if row.cost_price is not None %}{{ row.cost_price|inr }}{% else %}—{% endif %}</div>
       <div class="dim" style="font-size:11.5px;margin-top:4px">as the piece was made</div>
     </div>
     <div class="pcell now">
       <div class="lbl" style="color:var(--brand)">Cost — today <span class="ro">read only</span></div>
-      <div class="midnum" style="color:var(--brand)">{{ row.current_cost|default_if_none:"—"|floatformat:0 }}</div>
-      <div class="dim" style="font-size:11.5px;margin-top:4px">at this morning's metal rate</div>
+      <div class="midnum" style="color:var(--brand)">{% if row.current_cost is not None %}{{ row.current_cost|inr }}{% else %}—{% endif %}</div>
+      <div class="dim" style="font-size:11.5px;margin-top:4px">
+        {% if rate_derivation %}{{ row.karat }} {{ rate_derivation.metal|lower }}{% else %}metal{% endif %}
+        at ₹{{ row.metal_cost_rate|default_if_none:"—"|floatformat:0 }}/g today</div>
     </div>
     {% endif %}
   </div>
-  {% if caps.view_margin %}
+  {% if pricing %}
   <div class="marginrow">
     <div><span class="lbl">Margin on frozen cost</span>
-      <b class="mono">{{ row.margin|default_if_none:"—"|floatformat:0 }}</b></div>
+      <b class="mono">{{ row.margin|inr }} · {{ pricing.margin_pct|floatformat:1 }}%</b></div>
     <div><span class="lbl">Margin at today's metal</span>
-      <b class="mono">{{ row.current_margin|default_if_none:"—"|floatformat:0 }}</b></div>
+      <b class="mono {{ pricing.tone }}">{{ row.current_margin|inr }} · {{ pricing.current_margin_pct|floatformat:1 }}%</b></div>
+    {% if pricing.metal_moved %}
+    <div><span class="lbl">Metal has moved</span>
+      <b class="mono">+{{ pricing.metal_moved|inr }}</b></div>
+    {% endif %}
   </div>
   {% endif %}
   <div class="note">The frozen figure is what this piece <b>did</b> cost. The one beside it is what an
@@ -173,29 +178,8 @@
 </div>
 {% endif %}
 
-{# ── the actions, each its own ledger write ──────────────────────────── #}
-<div class="card">
-  <div class="spread" style="margin-bottom:10px">
-    <div><h3>Move</h3>
-      <p class="hint" style="margin:0">Every movement is a ledger row. Nothing is edited in place.</p></div>
-  </div>
-  {% if caps.adjust_stock or caps.edit_bom %}
-  <form method="post" action="{% url 'stock:move_piece' piece.jewel_code %}">{% csrf_token %}
-    <label for="location">Location</label>
-    <select id="location" name="location" style="max-width:280px">
-      {% for location in locations %}<option value="{{ location.code }}" {% if location.pk == piece.location_id %}selected{% endif %}>{{ location.name }}</option>{% endfor %}
-    </select>
-    <div class="row" style="margin-top:10px">
-      <button class="btn tight" name="action" value="receive">Receive</button>
-      <button class="btn tight" name="action" value="transfer">Transfer</button>
-      <button class="btn tight" name="action" value="reserve">Reserve</button>
-      <button class="btn tight" name="action" value="unreserve">Unreserve</button>
-    </div>
-  </form>
-  {% else %}<div class="empty">You can see this piece but not move it.</div>{% endif %}
-
-  {% if caps.adjust_stock and not piece.is_terminal %}
-  <h3 style="margin-top:16px">Sell</h3>
+{% if caps.adjust_stock and not piece.is_terminal %}
+<div class="card"><h3>Sell</h3>
   <form method="post" action="{% url 'stock:sell_piece' piece.jewel_code %}">{% csrf_token %}
     <div class="row">
       <div><label for="sold_price">Sold price</label><input id="sold_price" name="sold_price" required inputmode="decimal"></div>
@@ -204,78 +188,20 @@
     <div class="row"><div><label for="customer_name">Customer</label><input id="customer_name" name="customer_name"></div></div>
     <button class="btn primary" style="margin-top:10px">Record sale</button>
   </form>
-  {% endif %}
-</div>
-
-{% if caps.edit_bom and not piece.is_terminal and not open_repair %}
-<div class="card" id="repair">
-  <h3>Send for repair</h3>
-  <p class="hint">A repair is not a note on a record — it forks the bill of materials. Removing a stone
-    and fitting a different one changes what the piece physically contains, so it changes its cost.</p>
-  <form method="post" action="{% url 'stock:repair_open' piece.jewel_code %}">{% csrf_token %}
-    {% for field in repair_form %}<div>{{ field.label_tag }}{{ field }}{{ field.errors }}</div>{% endfor %}
-    <button class="btn" style="margin-top:10px">⚒ Open the job</button>
-  </form>
-</div>
-{% endif %}
-
-{% if caps.melt and not piece.is_terminal %}
-<div class="card" id="melt" style="border-color:var(--critical)">
-  <h3>Melt</h3>
-  <p class="hint">This is permanent. A melted jewel code refuses every further movement forever, and the
-    reason is what anyone auditing this in a year will read.</p>
-  <form method="post" action="{% url 'stock:melt_piece' piece.jewel_code %}">{% csrf_token %}
-    <label for="reason">Reason (at least 10 characters)</label>
-    <textarea id="reason" name="reason" rows="2" required minlength="10"></textarea>
-    <button class="btn danger" style="margin-top:8px">♨ Melt permanently</button>
-  </form>
 </div>
 {% endif %}
 
 {# ── Sale BOM & Breakup ───────────────────────────────────────────────── #}
 {% elif tab == 'bom' %}
-<div class="card">
-  <div class="spread">
-    <div><h3>Bill of materials</h3>
-      <p class="hint" style="margin:0">Current version is v{{ row.bom_version|default:"—" }}. A change forks
-        a new version; the old one is superseded, never overwritten.</p></div>
-    <div class="row">
-      {% if caps.manage_materials %}<a class="btn" href="{% url 'stock:piece_bom' piece.jewel_code %}">Material breakup →</a>{% endif %}
-      {% if caps.edit_bom %}<a class="btn primary" href="{% url 'stock:piece_bom_edit' piece.jewel_code %}">✎ Edit BOM</a>{% endif %}
-    </div>
-  </div>
-  {% if not caps.manage_materials %}
-  <div class="empty">🔒 Your role does not see the material breakup.</div>
-  {% endif %}
-</div>
+{% if caps.manage_materials %}
+{% include "stock/_bom.html" %}
+{% else %}
+<div class="card"><div class="empty">🔒 The material breakup is not available to <b>{{ role_name }}</b>.</div></div>
+{% endif %}
 
 {# ── Pricing ──────────────────────────────────────────────────────────── #}
 {% elif tab == 'pricing' %}
-<div class="card">
-  <div class="spread">
-    <div><h3>Pricing</h3>
-      <p class="hint" style="margin:0">Sale follows the live metal rate. Neither cost figure is ever
-        written back.</p></div>
-    <a class="btn" href="{% url 'stock:piece_scenarios' piece.jewel_code %}">Scenarios →</a>
-  </div>
-  <div class="bio" style="margin-top:12px">
-    <dl>
-      <div class="biorow"><dt>Sale price</dt><dd class="mono">{{ row.sale_price|default_if_none:"—"|floatformat:0 }}</dd></div>
-      <div class="biorow"><dt>Rate used</dt><dd class="mono">{{ row.gold_rate_used|default_if_none:"—"|floatformat:0 }} /g</dd></div>
-      {% if caps.view_cost %}
-      <div class="biorow"><dt>Cost — frozen</dt><dd class="mono">{{ row.cost_price|default_if_none:"—"|floatformat:0 }}</dd></div>
-      <div class="biorow"><dt>Cost — today</dt><dd class="mono">{{ row.current_cost|default_if_none:"—"|floatformat:0 }}</dd></div>
-      {% endif %}
-    </dl>
-    <dl>
-      {% if caps.view_margin %}
-      <div class="biorow"><dt>Margin on frozen cost</dt><dd class="mono">{{ row.margin|default_if_none:"—"|floatformat:0 }}</dd></div>
-      <div class="biorow"><dt>Margin at today's metal</dt><dd class="mono">{{ row.current_margin|default_if_none:"—"|floatformat:0 }}</dd></div>
-      {% endif %}
-      <div class="biorow"><dt>Scenario</dt><dd>{{ piece.scenario|default:"—" }}</dd></div>
-    </dl>
-  </div>
-</div>
+{% include "stock/_scenarios.html" %}
 
 {# ── Media ────────────────────────────────────────────────────────────── #}
 {% elif tab == 'media' %}
@@ -421,4 +347,64 @@
 </div>
 {% endif %}
 {% endif %}
+{# ── the actions, each its own ledger write, each behind a button above ── #}
+{% if not piece.is_terminal %}
+{% if caps.adjust_stock or caps.edit_bom %}
+<dialog class="modal" id="movedlg">
+  <form method="post" action="{% url 'stock:move_piece' piece.jewel_code %}">{% csrf_token %}
+    <header><h3>Move {{ piece.jewel_code }}</h3>
+      <p>Every movement is a ledger row. Nothing is edited in place.</p></header>
+    <div class="content">
+      <div class="field"><label class="f" for="location">Location</label>
+        <select id="location" name="location" style="width:100%">
+          {% for location in locations %}<option value="{{ location.code }}" {% if location.pk == piece.location_id %}selected{% endif %}>{{ location.name }}</option>{% endfor %}
+        </select></div>
+    </div>
+    <footer>
+      <button class="btn" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn tight" name="action" value="receive">Receive</button>
+      <button class="btn tight" name="action" value="transfer">Transfer</button>
+      <button class="btn tight" name="action" value="reserve">Reserve</button>
+      <button class="btn tight" name="action" value="unreserve">Unreserve</button>
+    </footer>
+  </form>
+</dialog>
+{% endif %}
+
+{% if caps.edit_bom and not open_repair %}
+<dialog class="modal" id="repairdlg">
+  <form method="post" action="{% url 'stock:repair_open' piece.jewel_code %}">{% csrf_token %}
+    <header><h3>Send {{ piece.jewel_code }} for repair</h3>
+      <p>A repair is not a note on a record — it forks the bill of materials. Removing a stone and
+        fitting a different one changes what the piece physically contains, so it changes its cost.</p></header>
+    <div class="content">
+      {% for field in repair_form %}<div class="field">{{ field.label_tag }}{{ field }}{{ field.errors }}</div>{% endfor %}
+    </div>
+    <footer>
+      <button class="btn" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn">⚒ Open the job</button>
+    </footer>
+  </form>
+</dialog>
+{% endif %}
+
+{% if caps.melt %}
+<dialog class="modal" id="meltdlg" style="border-color:var(--critical)">
+  <form method="post" action="{% url 'stock:melt_piece' piece.jewel_code %}">{% csrf_token %}
+    <header><h3>Melt {{ piece.jewel_code }}</h3>
+      <p>This is permanent. A melted jewel code refuses every further movement forever, and the
+        reason is what anyone auditing this in a year will read.</p></header>
+    <div class="content">
+      <div class="field"><label class="f" for="reason">Reason (at least 10 characters)</label>
+        <textarea id="reason" name="reason" rows="3" style="width:100%" required minlength="10"></textarea></div>
+    </div>
+    <footer>
+      <button class="btn" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn danger">♨ Melt permanently</button>
+    </footer>
+  </form>
+</dialog>
+{% endif %}
+{% endif %}
+
 {% endblock %}

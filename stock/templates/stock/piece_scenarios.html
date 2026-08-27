@@ -2,47 +2,5 @@
 {% block title %}{{ piece.jewel_code }} scenarios · Nornament{% endblock %}
 {% block content %}
 <div class="crumb"><a href="{% url 'stock:piece_detail' piece.jewel_code %}">← {{ piece.jewel_code }}</a> / Pricing</div>
-<div class="card">
-  <div class="spread"><div>
-    <h3>This piece under every scenario</h3>
-    <p class="hint" style="margin:0;max-width:82ch">The scenarios kept in Settings, priced against this
-      piece as it stands now. Metal and making repeat down every row because a scenario cannot touch them.</p>
-  </div></div>
-  <table style="margin-top:14px"><thead><tr>
-    <th>Scenario</th><th>How it prices</th>
-    <th class="num" style="width:80px">Metal g</th>
-    {% if show_cost %}<th class="num" style="width:106px">Metal cost</th>{% endif %}
-    <th class="num" style="width:106px">Metal</th>
-    {% if show_cost %}<th class="num" style="width:100px">Stone cost</th>{% endif %}
-    <th class="num" style="width:100px">Stones</th>
-    <th class="num" style="width:100px">Making</th>
-    {% if show_cost %}<th class="num" style="width:106px">Cost today</th>{% endif %}
-    <th class="num" style="width:112px">Price</th>
-    {% if show_cost %}<th class="num" style="width:86px">Margin</th>{% endif %}
-    <th class="num" style="width:78px">Stone ×</th>
-    <th style="width:86px"></th>
-  </tr></thead><tbody>
-  {% for price in prices %}
-  <tr>
-    <td>{{ price.scenario_name }}<div class="dim mono" style="font-size:11.5px">{{ price.scenario }}</div></td>
-    <td class="dim" style="font-size:12px">{{ price.method }}</td>
-    <td class="num">{{ price.metal_gm }}</td>
-    {% if show_cost %}<td class="num">{{ price.metal_cost|floatformat:0 }}</td>{% endif %}
-    <td class="num">{{ price.metal_sale|floatformat:0 }}</td>
-    {% if show_cost %}<td class="num">{{ price.stone_cost|floatformat:0 }}</td>{% endif %}
-    <td class="num">{{ price.stone_sale|floatformat:0 }}</td>
-    <td class="num">{{ price.making_sale|floatformat:0 }}</td>
-    {% if show_cost %}<td class="num">{{ price.cost_today|floatformat:0 }}</td>{% endif %}
-    <td class="num"><b>{{ price.price|floatformat:0 }}</b></td>
-    {% if show_cost %}<td class="num">{{ price.margin|default_if_none:"—"|floatformat:0 }}</td>{% endif %}
-    <td class="num">{% if price.stone_multiple %}{{ price.stone_multiple|floatformat:2 }}×{% else %}—{% endif %}</td>
-    <td>{% if price.capped %}<span class="chip c-warn">capped: {{ price.capped }}</span>{% endif %}</td>
-  </tr>
-  {% empty %}<tr><td colspan="13"><div class="empty">No scenario is available to you.</div></td></tr>{% endfor %}
-  </tbody></table>
-  <div class="note">Metal always passes through at its live rate under every scenario. Only stones move.
-    Nothing is stored until a piece is put on one.</div>
-  {% if show_cost %}<div class="note">Margin is measured against <b>cost today</b>, not the frozen figure —
-    it is what you would make if you replaced the piece at this morning's metal rate.</div>{% endif %}
-</div>
+{% include "stock/_scenarios.html" %}
 {% endblock %}
