@@ -151,16 +151,23 @@
   <h3>Assets</h3>
   <p class="hint">The <b>display picture</b> is what every list and the catalogue pull.</p>
   {% if media %}
-  <div class="mediagrid">
+  <div class="mgrid">
     {% for asset in media %}
-    <div class="mtile">
-      {% with url=media_urls|get:asset.pk %}
-      {% if url %}<img class="art" src="{{ url }}" alt="{{ asset.file_name }}" loading="lazy">
-      {% else %}<div class="empty" style="min-height:120px">{{ asset.kind }}</div>{% endif %}
-      {% endwith %}
-      <div class="cap"><b style="color:var(--ink)">{{ asset.kind }}</b><br>
-        {{ asset.file_name|default:asset.media_ref }}{% if asset.rank_order %} · rank {{ asset.rank_order }}{% endif %}</div>
-    </div>
+    <figure class="mcard{% if asset.is_catalogue_default %} ishero{% endif %}">
+      <div class="mshot">
+        {% with url=media_urls|get:asset.pk %}
+        {% if not url %}<span class="mext">{{ asset.kind }}</span>
+        {% elif asset.is_video %}<video src="{{ url }}" muted playsinline preload="metadata"></video>
+        {% else %}<img src="{{ url }}" alt="{{ asset.file_name }}" loading="lazy" decoding="async">{% endif %}
+        {% endwith %}
+        {% if asset.is_catalogue_default %}<span class="mhero">display</span>{% endif %}
+      </div>
+      <figcaption>
+        <span class="mname" title="{{ asset.file_name|default:asset.media_ref }}">{{ asset.file_name|default:asset.media_ref }}</span>
+        <span class="mmeta">{{ asset.get_kind_display }}{% if asset.bytes %} · {{ asset.bytes|filesizeformat }}{% endif %}
+          · <span class="mono">{{ asset.media_ref|default:asset.pk }}</span></span>
+      </figcaption>
+    </figure>
     {% endfor %}
   </div>
   {% else %}<div class="empty">No media on this piece.</div>{% endif %}
@@ -190,7 +197,7 @@
     {% for entry in similar %}
     <article class="dcard">
       <a href="{% url 'stock:piece_detail' entry.piece.jewel_code %}">
-        {% if entry.thumb %}<img class="art" src="{{ entry.thumb }}" alt="{{ entry.piece.jewel_code }}" loading="lazy">{% endif %}</a>
+        {% if entry.thumb %}<img class="jart sq" src="{{ entry.thumb }}" alt="{{ entry.piece.jewel_code }}" loading="lazy">{% endif %}</a>
       <div class="m">
         <div style="font-family:var(--mono);font-size:12.5px;font-weight:600">
           <a href="{% url 'stock:piece_detail' entry.piece.jewel_code %}">{{ entry.piece.jewel_code }}</a></div>
