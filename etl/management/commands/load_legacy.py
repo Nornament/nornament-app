@@ -144,6 +144,12 @@ class Command(BaseCommand):
                 counts |= self.load_users(write=("users" in parts))
                 if "stock" in parts:
                     counts |= self.load_stock()
+                # The stock load preserves primary keys, so every sequence is
+                # still sitting behind the rows it just wrote. ``load_crm``
+                # creates ``MediaAsset`` rows with assigned ids, which collide
+                # with the preserved ``app.media_asset`` pks unless the reset
+                # happens here as well as at the end.
+                legacy.reset_sequences()
                 if "crm" in parts:
                     counts |= self.load_crm()
                 legacy.reset_sequences()

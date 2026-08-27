@@ -21,3 +21,7 @@ staticfiles/
 media/
 static/vendor/htmx.min.js
 db.sqlite3
+
+# Local dev Postgres 17 cluster and binaries
+.pgdata17/
+.pgtools/
