@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from accounts.models import User, sync_role_groups
 from stock import services
-from stock.enums import ChargeBasis, MaterialClass, StockState, Uom
+from stock.enums import ChargeBasis, StockState, Uom
 from stock.models import (
     BomVersion,
     Category,
@@ -125,7 +125,6 @@ def materials(db, rates):
     gold = Material.objects.create(
         item_code="G",
         item_name="Gold",
-        mat_class=MaterialClass.METAL,
         category=categories["METAL"],
         default_uom=Uom.GM,
         metal=rates["gold"],
@@ -133,14 +132,12 @@ def materials(db, rates):
     diamond = Material.objects.create(
         item_code="DRKL",
         item_name="Diamond RKL",
-        mat_class=MaterialClass.DIAMOND,
         category=categories["DIAMOND"],
         default_uom=Uom.CT,
     )
     making = Material.objects.create(
         item_code="MAKING",
         item_name="Making Charge",
-        mat_class=MaterialClass.LABOUR,
         category=categories["LABOUR"],
         default_uom=Uom.GM,
     )

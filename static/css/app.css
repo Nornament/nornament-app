@@ -186,10 +186,26 @@ label.f{display:block;font-size:12px;color:var(--ink-2);margin:0 0 5px;font-weig
 .dcard:hover{border-color:var(--brand);transform:translateY(-2px);box-shadow:var(--shadow)}
 .dcard .thart{width:100%;height:150px;display:block}
 .dcard .m{padding:11px 13px 13px}
-.mediagrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:12px}
-.mtile{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface-2)}
-.mtile .thart{width:100%;height:118px;display:block}
-.mtile .cap{padding:7px 9px;font-size:11px;color:var(--muted)}
+/* media tiles — the legacy's .mgrid/.mcard. Every shot is the same box and the
+   picture is cropped into it: a portrait and a landscape photo side by side
+   otherwise size their own tiles and the grid reads as a ransom note. */
+.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));
+  gap:14px;margin-top:14px;align-items:start}
+.mcard{margin:0;border:1px solid var(--line);border-radius:11px;overflow:hidden;
+  background:var(--surface);display:flex;flex-direction:column}
+.mcard.ishero{outline:2px solid var(--brand);outline-offset:2px}
+.mshot{position:relative;height:140px;flex:none;background:var(--surface-2);display:flex;
+  align-items:center;justify-content:center;overflow:hidden}
+.mshot img,.mshot video{width:100%;height:100%;object-fit:cover;display:block}
+.mext{font-family:var(--mono);font-size:12px;letter-spacing:.1em;color:var(--muted)}
+.mhero{position:absolute;top:7px;left:7px;background:var(--brand);color:#fff;font-size:10px;
+  padding:2px 7px;border-radius:99px;letter-spacing:.04em;max-width:calc(100% - 14px);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mcard figcaption{padding:8px 10px 9px;display:flex;flex-direction:column;gap:2px}
+.mname{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;line-height:1.35}
+.mmeta{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
 .hero{display:flex;gap:16px;align-items:center}
 
 
@@ -299,8 +315,19 @@ label.f{display:block;font-size:12px;color:var(--ink-2);margin:0 0 5px;font-weig
   text-transform:uppercase;letter-spacing:.06em}
 .editable{cursor:text;border-bottom:1px dashed var(--rule);padding-bottom:1px}
 .editable:hover,.editable:focus{border-bottom-color:var(--brand);outline:none}
-.editable .pen{opacity:0;margin-left:7px;font-size:11px;color:var(--brand)}
-.editable:hover .pen,.editable:focus .pen{opacity:1}
+.editable .pen{opacity:0;margin-left:7px;font-size:11px;color:var(--brand);
+  border:0;background:none;padding:0 2px;cursor:pointer;transition:opacity .12s}
+.editable:hover .pen,.editable:focus .pen,.editable .pen:focus-visible{opacity:1}
+/* the field itself only exists once the pencil is clicked */
+.editable form{display:none}
+.editable.editing{border-bottom-color:transparent;cursor:default}
+.editable.editing .shown{display:none}
+.editable.editing form{display:inline-flex;align-items:center;gap:5px}
+.pbtn{border:1px solid var(--line);background:var(--surface);color:var(--ink-2);
+  border-radius:6px;padding:2px 7px;font-size:12px;line-height:1.5;cursor:pointer}
+.pbtn:hover{border-color:var(--brand);color:var(--ink)}
+.pbtn.ok{border-color:color-mix(in srgb,var(--good) 55%,transparent);color:var(--good-ink)}
+.pbtn.no:hover{border-color:var(--critical);color:var(--critical-ink)}
 .unset{color:var(--muted);font-style:italic;font-weight:400}
 input.inplace,select.inplace{width:auto;min-width:110px;max-width:230px;padding:3px 7px;
   font-size:13px;border:1px solid var(--brand);border-radius:6px;text-align:right;
@@ -330,8 +357,6 @@ input.inplace,select.inplace{width:auto;min-width:110px;max-width:230px;padding:
 .livepill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;
   font-size:11px;font-weight:600;background:var(--brand-soft);color:var(--brand);
   border:1px solid var(--brand)}
-.fsummary{display:flex;align-items:center;gap:12px;margin-top:12px;font-size:13px;color:var(--muted)}
-.fsummary b{color:var(--ink)}
 
 /* ---------- pinterest / masonry grid ---------- */
 .masonry{columns:4;column-gap:16px}

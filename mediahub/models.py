@@ -89,3 +89,8 @@ class MediaAsset(models.Model):
     @property
     def is_confirmed(self):
         return self.confirmed_at is not None
+
+    @property
+    def is_video(self):
+        """An <img> cannot draw a video, so every tile has to ask this first."""
+        return self.kind == MediaKind.VIDEO or (self.mime_type or "").startswith("video/")

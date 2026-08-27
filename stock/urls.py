@@ -15,6 +15,7 @@ urlpatterns = [
     path("pieces/<str:jewel_code>/bom/", views.piece_bom, name="piece_bom"),
     path("pieces/<str:jewel_code>/bom/edit/", views.piece_bom_edit, name="piece_bom_edit"),
     path("pieces/<str:jewel_code>/scenarios/", views.piece_scenarios, name="piece_scenarios"),
+    path("pieces/<str:jewel_code>/field/", views.piece_field, name="piece_field"),
     path("pieces/<str:jewel_code>/scenario/", views.set_piece_scenario_view, name="set_piece_scenario"),
     path("pieces/<str:jewel_code>/sell/", views.sell_piece_view, name="sell_piece"),
     path("pieces/<str:jewel_code>/melt/", views.melt_piece_view, name="melt_piece"),
@@ -48,4 +49,5 @@ urlpatterns = [
     path("audit/", views.audit, name="audit"),
     path("settings/", views.settings_view, name="settings"),
     path("exports/pieces.csv", views.piece_export, name="piece_export"),
+    path("exports/materials.csv", views.material_export, name="material_export"),
 ]

@@ -29,7 +29,6 @@ from .enums import (
     COUNTABLE_STATES,
     ChargeBasis,
     GRAMS_PER_UNIT,
-    MaterialClass,
     MovementType,
     StockState,
     TERMINAL_STATES,
@@ -197,7 +196,7 @@ def _lines_for(piece_id, version_no):
 def net_metal_weight(piece_id, version_no):
     total = ZERO
     for line in _lines_for(piece_id, version_no):
-        if line.material.mat_class == MaterialClass.METAL:
+        if line.material.is_metal:
             total += line_weight_gm(line.qty_value, line.qty_uom)
     return total
 
@@ -234,7 +233,7 @@ def recost_piece(piece, version_no=None, user=None):
         line.save(update_fields=["qty_value", "qty_uom", "cost_amount", "sale_amount"])
 
     bom_weight = sum(
-        (line_weight_gm(l.qty_value, l.qty_uom) for l in lines if l.material.mat_class != MaterialClass.LABOUR),
+        (line_weight_gm(l.qty_value, l.qty_uom) for l in lines if not l.material.is_labour),
         ZERO,
     )
     version = BomVersion.objects.get(piece=piece, version_no=version_no)
@@ -243,10 +242,10 @@ def recost_piece(piece, version_no=None, user=None):
     version.total_cost_price = round_to(sum((l.cost_amount or ZERO for l in lines), ZERO), tdp)
     version.total_sale_price = round_to(sum((l.sale_amount or ZERO for l in lines), ZERO), tdp)
     version.making_value = round_to(
-        sum((l.sale_amount or ZERO for l in lines if l.material.mat_class == MaterialClass.LABOUR), ZERO), tdp
+        sum((l.sale_amount or ZERO for l in lines if l.material.is_labour), ZERO), tdp
     )
     version.goods_value = round_to(
-        sum((l.sale_amount or ZERO for l in lines if l.material.mat_class != MaterialClass.LABOUR), ZERO), tdp
+        sum((l.sale_amount or ZERO for l in lines if not l.material.is_labour), ZERO), tdp
     )
     version.save(
         update_fields=[
@@ -270,7 +269,7 @@ def _scenario_stone_rates(piece, scenario, lines):
     the most cost carry the most of the markup.
     """
     stones = [
-        line for line in lines if line.material.mat_class not in (MaterialClass.METAL, MaterialClass.LABOUR)
+        line for line in lines if not (line.material.is_metal or line.material.is_labour)
     ]
     if scenario.method == scenario.CHART:
         return {
@@ -309,7 +308,7 @@ def sale_lines(piece, version_no=None, scenario=None):
     priced = []
     for line in lines:
         rate = line.sale_rate
-        if line.material.mat_class == MaterialClass.METAL:
+        if line.material.is_metal:
             rate = metal_rate
             amount = rate * Decimal(line.qty_value or 0)
         elif line.basis == ChargeBasis.BY_NET_METAL_WT:
@@ -344,7 +343,7 @@ def current_cost(piece, version_no=None):
     rate = alloy_cost_rate(piece.metal_purity)
     total = ZERO
     for line in _lines_for(piece.pk, version_no):
-        if line.material.mat_class == MaterialClass.METAL:
+        if line.material.is_metal:
             amount = rate * Decimal(line.qty_value or 0)
         elif line.basis == ChargeBasis.BY_NET_METAL_WT:
             amount = (line.cost_rate or ZERO) * metal_gm
@@ -434,13 +433,13 @@ def scenario_price(piece, scenario=None):
     version_no = piece.current_bom_version
     lines = _lines_for(piece.pk, version_no)
     metal_gm = sum(
-        (line_weight_gm(l.qty_value, l.qty_uom) for l in lines if l.material.mat_class == MaterialClass.METAL), ZERO
+        (line_weight_gm(l.qty_value, l.qty_uom) for l in lines if l.material.is_metal), ZERO
     )
     metal_sale = round_to(alloy_sale_rate(piece.metal_purity) * metal_gm, 0)
     metal_cost = round_to(alloy_cost_rate(piece.metal_purity) * metal_gm, 0)
 
     making_sale = making_cost = ZERO
-    for line in (l for l in lines if l.material.mat_class == MaterialClass.LABOUR):
+    for line in (l for l in lines if l.material.is_labour):
         if line.basis == ChargeBasis.FLAT:
             making_sale += line.sale_rate or ZERO
             making_cost += line.cost_rate or ZERO
@@ -453,7 +452,7 @@ def scenario_price(piece, scenario=None):
 
     stone_cost = stone_chart = ZERO
     for line in lines:
-        if line.material.mat_class in (MaterialClass.METAL, MaterialClass.LABOUR):
+        if line.material.is_metal or line.material.is_labour:
             continue
         qty = Decimal(line.qty_value or 0)
         stone_cost += (line.cost_rate or ZERO) * qty
@@ -776,9 +775,9 @@ def set_bom(user, piece, lines, reason=BomChangeReason.CORRECTION, note=None):
 
 def _check_line_uom(material, uom, line_no):
     """``trg_check_line_uom`` — metal is grams, diamonds are carats or pieces."""
-    if material.mat_class == MaterialClass.METAL and uom != "GM":
+    if material.is_metal and uom != "GM":
         raise ServiceError(f"Metal line {line_no} must be GM, got {uom}")
-    if material.mat_class in (MaterialClass.DIAMOND, MaterialClass.POLKI) and uom not in ("CT", "PCS"):
+    if material.category_id in ("DIAMOND", "POLKI") and uom not in ("CT", "PCS"):
         raise ServiceError(f"Diamond/Polki line {line_no} must be CT or PCS, got {uom}")
 
 
@@ -798,7 +797,7 @@ def refresh_bom_rates(user, piece, chart=None, side="BOTH"):
     piece = _as_piece(piece)
     touched = 0
     for line in _lines_for(piece.pk, piece.current_bom_version):
-        if line.off_chart or line.material.mat_class == MaterialClass.METAL:
+        if line.off_chart or line.material.is_metal:
             continue
         fields = []
         if side in ("BOTH", "COST"):

@@ -159,11 +159,13 @@ def test_a_sales_login_sees_no_cost_vendor_or_margin_anywhere(client, sales_user
 
 def test_the_same_screens_do_show_those_numbers_to_accounts(client, accounts_user, priced_and_sold):
     _login(client, accounts_user)
-    response = client.get(reverse("stock:piece_detail", kwargs={"jewel_code": "ER00738"}))
-    body = response.content.decode()
+    detail = reverse("stock:piece_detail", kwargs={"jewel_code": "ER00738"})
+    # cost lives on the BOM tab: the overview's pricing card was retired in
+    # favour of the Pricing and BOM tabs, which is where the legacy kept it
+    body = client.get(detail, {"tab": "bom"}).content.decode()
     cost = priced_and_sold.current_bom().total_cost_price
     assert f"{cost:,.0f}".replace(",", "") in body.replace(",", "")
-    assert "Sharma Karigars" in body
+    assert "Sharma Karigars" in client.get(detail).content.decode()
 
 
 def test_the_material_breakup_is_closed_to_a_role_without_the_capability(client, graphic_user, priced_and_sold):
@@ -179,7 +181,10 @@ def test_the_locked_tabs_refuse_a_sales_login(client, sales_user, priced_and_sol
     just hidden in the interface — a bug in the UI cannot let it through".
     """
     _login(client, sales_user)
-    for name in ("stock:melt_list", "stock:data", "stock:audit", "stock:settings", "stock:reports"):
+    for name in (
+        "stock:melt_list", "stock:data", "stock:audit", "stock:settings", "stock:reports",
+        "stock:material_export",
+    ):
         assert client.get(reverse(name)).status_code == 403, f"{name} let a SALES login in"
 
 
@@ -242,6 +247,7 @@ def test_every_stock_and_crm_screen_is_in_the_sales_walk():
         # POST-only endpoints; their permission gates are tested in test_ledger
         "stock:sell_piece", "stock:melt_piece", "stock:move_piece", "stock:set_rate",
         "stock:set_piece_scenario",
+        "stock:piece_field",
         "stock:count_open", "stock:count_scan", "stock:count_unscan", "stock:count_close",
         "stock:repair_complete", "stock:repair_open", "stock:reserve_piece", "crm:add_purchase",
         "crm:customer_delete", "crm:customer_temperature", "crm:delete_purchase",
@@ -254,6 +260,7 @@ def test_every_stock_and_crm_screen_is_in_the_sales_walk():
         "stock:count_detail", "stock:count_list", "stock:piece_rows",
         # asserted to 403 for SALES in test_the_locked_tabs_refuse_a_sales_login
         "stock:melt_list", "stock:data", "stock:audit", "stock:settings", "stock:reports",
+        "stock:material_export",
         # gated on edit_bom, and asserted to 403 below
         "stock:piece_new", "stock:piece_edit", "stock:piece_bom_edit",
         "stock:style_new", "stock:style_edit",

@@ -64,9 +64,24 @@
     <div><h3>Materials</h3><p class="hint" style="margin:0;max-width:76ch">Every item code that has
       appeared on a bill of materials. A code arriving from an import lands in <b>Other Materials</b>
       and is flagged — never guessed into a category that would change how it prices.</p></div>
-    <form method="get" class="row"><input type="hidden" name="tab" value="mats">
-      <input type="search" name="q" value="{{ q }}" placeholder="Code or description" style="max-width:240px">
-      <button class="btn sm">Search</button></form>
+    <div class="row">
+      <form method="get" class="row"><input type="hidden" name="tab" value="mats">
+        <input type="hidden" name="cat" value="{{ cat }}">
+        <input type="search" name="q" value="{{ q }}" placeholder="Code or description" style="max-width:240px">
+        <button class="btn sm">Search</button></form>
+      {% if caps.edit_bom %}
+      <button type="button" class="btn" onclick="document.getElementById('matbulkdlg').showModal()">⇅ Bulk CSV</button>
+      <button type="button" class="btn primary" onclick="document.getElementById('matdlg').showModal()">+ Add material</button>
+      {% endif %}
+    </div>
+  </div>
+  <div class="fchips" style="margin-top:12px">
+    <a class="fchip" aria-pressed="{% if not cat %}true{% else %}false{% endif %}"
+       href="?tab=mats&amp;q={{ q|urlencode }}">All <b>{{ material_total }}</b></a>
+    {% for category in material_categories %}
+    <a class="fchip" aria-pressed="{% if category.selected %}true{% else %}false{% endif %}"
+       href="?tab=mats&amp;q={{ q|urlencode }}{% if not category.selected %}&amp;cat={{ category.pk|urlencode }}{% endif %}">{{ category.name }} <b>{{ category.n }}</b></a>
+    {% endfor %}
   </div>
   <table style="margin-top:12px"><thead><tr><th style="width:120px">Code</th><th>Description</th>
     <th style="width:96px">Size</th><th style="width:150px">Category</th><th style="width:64px">Unit</th>
@@ -78,15 +93,52 @@
       <td class="num">{{ row.used_on_lines }}</td></tr>
     {% empty %}<tr><td colspan="6"><div class="empty">No materials match.</div></td></tr>{% endfor %}
   </tbody></table>
-  {% if caps.edit_bom %}
-  <form method="post" class="row" style="margin-top:14px">{% csrf_token %}
-    {% for field in form %}<div>{{ field.label_tag }}{{ field }}</div>{% endfor %}
-    <div class="tight"><button class="btn primary">Add material</button></div>
-  </form>
-  {% endif %}
   <div class="note">The <b>code</b> is what a bill of materials points at, so changing it moves every
-    line that uses it. Description and size are free text.</div>
+    line that uses it. Description and size are free text. The table stops at 400 rows — the pill
+    counts above are of everything the search matched, so narrow it rather than scroll.</div>
 </div>
+
+{% if caps.edit_bom %}
+<dialog class="modal" id="matbulkdlg">
+  <form method="post" enctype="multipart/form-data">{% csrf_token %}
+    <header><h3>Bulk import / export</h3>
+      <p>The export and the upload are the same columns in the same order, so the file you take out
+        is the file you edit and put back.</p></header>
+    <div class="content">
+      <div class="row" style="margin-bottom:14px">
+        <a class="btn" href="{% url 'stock:material_export' %}?q={{ q|urlencode }}&amp;cat={{ cat|urlencode }}">⇩ Export {% if q or cat %}these{% else %}all{% endif %} ({{ material_total }})</a>
+        <a class="btn" href="{% url 'stock:material_export' %}?sample=1">⇩ Sample CSV</a>
+      </div>
+      <div class="field"><label class="f" for="csv">CSV to upload</label>
+        <input id="csv" type="file" name="csv" accept=".csv,text/csv" required></div>
+    </div>
+    <footer>
+      <button class="btn" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn primary">Upload</button>
+    </footer>
+  </form>
+</dialog>
+<div class="note" style="margin-bottom:14px"><b>item_code</b> is the key: a code already in the register
+  is updated, a new one is added. One row the Add material modal would have refused rolls the whole
+  file back — nothing is half-applied. The download is stamped with today's date so two edits of the
+  same sheet do not overwrite each other in a downloads folder.</div>
+
+<dialog class="modal" id="matdlg">
+  <form method="post">{% csrf_token %}
+    <header><h3>Add a material</h3>
+      <p>A code here is what a bill of materials will point at. A metal material has to say which
+        metal — the table refuses the row otherwise.</p></header>
+    <div class="content">
+      {% for field in form %}<div class="field">{{ field.label_tag }}{{ field }}
+        {% if field.help_text %}<div class="hint">{{ field.help_text }}</div>{% endif %}</div>{% endfor %}
+    </div>
+    <footer>
+      <button class="btn" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn primary">Add material</button>
+    </footer>
+  </form>
+</dialog>
+{% endif %}
 
 {% elif tab == 'charts' %}
 <div class="card">
@@ -94,24 +146,76 @@
     <div><h3>Rate charts</h3><p class="hint" style="margin:0;max-width:78ch">Cost and sale for every
       material, on one line. Metal is deliberately absent — it prices from its live rate and a chart
       must not be able to override that.</p></div>
-    <form method="get" class="row"><input type="hidden" name="tab" value="charts">
-      <select name="chart" onchange="this.form.submit()">
-        {% for c in charts %}<option value="{{ c.pk }}" {% if chart and c.pk == chart.pk %}selected{% endif %}>{{ c.code }} v{{ c.version_no }}{% if c.is_default %} · default{% endif %}</option>{% endfor %}
-      </select></form>
+    <div class="row">
+      <form method="get" class="row"><input type="hidden" name="tab" value="charts">
+        <select name="chart" onchange="this.form.submit()">
+          {% for c in charts %}<option value="{{ c.pk }}" {% if chart and c.pk == chart.pk %}selected{% endif %}>{{ c.code }} v{{ c.version_no }}{% if c.is_default %} · default{% endif %}</option>{% endfor %}
+        </select></form>
+      {% if caps.edit_bom and chart and not chart.is_locked %}
+      <button type="button" class="btn primary" onclick="rateEdit(this)">+ Add rate</button>
+      {% endif %}
+    </div>
   </div>
   <table style="margin-top:12px"><thead><tr><th>Material</th><th style="width:96px">Size</th>
     {% if caps.view_cost %}<th class="num" style="width:118px">Cost rate</th>{% endif %}
-    {% if caps.view_sale %}<th class="num" style="width:118px">Sale rate</th>{% endif %}</tr></thead><tbody>
+    {% if caps.view_sale %}<th class="num" style="width:118px">Sale rate</th>{% endif %}
+    <th style="width:70px"></th></tr></thead><tbody>
     {% for line in lines %}
-    <tr><td class="code">{{ line.material.item_code }} <span class="dim">{{ line.material.item_name }}</span></td>
+    <tr><td class="code">{{ line.material.item_code }} <span class="dim">{{ line.material.item_name }}</span>
+        {% if line.history %}
+        <details style="margin-top:4px">
+          <summary class="dim" style="font-size:12px;cursor:pointer">{{ line.history|length }} edit{{ line.history|pluralize }}</summary>
+          <div class="dim mono" style="font-size:11.5px;padding:4px 0 2px">
+            {% for entry in line.history %}<div>{{ entry.changed_at|date:"d M Y H:i" }} · {{ entry.user|default:"system" }} · {{ entry.shown }}</div>{% endfor %}
+          </div>
+        </details>
+        {% endif %}</td>
       <td>{{ line.size_band|default:"—" }}</td>
       {% if caps.view_cost %}<td class="num mono">{{ line.cost_rate|default_if_none:"—"|floatformat:0 }}</td>{% endif %}
-      {% if caps.view_sale %}<td class="num mono">{{ line.sale_rate|default_if_none:"—"|floatformat:0 }}</td>{% endif %}</tr>
-    {% empty %}<tr><td colspan="4"><div class="empty">This chart has no lines.</div></td></tr>{% endfor %}
+      {% if caps.view_sale %}<td class="num mono">{{ line.sale_rate|default_if_none:"—"|floatformat:0 }}</td>{% endif %}
+      <td>{% if caps.edit_bom and not chart.is_locked %}
+        <button type="button" class="btn sm" onclick="rateEdit(this)" data-pk="{{ line.pk }}" data-material="{{ line.material_id }}"
+          data-size_band="{{ line.size_band }}" data-rate_uom="{{ line.rate_uom|default_if_none:'' }}"
+          {% if caps.view_cost %}data-cost_rate="{{ line.cost_rate|default_if_none:'' }}"{% endif %}
+          {% if caps.view_sale %}data-sale_rate="{{ line.sale_rate|default_if_none:'' }}"{% endif %}>Edit</button>
+      {% endif %}</td></tr>
+    {% empty %}<tr><td colspan="5"><div class="empty">This chart has no lines.</div></td></tr>{% endfor %}
   </tbody></table>
-  <div class="note">A chart that has priced live stock cannot be edited — fork it, so a quote from
-    March still reconciles in September.{% if chart_in_use %} <b>This one has priced live stock.</b>{% endif %}</div>
+  <div class="note">Every rate change is written to the audit log against that line, and the row shows
+    it back — so a rate that moved twice reads as two entries, not as one number that was always this.
+    A <b>locked</b> chart refuses edits: fork it, so a quote from March still reconciles in September.
+    {% if chart_in_use %} <b>This one has priced live stock.</b>{% endif %}</div>
 </div>
+
+{% if caps.edit_bom and line_form and not chart.is_locked %}
+<dialog class="modal" id="ratedlg">
+  <form method="post">{% csrf_token %}<input type="hidden" name="pk" id="rate_pk">
+    <header><h3 id="ratedlg_title">Add a rate</h3>
+      <p>The old values are kept — this row's history is what an audit reads.</p></header>
+    <div class="content">
+      {% for field in line_form %}{% if field.is_hidden %}{{ field }}
+      {% elif field.name == 'cost_rate' and not caps.view_cost %}{% elif field.name == 'sale_rate' and not caps.view_sale %}
+      {% else %}<div class="field">{{ field.label_tag }}{{ field }}</div>{% endif %}{% endfor %}
+    </div>
+    <footer>
+      <button class="btn" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn primary">Save</button>
+    </footer>
+  </form>
+</dialog>
+<script>
+function rateEdit(button) {
+  const dialog = document.getElementById('ratedlg'), data = button.dataset;
+  document.getElementById('rate_pk').value = data.pk || '';
+  document.getElementById('ratedlg_title').textContent = data.pk ? 'Edit rate' : 'Add a rate';
+  for (const name of ['material', 'size_band', 'cost_rate', 'sale_rate', 'rate_uom']) {
+    const input = document.getElementById('id_' + name);
+    if (input) input.value = data[name] || '';
+  }
+  dialog.showModal();
+}
+</script>
+{% endif %}
 
 {% elif tab == 'scen' %}
 <div class="card">

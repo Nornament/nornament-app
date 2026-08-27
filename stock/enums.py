@@ -17,17 +17,6 @@ class Uom(models.TextChoices):
 GRAMS_PER_UNIT = {"GM": "1.0", "CT": "0.2", "RATTI": "0.1215", "PCS": "0.0"}
 
 
-class MaterialClass(models.TextChoices):
-    METAL = "METAL", "Metal"
-    DIAMOND = "DIAMOND", "Diamond"
-    POLKI = "POLKI", "Polki"
-    COLOUR_STONE = "COLOUR_STONE", "Colour stone"
-    PEARL = "PEARL", "Pearl"
-    FINDING = "FINDING", "Finding"
-    LABOUR = "LABOUR", "Labour"
-    OTHER = "OTHER", "Other"
-
-
 class ChargeBasis(models.TextChoices):
     BY_QTY = "BY_QTY", "By quantity"
     BY_NET_METAL_WT = "BY_NET_METAL_WT", "By net metal weight"

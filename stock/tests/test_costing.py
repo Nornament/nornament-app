@@ -136,7 +136,6 @@ def test_the_bom_sale_side_follows_the_piece_s_scenario(piece, scenarios, chart)
 
 def test_a_scenario_moves_the_stone_lines_and_nothing_else(piece, scenarios, chart):
     """Metal passes through at the live rate and making keeps its own line."""
-    from stock.enums import MaterialClass
     from stock.models import Scenario
 
     value_added = Scenario.objects.get(code="VA100")
@@ -149,4 +148,4 @@ def test_a_scenario_moves_the_stone_lines_and_nothing_else(piece, scenarios, cha
     }
     assert moved, "the chart scenario should reprice at least one stone line"
     for no in moved:
-        assert under[no]["line"].material.mat_class not in (MaterialClass.METAL, MaterialClass.LABOUR)
+        assert not (under[no]["line"].material.is_metal or under[no]["line"].material.is_labour)

@@ -1,0 +1,28 @@
+{% comment %}One editable value. It reads as text until you hover it, when the
+pencil appears; clicking that swaps in the field with ✓ and ✕. Escape cancels.
+
+The classes are the legacy's own — ``.editable``/``.pen``/``.inplace`` were
+ported into app.css with the rest of the stylesheet and never wired to
+anything. This is what they were for.
+
+  {% include "stock/_inline.html" with name="huid" field=inline.huid value=row.huid %}
+{% endcomment %}
+{% if inline and field %}
+<span class="editable">
+  <span class="shown">{{ value|default:"—" }}<button type="button" class="pen" aria-label="Edit"
+    onclick="const e=this.closest('.editable');e.classList.add('editing');e.querySelector('.inplace').focus()"
+    >✎</button></span>
+  {% comment %}No class="inline" here: form.inline{display:inline} in app.css
+  matches this at the same specificity and later in source order, so the field
+  would never stay hidden.{% endcomment %}
+  <form method="post" action="{% url 'stock:piece_field' piece.jewel_code %}"
+        onkeydown="if(event.key==='Escape'){this.closest('.editable').classList.remove('editing')}">{% csrf_token %}
+    <input type="hidden" name="field" value="{{ name }}">
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    {{ field }}
+    <button class="pbtn ok" aria-label="Save">✓</button>
+    <button class="pbtn no" type="button" aria-label="Cancel"
+      onclick="this.closest('.editable').classList.remove('editing')">✕</button>
+  </form>
+</span>
+{% else %}{{ value|default:"—" }}{% endif %}

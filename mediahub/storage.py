@@ -103,3 +103,7 @@ def put_bytes(key, data, content_type):
 
 def head(key):
     return client().head_object(Bucket=settings.MEDIA_BUCKET, Key=key)
+
+
+def get_bytes(key):
+    return client().get_object(Bucket=settings.MEDIA_BUCKET, Key=key)["Body"].read()

@@ -8,6 +8,8 @@ HTMX carries the live bits — search, the scan flow, inline rate edits — by
 returning the same partials the full page renders.
 """
 import csv
+import io
+import re
 from decimal import Decimal
 from functools import wraps
 from urllib.parse import urlencode
@@ -16,9 +18,11 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.forms import modelform_factory
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
@@ -26,11 +30,13 @@ from django.views.decorators.http import require_POST
 
 from accounts.capabilities import EDIT_BOM, ROLE_GROUPS, ROLE_TABS, VIEW_COST, VIEW_MARGIN, VIEW_SALE
 from accounts.context_processors import _role_code
+from crm import services as crm_services
+from crm.models import Customer
 from mediahub import services as media_services
 from mediahub.models import MediaAsset
 
 from . import services
-from .enums import BomChangeReason, COUNTABLE_STATES, MaterialClass, MovementType, StockState, TERMINAL_STATES, Uom
+from .enums import BomChangeReason, COUNTABLE_STATES, MovementType, StockState, TERMINAL_STATES, Uom
 from .forms import (
     BomLineFormSet,
     CategoryForm,
@@ -39,6 +45,7 @@ from .forms import (
     MeltForm,
     MoveForm,
     PieceForm,
+    RateChartLineForm,
     RepairForm,
     SaleForm,
     StyleForm,
@@ -119,12 +126,28 @@ def dashboard(request):
     return render(request, "stock/dashboard.html", context)
 
 
+#: The four status chips the legacy stock screen offered. The other states are
+#: reachable — they are just not questions anyone asked from this screen.
+LIST_STATES = [StockState.IN_STOCK, StockState.ON_APPROVAL, StockState.SOLD, StockState.IN_REPAIR]
+
+#: ``PRICE_BANDS`` from the legacy, unchanged. ``None`` is "and up".
+PRICE_BANDS = [
+    ("0 – 1 lakh", 0, 100_000),
+    ("1 – 2 lakh", 100_000, 200_000),
+    ("2 – 5 lakh", 200_000, 500_000),
+    ("5 lakh +", 500_000, None),
+]
+
+#: The dimensions the filter bar carries, in the legacy's own order.
+FILTER_KEYS = ("category", "location", "state", "price")
+
+
 def _filtered(request):
     """The list filter, shared by the page, the HTMX rows and the export.
 
-    ``state`` and ``location`` repeat (``?state=IN_STOCK&state=RESERVED``) —
-    the legacy multi-select chips. A single value still works: ``getlist``
-    reads both shapes.
+    Every key repeats (``?state=IN_STOCK&state=SOLD``) — the legacy multi-select
+    chips, where two chips in one row are an *or* and two rows are an *and*. A
+    single value still works: ``getlist`` reads both shapes.
     """
     pieces = _visible_pieces(request)
     query = (request.GET.get("q") or "").strip()
@@ -136,28 +159,56 @@ def _filtered(request):
             | Q(huid__icontains=query)
             | Q(src_ref__icontains=query)
         )
-    states = [value for value in request.GET.getlist("state") if value]
-    if states:
-        pieces = pieces.filter(stock_state__in=states)
-    locations = [value for value in request.GET.getlist("location") if value]
-    if locations:
-        pieces = pieces.filter(location__code__in=locations)
+    picked = {key: [value for value in request.GET.getlist(key) if value] for key in FILTER_KEYS}
+    if picked["category"]:
+        pieces = pieces.filter(style__category__code__in=picked["category"])
+    if picked["location"]:
+        pieces = pieces.filter(location__code__in=picked["location"])
+    if picked["state"]:
+        pieces = pieces.filter(stock_state__in=picked["state"])
     if request.GET.get("unpriced"):
         pieces = pieces.exclude(bom_versions__is_current=True, bom_versions__total_cost_price__gt=0)
-    return pieces, query, states, locations
+    if picked["price"] and allowed(request.user, "sale_price"):
+        pieces = _in_price_bands(pieces, picked["price"])
+    elif picked["price"]:
+        picked["price"] = []  # a role that cannot see prices is not offered them
+    return pieces, query, picked
 
 
-def _filter_qs(query, states, locations):
-    params = ([("q", query)] if query else []) + [("state", s) for s in states] + [("location", c) for c in locations]
+def _in_price_bands(pieces, chosen):
+    """Keep the pieces whose asking price falls in one of the chosen bands.
+
+    ponytail: a sale price is computed, not stored — metal moves daily — so this
+    cannot be SQL and costs one BOM read per piece. It only runs when a price
+    chip is on, over a catalogue of a few hundred; make it a materialised column
+    if that stops being true.
+    """
+    bands = [PRICE_BANDS[int(index)] for index in chosen if index.isdigit() and int(index) < len(PRICE_BANDS)]
+    if not bands:
+        return pieces
+    return [
+        piece
+        for piece in pieces
+        if any(low <= (price := services.live_sale_price(piece)) and (high is None or price < high)
+               for _, low, high in bands)
+    ]
+
+
+def _filter_qs(query, picked):
+    params = [("q", query)] if query else []
+    for key in FILTER_KEYS:
+        params += [(key, value) for value in picked[key]]
     return urlencode(params)
 
 
-def _filter_chips(options, selected, other_qs_parts):
+def _filter_chips(options, key, picked, query):
     """One legacy ``.fchip`` per option: its toggled-URL querystring, precomputed."""
+    selected = picked[key]
     chips = []
     for value, label in options:
+        value = str(value)
         toggled = [v for v in selected if v != value] if value in selected else selected + [value]
-        chips.append({"label": label, "active": value in selected, "qs": other_qs_parts(toggled)})
+        chips.append({"label": label, "active": value in selected, "qs": _filter_qs(query, picked | {key: toggled})})
     return chips
 
 
@@ -177,7 +228,7 @@ def _piece_thumbs(piece_ids):
 
 @login_required
 def piece_list(request):
-    pieces, query, states, locations = _filtered(request)
+    pieces, query, picked = _filtered(request)
     page = Paginator(pieces, PAGE_SIZE).get_page(request.GET.get("page"))
     rows = [piece_row(request.user, piece) for piece in page]
     thumbs = _pin_thumbs(page)
@@ -191,18 +242,25 @@ def piece_list(request):
                 {"row": row, "thumb": thumbs[row["jewel_code_id"]]} for row in rows if row["jewel_code_id"] in thumbs
             ],
             "q": query,
-            "state_chips": _filter_chips(
-                StockState.choices, states, lambda toggled: _filter_qs(query, toggled, locations)
+            # the legacy's own order: category, location, status, price
+            "category_chips": _filter_chips(
+                Category.objects.values_list("code", "name"), "category", picked, query
             ),
             "location_chips": _filter_chips(
-                [(l.code, l.name) for l in Location.objects.filter(is_active=True)],
-                locations,
-                lambda toggled: _filter_qs(query, states, toggled),
+                # the workshop is where a piece goes to be repaired, not a place
+                # anyone browses stock in — the legacy left WS1 out of this row
+                Location.objects.filter(is_active=True).exclude(kind="WORKSHOP").values_list("code", "name"),
+                "location",
+                picked,
+                query,
             ),
-            "selected_states": states,
-            "selected_locations": locations,
-            "filter_qs": _filter_qs(query, states, locations),
-            "total": pieces.count(),
+            "state_chips": _filter_chips(
+                [(state.value, state.label) for state in LIST_STATES], "state", picked, query
+            ),
+            "price_chips": _filter_chips(
+                [(index, band[0]) for index, band in enumerate(PRICE_BANDS)], "price", picked, query
+            ),
+            "picked": picked,
         },
     )
 
@@ -210,7 +268,7 @@ def piece_list(request):
 @login_required
 def piece_rows(request):
     """The HTMX half of the list: the same rows, no chrome."""
-    pieces, _, _, _ = _filtered(request)
+    pieces, _, _ = _filtered(request)
     page = Paginator(pieces, PAGE_SIZE).get_page(request.GET.get("page"))
     return render(
         request,
@@ -319,6 +377,9 @@ def piece_detail(request, jewel_code):
         context |= _scenario_prices(request, piece)
     if tab == "bom" and request.user.has_perm("accounts.manage_materials"):
         context |= _bom_context(request, piece)
+    if tab == "overview" and request.user.has_perm(EDIT_BOM):
+        context["inline"] = _inline_form(piece)
+        context["customers"] = Customer.objects.order_by("name")
     if tab == "history":
         context["bom_versions"] = piece.bom_versions.order_by("-version_no")
         context["repairs"] = RepairJob.objects.filter(piece=piece).select_related("vendor").order_by("-opened_on")
@@ -362,7 +423,7 @@ def _bom_context(request, piece):
 
     groups, breakup = [], []
     for line in lines:
-        is_metal = line.material.mat_class == MaterialClass.METAL
+        is_metal = line.material.is_metal
         sale = priced.get(line.line_no, {})
         sale_amount = sale.get("sale_amount")
         share = (Decimal(100) * (sale_amount or 0) / sale_total) if sale_total else None
@@ -506,23 +567,120 @@ def piece_scenarios(request, jewel_code):
     return render(request, "stock/piece_scenarios.html", {"piece": piece, **_scenario_prices(request, piece)})
 
 
+#: The piece's own fields that the detail screen edits in place. Jewel code is
+#: absent by design — it is the identity of a physical object. So are design
+#: name, category and collection: those belong to the *style*, and editing one
+#: here would silently retag every other piece of that design.
+INLINE_FIELDS = (
+    "style",
+    "sub_category",
+    "metal_purity",
+    "metal_colour",
+    "size_label",
+    "diamond_quality",
+    "received_on",
+    "measured_gross_wt_gm",
+    "length_mm",
+    "breadth_mm",
+    "height_mm",
+    "huid",
+    "hallmarked_on",
+    "hallmark_centre",
+)
+
+
+def _inline_form(piece):
+    """``PieceForm`` again, one field per editor on the detail screen.
+
+    Each value reads as text until its pencil is clicked; the widget rendered
+    here is what appears then. Validation is the edit screen's own rather than
+    a second copy of it.
+    """
+    form = PieceForm(instance=piece)
+    for name in INLINE_FIELDS:
+        widget = form.fields[name].widget
+        widget.attrs["class"] = f"inplace {widget.attrs.get('class', '')}".strip()
+    return form
+
+
+@login_required
+@require_POST
+def piece_field(request, jewel_code):
+    """Save one field edited in place on the detail screen."""
+    piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
+    if not request.user.has_perm(EDIT_BOM):
+        raise PermissionDenied("You are not authorised to edit this piece.")
+    field = request.POST.get("field")
+    if field not in INLINE_FIELDS:
+        raise PermissionDenied(f"{field!r} is not editable here.")
+    form = modelform_factory(Piece, form=PieceForm, fields=[field])(request.POST, instance=piece)
+    if form.is_valid():
+        form.save()
+        services.log(request.user, "UPDATE", "jewel_code", piece.pk, f"{field} edited on the detail screen")
+    else:
+        messages.error(request, "; ".join(f"{field}: {e}" for errors in form.errors.values() for e in errors))
+    return _redirect_back(request, reverse("stock:piece_detail", args=[piece.jewel_code]))
+
+
+#: ``Meera — NOR-041 — 98…`` comes back from the datalist; the code is the part
+#: that identifies anybody.
+CUSTOMER_CODE = re.compile(r"\b([A-Z]{2,5}-\d+)\b")
+
+
+def _sale_customer(request, new_name):
+    """Who the sale is against: a new record, one picked from the CRM, or nobody.
+
+    An unrecognised name is refused rather than dropped. Selling to "Meara" when
+    Meera exists is a customer record that never gets the sale attached to it,
+    and nothing on the screen would have said so.
+    """
+    if new_name:
+        return crm_services.quick_customer(new_name, request.POST.get("new_customer_phone"))
+    if request.POST.get("customer"):
+        return Customer.objects.filter(pk=request.POST["customer"]).first()
+    picked = (request.POST.get("customer_pick") or "").strip()
+    if not picked:
+        return None  # a walk-in, as the placeholder says
+    code = CUSTOMER_CODE.search(picked)
+    customer = (
+        Customer.objects.filter(customer_code=code.group(1)).first()
+        if code
+        else Customer.objects.filter(name__iexact=picked).first()
+    )
+    if customer is None:
+        raise ValidationError(
+            f"No customer matches “{picked}”. Pick one from the list, or use ＋ New customer."
+        )
+    return customer
+
+
 @login_required
 @require_POST
 def sell_piece_view(request, jewel_code):
     piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
+    new_name = (request.POST.get("new_customer_name") or "").strip()
+    try:
+        customer = _sale_customer(request, new_name)
+    except ValidationError as error:
+        messages.error(request, _message(error))
+        return redirect("stock:piece_detail", jewel_code=piece.jewel_code)
     try:
         sale = services.sell_piece(
             request.user,
             piece,
             sold_price=request.POST["sold_price"],
             discount_amt=request.POST.get("discount_amt") or 0,
-            customer_name=request.POST.get("customer_name"),
-            customer_phone=request.POST.get("customer_phone"),
+            customer=customer,
+            customer_name=customer.name if customer else request.POST.get("customer_name"),
+            customer_phone=customer.mobile if customer else request.POST.get("customer_phone"),
         )
     except (ValidationError, PermissionDenied) as error:
         messages.error(request, _message(error))
+    except KeyError:
+        messages.error(request, "A sold price is required.")
     else:
-        messages.success(request, f"{piece.jewel_code} sold for {sale.sold_price}.")
+        who = f" to {customer.name} ({customer.customer_code})" if customer else ""
+        messages.success(request, f"{piece.jewel_code} sold for {sale.sold_price}{who}.")
     return redirect("stock:piece_detail", jewel_code=piece.jewel_code)
 
 
@@ -866,7 +1024,7 @@ def piece_export(request):
     An export is where masking is most often forgotten, so it goes through
     ``piece_row`` like everything else and is logged as an EXPORT.
     """
-    pieces, _, _, _ = _filtered(request)
+    pieces, _, _ = _filtered(request)
     rows = [piece_row(request.user, piece) for piece in pieces[:5000]]
     fields = list(rows[0].keys()) if rows else ["jewel_code"]
     response = HttpResponse(content_type="text/csv")
@@ -1071,15 +1229,30 @@ def settings_view(request):
         ).order_by("code")
         context["form"] = LocationForm()
     elif tab == "mats":
+        query = (request.GET.get("q") or "").strip()
+        picked = request.GET.get("cat") or ""
         materials = Material.objects.select_related("category", "metal").annotate(
             used_on_lines=Count("bom_lines")
         )
-        query = (request.GET.get("q") or "").strip()
+        # counted off a plain queryset: the used_on_lines join would multiply a
+        # material by its BOM lines and the pills would read as nonsense
+        matching = Material.objects.all()
         if query:
-            materials = materials.filter(Q(item_code__icontains=query) | Q(item_name__icontains=query))
+            search = Q(item_code__icontains=query) | Q(item_name__icontains=query)
+            materials, matching = materials.filter(search), matching.filter(search)
+        # the pills count what the search holds, not what the table shows, so
+        # picking one never changes the other numbers under it
+        counts = {row["category_id"]: row["n"] for row in matching.values("category_id").annotate(n=Count("pk"))}
+        categories = list(MaterialCategory.objects.all())
+        for category in categories:
+            category.n, category.selected = counts.get(category.pk, 0), category.pk == picked
+        if picked:
+            materials = materials.filter(category_id=picked)
         context |= {
             "materials": materials.order_by("category__sort_order", "item_code")[:400],
-            "material_categories": MaterialCategory.objects.all(),
+            "material_categories": categories,
+            "material_total": sum(counts.values()),
+            "cat": picked,
             "q": query,
             "form": MaterialForm(),
         }
@@ -1087,14 +1260,40 @@ def settings_view(request):
         chart_id = request.GET.get("chart")
         charts = list(RateChart.objects.order_by("-is_default", "code", "-version_no"))
         chart = next((c for c in charts if str(c.pk) == chart_id), None) or next(iter(charts), None)
+        lines = (
+            list(
+                RateChartLine.objects.filter(chart=chart)
+                .select_related("material")
+                .order_by("material__item_code", "size_band")
+            )
+            if chart
+            else []
+        )
+        # the edit history each row shows is the audit log, read back by pk —
+        # a second history table would be a second thing to keep honest
+        history = {}
+        for entry in ActivityLog.objects.filter(
+            table_name="rate_chart_line", record_pk__in=[str(line.pk) for line in lines]
+        ).select_related("user"):
+            history.setdefault(entry.record_pk, []).append(entry)
+        hidden = {
+            field
+            for capability, field in ((VIEW_COST, "cost_rate"), (VIEW_SALE, "sale_rate"))
+            if not request.user.has_perm(capability)
+        }
+        for line in lines:
+            line.history = history.get(str(line.pk), [])
+            for entry in line.history:
+                # the log keeps everything; the row shows only what this reader may see
+                entry.shown = _rate_diff(
+                    {k: v for k, v in (entry.old_values or {}).items() if k not in hidden},
+                    {k: v for k, v in (entry.new_values or {}).items() if k not in hidden},
+                )
         context |= {
             "charts": charts,
             "chart": chart,
-            "lines": RateChartLine.objects.filter(chart=chart).select_related("material").order_by(
-                "material__item_code", "size_band"
-            )
-            if chart
-            else [],
+            "lines": lines,
+            "line_form": RateChartLineForm(initial={"chart": chart}) if chart else None,
             "chart_in_use": chart.lines.filter(material__bom_lines__isnull=False).exists() if chart else False,
         }
     elif tab == "scen":
@@ -1125,6 +1324,10 @@ def settings_view(request):
 def _settings_post(request, tab):
     """Category, location and material writes. Everything else is read-only here."""
     services.require(request.user, EDIT_BOM, "You cannot change reference data.")
+    if tab == "charts":
+        return _chart_line_post(request)
+    if tab == "mats" and request.FILES.get("csv"):
+        return _material_import(request)
     forms = {"cats": (CategoryForm, Category), "locs": (LocationForm, Location), "mats": (MaterialForm, Material)}
     if tab not in forms:
         raise PermissionDenied("That tab has nothing to save.")
@@ -1154,6 +1357,158 @@ def _settings_post(request, tab):
         messages.success(request, f"{row} saved.")
     else:
         messages.error(request, "; ".join(f"{field}: {error[0]}" for field, error in form.errors.items()))
+    return redirect(back)
+
+
+#: the bulk sheet's columns, in order. ``item_code`` is what an upload matches
+#: on, so the file that comes out is the file that goes back in.
+MATERIAL_COLUMNS = ["item_code", "item_name", "size", "category", "default_uom", "metal", "is_active"]
+
+
+@login_required
+@tab_required("admin")
+def material_export(request):
+    """The material register as CSV, and the template an upload comes back on.
+
+    ``?sample=1`` writes the header and five rows instead of the register — the
+    same columns either way, because a template that does not match the export
+    is a template nobody can round-trip.
+    """
+    materials = Material.objects.select_related("category", "metal").order_by("category__sort_order", "item_code")
+    query = (request.GET.get("q") or "").strip()
+    if query:
+        materials = materials.filter(Q(item_code__icontains=query) | Q(item_name__icontains=query))
+    if request.GET.get("cat"):
+        materials = materials.filter(category_id=request.GET["cat"])
+    sample = bool(request.GET.get("sample"))
+    if sample:
+        materials = materials[:5]
+
+    name = "materials-sample" if sample else "materials"
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="{name}-{timezone.localdate():%Y-%m-%d}.csv"'
+    writer = csv.writer(response)
+    writer.writerow(MATERIAL_COLUMNS)
+    rows = 0
+    for material in materials:
+        writer.writerow(
+            [
+                material.item_code,
+                material.item_name,
+                material.size or "",
+                material.category_id,
+                material.default_uom,
+                material.metal_id or "",
+                material.is_active,
+            ]
+        )
+        rows += 1
+    if sample and not rows:
+        # an empty register still has to hand back something fillable
+        writer.writerow(["DRKL", "Diamond RKL", "1.0mm", "DIAMOND", "CT", "", "True"])
+    services.log(request.user, "EXPORT", "material", name, f"{rows} rows", row_count=rows)
+    return response
+
+
+def _material_import(request):
+    """Upsert the material register from a CSV, keyed on ``item_code``.
+
+    Every row goes through ``MaterialForm``, so an upload cannot write a row the
+    Add material modal would have refused. One bad row rolls the whole file back:
+    a half-applied sheet is the state nobody can describe afterwards.
+    """
+    try:
+        rows = list(csv.DictReader(io.TextIOWrapper(request.FILES["csv"], encoding="utf-8-sig")))
+    except (UnicodeDecodeError, csv.Error):
+        messages.error(request, "That file is not readable as CSV. Export the sheet again and edit that.")
+        return redirect(f"{reverse('stock:settings')}?tab=mats")
+
+    created = updated = 0
+    errors = []
+    with transaction.atomic():
+        for number, row in enumerate(rows, start=2):  # row 1 is the header
+            code = (row.get("item_code") or "").strip()
+            if not code:
+                errors.append(f"row {number}: no item_code")
+                continue
+            existing = Material.objects.filter(item_code=code).first()
+            data = {column: (row.get(column) or "").strip() for column in MATERIAL_COLUMNS}
+            if not data["is_active"]:
+                # a blank column keeps what the row already said rather than
+                # silently retiring every material in the sheet
+                data["is_active"] = str(existing.is_active if existing else True)
+            form = MaterialForm(data, instance=existing)
+            if form.is_valid():
+                form.save()
+                updated += bool(existing)
+                created += not existing
+            else:
+                errors.append(f"row {number} ({code}): " + "; ".join(f"{f}: {e[0]}" for f, e in form.errors.items()))
+        if errors:
+            transaction.set_rollback(True)
+
+    if errors:
+        messages.error(request, f"Nothing was saved — {len(errors)} row(s) were refused. " + " · ".join(errors[:5]))
+    else:
+        services.log(
+            request.user, "IMPORT", "material", "material_import", f"{created} new, {updated} updated", row_count=len(rows)
+        )
+        messages.success(request, f"{created} material(s) added, {updated} updated.")
+    return redirect(f"{reverse('stock:settings')}?tab=mats")
+
+
+#: what a rate history entry records — the four values that can move
+RATE_FIELDS = ["size_band", "cost_rate", "sale_rate", "rate_uom"]
+
+
+def _rate_snapshot(line):
+    return {field: (str(getattr(line, field)) if getattr(line, field) not in (None, "") else None) for field in RATE_FIELDS}
+
+
+def _rate_diff(before, after):
+    """`cost_rate 100 → 120 · sale_rate 200 → 240`, or the whole row when it is new."""
+    if not before:
+        return " · ".join(f"{k} {v}" for k, v in after.items() if v is not None) or "added"
+    moved = [f"{k} {before.get(k) or '—'} → {after[k] or '—'}" for k in after if before.get(k) != after[k]]
+    return " · ".join(moved) or "no change"
+
+
+def _chart_line_post(request):
+    """Add or edit one rate. The old values go to the audit log, never over the wire back.
+
+    A locked chart refuses the write: a quote priced in March has to still
+    reconcile in September, so the fix for a wrong rate is a fork, not an edit.
+    """
+    line = get_object_or_404(RateChartLine, pk=request.POST["pk"]) if request.POST.get("pk") else None
+    # snapshot first: validating binds the posted values onto the instance
+    before = _rate_snapshot(line) if line else {}
+    # a rate this user is not allowed to see is never posted, so it is carried
+    # over rather than saved as the blank the form would otherwise receive
+    posted = request.POST.copy()
+    for capability, field in ((VIEW_COST, "cost_rate"), (VIEW_SALE, "sale_rate")):
+        if not request.user.has_perm(capability):
+            posted[field] = before.get(field) or ""
+    form = RateChartLineForm(posted, instance=line)
+    back = f"{reverse('stock:settings')}?tab=charts&chart={request.POST.get('chart') or ''}"
+    if not form.is_valid():
+        messages.error(request, "; ".join(f"{field}: {error[0]}" for field, error in form.errors.items()))
+        return redirect(back)
+    if form.cleaned_data["chart"].is_locked:
+        messages.error(request, f"{form.cleaned_data['chart']} is locked. Fork it to change a rate.")
+        return redirect(back)
+
+    row = form.save()
+    after = _rate_snapshot(row)
+    services.log(
+        request.user,
+        "UPDATE" if before else "INSERT",
+        "rate_chart_line",
+        row.pk,
+        detail=_rate_diff(before, after),
+        old_values=before or None,
+        new_values=after,
+    )
+    messages.success(request, f"{row.material.item_code} saved.")
     return redirect(back)
 
 

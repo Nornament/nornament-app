@@ -187,6 +187,22 @@ CODE_PREFIXES = {
 }
 
 
+def quick_customer(name, phone=""):
+    """A walk-in, created from the sale modal with the two things the counter has.
+
+    Everything else on a customer is optional, so the record is real and the
+    CRM's own screen fills in the rest later. Recording the sale against a
+    customer row is the point — a typed-in name on a sale is not a customer.
+    """
+    from .models import Customer
+
+    return Customer.objects.create(
+        customer_code=next_code(Customer, "customer"),
+        name=(name or "").strip(),
+        mobile=(phone or "").strip(),
+    )
+
+
 def next_code(model, kind):
     """``NOR-001``, ``ENQ-014`` … — the legacy ``gc``/``gEnq`` generators.
 

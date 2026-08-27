@@ -9,6 +9,15 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# A .env beside manage.py, for laptops. Real environment wins — in Dokploy and
+# in compose the variables are already set, and a stale file must never quietly
+# override them. Absent file, absent behaviour.
+for _line in (BASE_DIR / ".env").read_text().splitlines() if (BASE_DIR / ".env").exists() else []:
+    _line = _line.strip()
+    if _line and not _line.startswith("#") and "=" in _line:
+        _key, _value = _line.split("=", 1)
+        os.environ.setdefault(_key.strip(), _value.strip())
+
 
 def env(key, default=None, required=False):
     value = os.environ.get(key, default)
@@ -183,6 +192,12 @@ MEDIA_PRESIGN_TTL = int(env("MEDIA_PRESIGN_TTL", "900"))
 # Phase 0 smoke test decides this: if a browser PUT to Contabo fails CORS the
 # upload proxies through Django instead. One flag, no redesign.
 MEDIA_DIRECT_UPLOAD = env_bool("MEDIA_DIRECT_UPLOAD", True)
+# Photos are re-encoded to WebP — on upload, and by ``manage.py media_to_webp``
+# for everything already in the bucket. Quality is a judgement about jewellery
+# on a showroom screen, so it is a knob rather than a constant; 0 turns the
+# upload-time conversion off entirely and leaves the backfill available.
+MEDIA_WEBP_QUALITY = int(env("MEDIA_WEBP_QUALITY", "82"))
+MEDIA_WEBP_ON_UPLOAD = env_bool("MEDIA_WEBP_ON_UPLOAD", True)
 
 LOGGING = {
     "version": 1,
