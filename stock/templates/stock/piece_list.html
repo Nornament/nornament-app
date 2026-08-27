@@ -39,15 +39,6 @@ own; the legacy searched from the top bar instead.{% endcomment %}
     </div>
   </div>
   {% endif %}
-  <div class="fsummary">
-    <span><b>{{ total }}</b> piece{{ total|pluralize }}{% if active_filters %} · {{ active_filters }} filter{{ active_filters|pluralize }} on{% endif %}</span>
-    <button class="btn sm" type="submit">Search</button>
-    {% if active_filters or unpriced_only or q %}<a class="btn sm" href="{% url 'stock:piece_list' %}">Clear all</a>{% endif %}
-    <a class="btn sm" href="{% url 'stock:piece_export' %}?{{ filter_qs }}">Export CSV</a>
-    {% if unpriced_only %}<span class="chip c-ser">showing unpriced only</span>{% endif %}
-    <span style="margin-left:auto">Location and status are separate questions, so they filter together —
-      <b>Mumbai + On approval</b> is a valid ask.</span>
-  </div>
 </form>
 {% if pins %}
 <div class="masonry">

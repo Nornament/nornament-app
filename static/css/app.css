@@ -341,8 +341,6 @@ input.inplace,select.inplace{width:auto;min-width:110px;max-width:230px;padding:
 .livepill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;
   font-size:11px;font-weight:600;background:var(--brand-soft);color:var(--brand);
   border:1px solid var(--brand)}
-.fsummary{display:flex;align-items:center;gap:12px;margin-top:12px;font-size:13px;color:var(--muted)}
-.fsummary b{color:var(--ink)}
 
 /* ---------- pinterest / masonry grid ---------- */
 .masonry{columns:4;column-gap:16px}

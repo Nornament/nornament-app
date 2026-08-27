@@ -259,10 +259,6 @@ def piece_list(request):
                 [(index, band[0]) for index, band in enumerate(PRICE_BANDS)], "price", picked, query
             ),
             "picked": picked,
-            "active_filters": sum(len(picked[key]) for key in FILTER_KEYS),
-            "unpriced_only": bool(request.GET.get("unpriced")),
-            "filter_qs": _filter_qs(query, picked),
-            "total": len(pieces) if isinstance(pieces, list) else pieces.count(),
         },
     )
 
@@ -1231,15 +1227,30 @@ def settings_view(request):
         ).order_by("code")
         context["form"] = LocationForm()
     elif tab == "mats":
+        query = (request.GET.get("q") or "").strip()
+        picked = request.GET.get("cat") or ""
         materials = Material.objects.select_related("category", "metal").annotate(
             used_on_lines=Count("bom_lines")
         )
-        query = (request.GET.get("q") or "").strip()
+        # counted off a plain queryset: the used_on_lines join would multiply a
+        # material by its BOM lines and the pills would read as nonsense
+        matching = Material.objects.all()
         if query:
-            materials = materials.filter(Q(item_code__icontains=query) | Q(item_name__icontains=query))
+            search = Q(item_code__icontains=query) | Q(item_name__icontains=query)
+            materials, matching = materials.filter(search), matching.filter(search)
+        # the pills count what the search holds, not what the table shows, so
+        # picking one never changes the other numbers under it
+        counts = {row["category_id"]: row["n"] for row in matching.values("category_id").annotate(n=Count("pk"))}
+        categories = list(MaterialCategory.objects.all())
+        for category in categories:
+            category.n, category.selected = counts.get(category.pk, 0), category.pk == picked
+        if picked:
+            materials = materials.filter(category_id=picked)
         context |= {
             "materials": materials.order_by("category__sort_order", "item_code")[:400],
-            "material_categories": MaterialCategory.objects.all(),
+            "material_categories": categories,
+            "material_total": sum(counts.values()),
+            "cat": picked,
             "q": query,
             "form": MaterialForm(),
         }

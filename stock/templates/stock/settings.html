@@ -64,9 +64,23 @@
     <div><h3>Materials</h3><p class="hint" style="margin:0;max-width:76ch">Every item code that has
       appeared on a bill of materials. A code arriving from an import lands in <b>Other Materials</b>
       and is flagged — never guessed into a category that would change how it prices.</p></div>
-    <form method="get" class="row"><input type="hidden" name="tab" value="mats">
-      <input type="search" name="q" value="{{ q }}" placeholder="Code or description" style="max-width:240px">
-      <button class="btn sm">Search</button></form>
+    <div class="row">
+      <form method="get" class="row"><input type="hidden" name="tab" value="mats">
+        <input type="hidden" name="cat" value="{{ cat }}">
+        <input type="search" name="q" value="{{ q }}" placeholder="Code or description" style="max-width:240px">
+        <button class="btn sm">Search</button></form>
+      {% if caps.edit_bom %}
+      <button type="button" class="btn primary" onclick="document.getElementById('matdlg').showModal()">+ Add material</button>
+      {% endif %}
+    </div>
+  </div>
+  <div class="fchips" style="margin-top:12px">
+    <a class="fchip" aria-pressed="{% if not cat %}true{% else %}false{% endif %}"
+       href="?tab=mats&amp;q={{ q|urlencode }}">All <b>{{ material_total }}</b></a>
+    {% for category in material_categories %}
+    <a class="fchip" aria-pressed="{% if category.selected %}true{% else %}false{% endif %}"
+       href="?tab=mats&amp;q={{ q|urlencode }}{% if not category.selected %}&amp;cat={{ category.pk|urlencode }}{% endif %}">{{ category.name }} <b>{{ category.n }}</b></a>
+    {% endfor %}
   </div>
   <table style="margin-top:12px"><thead><tr><th style="width:120px">Code</th><th>Description</th>
     <th style="width:96px">Size</th><th style="width:150px">Category</th><th style="width:64px">Unit</th>
@@ -78,15 +92,28 @@
       <td class="num">{{ row.used_on_lines }}</td></tr>
     {% empty %}<tr><td colspan="6"><div class="empty">No materials match.</div></td></tr>{% endfor %}
   </tbody></table>
-  {% if caps.edit_bom %}
-  <form method="post" class="row" style="margin-top:14px">{% csrf_token %}
-    {% for field in form %}<div>{{ field.label_tag }}{{ field }}</div>{% endfor %}
-    <div class="tight"><button class="btn primary">Add material</button></div>
-  </form>
-  {% endif %}
   <div class="note">The <b>code</b> is what a bill of materials points at, so changing it moves every
-    line that uses it. Description and size are free text.</div>
+    line that uses it. Description and size are free text. The table stops at 400 rows — the pill
+    counts above are of everything the search matched, so narrow it rather than scroll.</div>
 </div>
+
+{% if caps.edit_bom %}
+<dialog class="modal" id="matdlg">
+  <form method="post">{% csrf_token %}
+    <header><h3>Add a material</h3>
+      <p>A code here is what a bill of materials will point at. A metal material has to say which
+        metal — the table refuses the row otherwise.</p></header>
+    <div class="content">
+      {% for field in form %}<div class="field">{{ field.label_tag }}{{ field }}
+        {% if field.help_text %}<div class="hint">{{ field.help_text }}</div>{% endif %}</div>{% endfor %}
+    </div>
+    <footer>
+      <button class="btn" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn primary">Add material</button>
+    </footer>
+  </form>
+</dialog>
+{% endif %}
 
 {% elif tab == 'charts' %}
 <div class="card">

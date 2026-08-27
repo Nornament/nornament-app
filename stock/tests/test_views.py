@@ -236,3 +236,19 @@ def test_a_typed_customer_nobody_recognises_stops_the_sale(client, admin_user_, 
     assert not Sale.objects.filter(piece=received_piece).exists()
     received_piece.refresh_from_db()
     assert received_piece.stock_state != "SOLD"
+
+
+def test_the_category_pills_count_the_search_and_filter_the_table(client, admin_user_, materials):
+    """A pill counts what the search matched; picking one narrows only the table."""
+    client.force_login(admin_user_)
+    url = reverse("stock:settings")
+    page = client.get(url, {"tab": "mats"}).content.decode()
+    assert "Diamond <b>1</b>" in page and "All <b>3</b>" in page
+    assert 'id="matdlg"' in page and "+ Add material" in page  # the add form is a modal now
+
+    filtered = client.get(url, {"tab": "mats", "cat": "DIAMOND"}).content.decode()
+    assert "DRKL" in filtered and "MAKING" not in filtered
+    assert "All <b>3</b>" in filtered  # the counts are of the search, not of the filtered table
+
+    searched = client.get(url, {"tab": "mats", "q": "Gold"}).content.decode()
+    assert "Metal <b>1</b>" in searched and "Diamond <b>0</b>" in searched
