@@ -24,7 +24,6 @@ from .enums import (
     COUNTABLE_STATES,
     DesignState,
     LocationKind,
-    MaterialClass,
     MediaKind,
     MovementType,
     StockState,
@@ -208,7 +207,6 @@ class Material(AppModel):
     item_name = models.CharField(max_length=160)
     description = models.TextField(blank=True, null=True)
     size = models.CharField(max_length=64, blank=True, null=True)
-    mat_class = models.CharField(max_length=20, choices=MaterialClass.choices)
     category = models.ForeignKey(
         MaterialCategory, on_delete=models.PROTECT, db_column="category", related_name="materials"
     )
@@ -225,10 +223,21 @@ class Material(AppModel):
         ordering = ["item_code"]
         constraints = [
             models.CheckConstraint(
-                condition=~Q(mat_class=MaterialClass.METAL) | Q(metal__isnull=False),
+                condition=~Q(category="METAL") | Q(metal__isnull=False),
                 name="material_metal_required",
             )
         ]
+
+    # ``mat_class`` was a second copy of the category that could disagree with
+    # it; the category is the single answer now, and these are the two
+    # questions costing actually asks of it.
+    @property
+    def is_metal(self):
+        return self.category_id == "METAL"
+
+    @property
+    def is_labour(self):
+        return self.category_id == "LABOUR"
 
     def __str__(self):
         return f"{self.item_code} — {self.item_name}"

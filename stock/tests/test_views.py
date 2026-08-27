@@ -2,9 +2,11 @@
 from decimal import Decimal
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
 from stock import services
+from stock.models import Material
 
 pytestmark = pytest.mark.django_db
 
@@ -252,3 +254,32 @@ def test_the_category_pills_count_the_search_and_filter_the_table(client, admin_
 
     searched = client.get(url, {"tab": "mats", "q": "Gold"}).content.decode()
     assert "Metal <b>1</b>" in searched and "Diamond <b>0</b>" in searched
+
+
+def test_the_material_csv_round_trips_and_one_bad_row_saves_nothing(client, admin_user_, materials):
+    """The export is the upload template, and a refused row rolls the file back."""
+    client.force_login(admin_user_)
+    sheet = client.get(reverse("stock:material_export")).content.decode()
+    assert sheet.splitlines()[0] == "item_code,item_name,size,category,default_uom,metal,is_active"
+    assert "DRKL" in sheet
+
+    edited = sheet.replace("Diamond RKL", "Diamond RKL edited") + "NEWCODE,New stone,,DIAMOND,CT,,True\n"
+    client.post(
+        reverse("stock:settings") + "?tab=mats",
+        {"csv": SimpleUploadedFile("materials.csv", edited.encode(), content_type="text/csv")},
+    )
+    assert Material.objects.get(item_code="DRKL").item_name == "Diamond RKL edited"
+    assert Material.objects.filter(item_code="NEWCODE").exists()
+
+    # a metal row with no metal is what the table itself refuses — and it takes
+    # the good row on the line above it down with it
+    bad = "item_code,item_name,size,category,default_uom,metal,is_active\n" \
+          "DRKL,Renamed again,,DIAMOND,CT,,True\nBADGOLD,Gold bar,,METAL,GM,,True\n"
+    response = client.post(
+        reverse("stock:settings") + "?tab=mats",
+        {"csv": SimpleUploadedFile("materials.csv", bad.encode(), content_type="text/csv")},
+        follow=True,
+    )
+    assert not Material.objects.filter(item_code="BADGOLD").exists()
+    assert Material.objects.get(item_code="DRKL").item_name == "Diamond RKL edited"  # rolled back
+    assert "Nothing was saved" in response.content.decode()

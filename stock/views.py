@@ -8,6 +8,7 @@ HTMX carries the live bits — search, the scan flow, inline rate edits — by
 returning the same partials the full page renders.
 """
 import csv
+import io
 import re
 from decimal import Decimal
 from functools import wraps
@@ -17,6 +18,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -34,7 +36,7 @@ from mediahub import services as media_services
 from mediahub.models import MediaAsset
 
 from . import services
-from .enums import BomChangeReason, COUNTABLE_STATES, MaterialClass, MovementType, StockState, TERMINAL_STATES, Uom
+from .enums import BomChangeReason, COUNTABLE_STATES, MovementType, StockState, TERMINAL_STATES, Uom
 from .forms import (
     BomLineFormSet,
     CategoryForm,
@@ -421,7 +423,7 @@ def _bom_context(request, piece):
 
     groups, breakup = [], []
     for line in lines:
-        is_metal = line.material.mat_class == MaterialClass.METAL
+        is_metal = line.material.is_metal
         sale = priced.get(line.line_no, {})
         sale_amount = sale.get("sale_amount")
         share = (Decimal(100) * (sale_amount or 0) / sale_total) if sale_total else None
@@ -1324,6 +1326,8 @@ def _settings_post(request, tab):
     services.require(request.user, EDIT_BOM, "You cannot change reference data.")
     if tab == "charts":
         return _chart_line_post(request)
+    if tab == "mats" and request.FILES.get("csv"):
+        return _material_import(request)
     forms = {"cats": (CategoryForm, Category), "locs": (LocationForm, Location), "mats": (MaterialForm, Material)}
     if tab not in forms:
         raise PermissionDenied("That tab has nothing to save.")
@@ -1354,6 +1358,103 @@ def _settings_post(request, tab):
     else:
         messages.error(request, "; ".join(f"{field}: {error[0]}" for field, error in form.errors.items()))
     return redirect(back)
+
+
+#: the bulk sheet's columns, in order. ``item_code`` is what an upload matches
+#: on, so the file that comes out is the file that goes back in.
+MATERIAL_COLUMNS = ["item_code", "item_name", "size", "category", "default_uom", "metal", "is_active"]
+
+
+@login_required
+@tab_required("admin")
+def material_export(request):
+    """The material register as CSV, and the template an upload comes back on.
+
+    ``?sample=1`` writes the header and five rows instead of the register — the
+    same columns either way, because a template that does not match the export
+    is a template nobody can round-trip.
+    """
+    materials = Material.objects.select_related("category", "metal").order_by("category__sort_order", "item_code")
+    query = (request.GET.get("q") or "").strip()
+    if query:
+        materials = materials.filter(Q(item_code__icontains=query) | Q(item_name__icontains=query))
+    if request.GET.get("cat"):
+        materials = materials.filter(category_id=request.GET["cat"])
+    sample = bool(request.GET.get("sample"))
+    if sample:
+        materials = materials[:5]
+
+    name = "materials-sample" if sample else "materials"
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="{name}-{timezone.localdate():%Y-%m-%d}.csv"'
+    writer = csv.writer(response)
+    writer.writerow(MATERIAL_COLUMNS)
+    rows = 0
+    for material in materials:
+        writer.writerow(
+            [
+                material.item_code,
+                material.item_name,
+                material.size or "",
+                material.category_id,
+                material.default_uom,
+                material.metal_id or "",
+                material.is_active,
+            ]
+        )
+        rows += 1
+    if sample and not rows:
+        # an empty register still has to hand back something fillable
+        writer.writerow(["DRKL", "Diamond RKL", "1.0mm", "DIAMOND", "CT", "", "True"])
+    services.log(request.user, "EXPORT", "material", name, f"{rows} rows", row_count=rows)
+    return response
+
+
+def _material_import(request):
+    """Upsert the material register from a CSV, keyed on ``item_code``.
+
+    Every row goes through ``MaterialForm``, so an upload cannot write a row the
+    Add material modal would have refused. One bad row rolls the whole file back:
+    a half-applied sheet is the state nobody can describe afterwards.
+    """
+    try:
+        rows = list(csv.DictReader(io.TextIOWrapper(request.FILES["csv"], encoding="utf-8-sig")))
+    except (UnicodeDecodeError, csv.Error):
+        messages.error(request, "That file is not readable as CSV. Export the sheet again and edit that.")
+        return redirect(f"{reverse('stock:settings')}?tab=mats")
+
+    created = updated = 0
+    errors = []
+    with transaction.atomic():
+        for number, row in enumerate(rows, start=2):  # row 1 is the header
+            code = (row.get("item_code") or "").strip()
+            if not code:
+                errors.append(f"row {number}: no item_code")
+                continue
+            existing = Material.objects.filter(item_code=code).first()
+            data = {column: (row.get(column) or "").strip() for column in MATERIAL_COLUMNS}
+            if not data["is_active"]:
+                # a blank column keeps what the row already said rather than
+                # silently retiring every material in the sheet
+                data["is_active"] = str(existing.is_active if existing else True)
+            form = MaterialForm(data, instance=existing)
+            if form.is_valid():
+                form.save()
+                updated += bool(existing)
+                created += not existing
+            else:
+                errors.append(f"row {number} ({code}): " + "; ".join(f"{f}: {e[0]}" for f, e in form.errors.items()))
+        if errors:
+            transaction.set_rollback(True)
+
+    if errors:
+        messages.error(request, f"Nothing was saved — {len(errors)} row(s) were refused. " + " · ".join(errors[:5]))
+    else:
+        services.log(
+            request.user, "IMPORT", "material", "material_import", f"{created} new, {updated} updated", row_count=len(rows)
+        )
+        messages.success(request, f"{created} material(s) added, {updated} updated.")
+    return redirect(f"{reverse('stock:settings')}?tab=mats")
 
 
 #: what a rate history entry records — the four values that can move

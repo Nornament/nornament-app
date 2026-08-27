@@ -2,7 +2,7 @@
 <table style="margin-top:12px">
   <thead><tr>
     <th style="width:120px">Code</th><th>Description</th><th style="width:96px">Size</th><th style="width:150px">Category</th>
-    <th style="width:110px">Class</th><th style="width:64px">Unit</th><th style="width:80px">Metal</th>
+    <th style="width:64px">Unit</th><th style="width:80px">Metal</th>
     <th class="num" style="width:74px">Used on</th><th style="width:90px"></th>
   </tr></thead><tbody>
   {% for material in materials %}
@@ -11,12 +11,11 @@
     <td>{{ material.item_name }}{% if material.description %}<div class="dim" style="font-size:11.5px">{{ material.description }}</div>{% endif %}</td>
     <td class="dim mono" style="font-size:12px">{{ material.size|default:"—" }}</td>
     <td>{{ material.category.name }}</td>
-    <td class="dim" style="font-size:12px">{{ material.mat_class }}</td>
     <td class="dim">{{ material.default_uom }}</td>
     <td class="dim">{{ material.metal_id|default:"—" }}</td>
     <td class="num">{{ material.used_on_lines }}</td>
     <td>{% if material.needs_review %}<span class="chip c-warn">needs review</span>{% endif %}</td>
   </tr>
-  {% empty %}<tr><td colspan="9"><div class="empty">No materials match.</div></td></tr>{% endfor %}
+  {% empty %}<tr><td colspan="8"><div class="empty">No materials match.</div></td></tr>{% endfor %}
   </tbody>
 </table>

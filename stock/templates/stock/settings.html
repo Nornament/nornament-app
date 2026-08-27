@@ -70,6 +70,7 @@
         <input type="search" name="q" value="{{ q }}" placeholder="Code or description" style="max-width:240px">
         <button class="btn sm">Search</button></form>
       {% if caps.edit_bom %}
+      <button type="button" class="btn" onclick="document.getElementById('matbulkdlg').showModal()">⇅ Bulk CSV</button>
       <button type="button" class="btn primary" onclick="document.getElementById('matdlg').showModal()">+ Add material</button>
       {% endif %}
     </div>
@@ -98,6 +99,30 @@
 </div>
 
 {% if caps.edit_bom %}
+<dialog class="modal" id="matbulkdlg">
+  <form method="post" enctype="multipart/form-data">{% csrf_token %}
+    <header><h3>Bulk import / export</h3>
+      <p>The export and the upload are the same columns in the same order, so the file you take out
+        is the file you edit and put back.</p></header>
+    <div class="content">
+      <div class="row" style="margin-bottom:14px">
+        <a class="btn" href="{% url 'stock:material_export' %}?q={{ q|urlencode }}&amp;cat={{ cat|urlencode }}">⇩ Export {% if q or cat %}these{% else %}all{% endif %} ({{ material_total }})</a>
+        <a class="btn" href="{% url 'stock:material_export' %}?sample=1">⇩ Sample CSV</a>
+      </div>
+      <div class="field"><label class="f" for="csv">CSV to upload</label>
+        <input id="csv" type="file" name="csv" accept=".csv,text/csv" required></div>
+    </div>
+    <footer>
+      <button class="btn" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn primary">Upload</button>
+    </footer>
+  </form>
+</dialog>
+<div class="note" style="margin-bottom:14px"><b>item_code</b> is the key: a code already in the register
+  is updated, a new one is added. One row the Add material modal would have refused rolls the whole
+  file back — nothing is half-applied. The download is stamped with today's date so two edits of the
+  same sheet do not overwrite each other in a downloads folder.</div>
+
 <dialog class="modal" id="matdlg">
   <form method="post">{% csrf_token %}
     <header><h3>Add a material</h3>

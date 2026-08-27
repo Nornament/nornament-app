@@ -48,8 +48,8 @@ class MaterialCategoryAdmin(admin.ModelAdmin):
 
 @admin.register(models.Material)
 class MaterialAdmin(admin.ModelAdmin):
-    list_display = ("item_code", "item_name", "category", "mat_class", "default_uom", "metal", "needs_review")
-    list_filter = ("category", "mat_class", "needs_review", "is_active")
+    list_display = ("item_code", "item_name", "category", "default_uom", "metal", "needs_review")
+    list_filter = ("category", "needs_review", "is_active")
     search_fields = ("item_code", "item_name", "description")
 
 

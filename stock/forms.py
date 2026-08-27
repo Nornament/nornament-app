@@ -12,7 +12,7 @@ ledger honest.
 from django import forms
 from django.utils import timezone
 
-from .enums import MaterialClass, Uom
+from .enums import Uom
 from .models import (
     Category,
     Collection,
@@ -232,12 +232,11 @@ class LocationForm(forms.ModelForm):
 class MaterialForm(forms.ModelForm):
     class Meta:
         model = Material
-        fields = ["item_code", "item_name", "size", "mat_class", "category", "default_uom", "metal", "is_active"]
+        fields = ["item_code", "item_name", "size", "category", "default_uom", "metal", "is_active"]
         labels = {
             "item_code": "Code",
             "item_name": "Description",
             "size": "Size",
-            "mat_class": "Class",
             "category": "Category",
             "default_uom": "Unit",
             "metal": "Metal",
@@ -253,9 +252,10 @@ class MaterialForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        # the table's own check constraint: a METAL material without a metal is
-        # a row the database refuses, so say so here rather than 500 later
-        if cleaned.get("mat_class") == MaterialClass.METAL and not cleaned.get("metal"):
+        # the table's own check constraint: a material in the METAL category
+        # without a metal is a row the database refuses, so say so here rather
+        # than 500 later
+        if cleaned.get("category") and cleaned["category"].pk == "METAL" and not cleaned.get("metal"):
             self.add_error("metal", "A metal material has to say which metal.")
         return cleaned
 
@@ -324,6 +324,6 @@ class RateChartLineForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["material"].queryset = Material.objects.exclude(mat_class=MaterialClass.METAL).order_by(
+        self.fields["material"].queryset = Material.objects.exclude(category="METAL").order_by(
             "item_code"
         )
