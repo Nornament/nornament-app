@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "nornament",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "DJANGO_SECRET_KEY=dev-only-insecure-key DJANGO_DEBUG=1 DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1 POSTGRES_DB=nornament POSTGRES_USER=nornament POSTGRES_PASSWORD=nornament POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=5432 LEGACY_DB_NAME=legacy exec .venv/bin/python manage.py runserver 127.0.0.1:8000"
+      ],
+      "port": 8000
+    }
+  ]
+}
