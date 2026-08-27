@@ -5,6 +5,7 @@ Phase 0 CORS smoke test fails, the flag flips and :func:`proxy_upload` takes the
 bytes through Django instead — a view change, not a redesign.
 """
 import json
+import logging
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, permission_required
@@ -14,10 +15,12 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from stock.models import Piece, Style
-from . import storage
+from . import services, storage
 from .models import MediaAsset
 
 CRM_SCOPES = {"customer", "order", "enquiry", "repair", "client_material"}
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_owner(scope, entity_id):
@@ -80,6 +83,21 @@ def presign(request):
     return JsonResponse(body)
 
 
+def _shrink(asset, data=None):
+    """Re-encode to WebP once the object is known to be there.
+
+    Best effort by design: the upload has already succeeded and been confirmed
+    by this point, so a conversion that fails leaves the original photo intact
+    and the row pointing at it. ``manage.py media_to_webp`` picks it up later.
+    """
+    if not settings.MEDIA_WEBP_ON_UPLOAD:
+        return
+    try:
+        services.to_webp(asset, data)
+    except Exception:  # noqa: BLE001 — a smaller file is never worth losing an upload over
+        logger.exception("webp conversion failed for media %s", asset.pk)
+
+
 @login_required
 @require_POST
 def confirm(request):
@@ -97,7 +115,10 @@ def confirm(request):
     asset.sha256 = payload.get("sha256", asset.sha256)
     asset.confirmed_at = timezone.now()
     asset.save(update_fields=["bytes", "file_size_kb", "sha256", "confirmed_at"])
-    return JsonResponse({"ok": True, "media_id": asset.pk, "media_ref": asset.media_ref})
+    _shrink(asset)
+    return JsonResponse(
+        {"ok": True, "media_id": asset.pk, "media_ref": asset.media_ref, "bytes": asset.bytes}
+    )
 
 
 @login_required
@@ -118,7 +139,8 @@ def proxy_upload(request):
     asset.sha256 = storage.sha256_of(data)
     asset.confirmed_at = timezone.now()
     asset.save(update_fields=["bytes", "file_size_kb", "sha256", "confirmed_at"])
-    return JsonResponse({"ok": True, "media_id": asset.pk})
+    _shrink(asset, data)
+    return JsonResponse({"ok": True, "media_id": asset.pk, "bytes": asset.bytes})
 
 
 @login_required

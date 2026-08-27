@@ -20,6 +20,7 @@ from .models import (
     Material,
     MaterialCategory,
     Piece,
+    RateChartLine,
     Scenario,
     Style,
     Vendor,
@@ -97,13 +98,20 @@ class PieceForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["style"].queryset = Style.objects.filter(is_active=True).select_related("category")
-        self.fields["style"].label_from_instance = lambda s: f"{s.style_code} — {s.name or ''}".strip(" —")
-        self.fields["location"].queryset = Location.objects.filter(is_active=True)
-        self.fields["vendor"].queryset = Vendor.objects.filter(is_active=True)
-        self.fields["scenario"].queryset = Scenario.objects.all()
-        self.fields["location"].required = True
-        if self.instance.pk:
+        # ``modelform_factory`` narrows this form to one field for the inline
+        # editors on the detail screen, so every touch here has to survive the
+        # field simply not being present.
+        if "style" in self.fields:
+            self.fields["style"].queryset = Style.objects.filter(is_active=True).select_related("category")
+            self.fields["style"].label_from_instance = lambda s: f"{s.style_code} — {s.name or ''}".strip(" —")
+        if "location" in self.fields:
+            self.fields["location"].queryset = Location.objects.filter(is_active=True)
+            self.fields["location"].required = True
+        if "vendor" in self.fields:
+            self.fields["vendor"].queryset = Vendor.objects.filter(is_active=True)
+        if "scenario" in self.fields:
+            self.fields["scenario"].queryset = Scenario.objects.all()
+        if self.instance.pk and "jewel_code" in self.fields:
             # the identity of a physical object, not a label on a record
             self.fields["jewel_code"].disabled = True
             self.fields["jewel_code"].help_text = "Cannot be changed."
@@ -294,3 +302,28 @@ class StyleForm(forms.ModelForm):
         self.fields["collection"].queryset = Collection.objects.all()
         if self.instance.pk:
             self.fields["style_code"].disabled = True
+
+
+class RateChartLineForm(forms.ModelForm):
+    """One rate on a chart. Metal is not offered: it prices from its live rate."""
+
+    class Meta:
+        model = RateChartLine
+        fields = ["chart", "material", "size_band", "cost_rate", "sale_rate", "rate_uom"]
+        labels = {
+            "material": "Material *",
+            "size_band": "Size",
+            "cost_rate": "Cost rate",
+            "sale_rate": "Sale rate",
+            "rate_uom": "Unit",
+        }
+        widgets = {
+            "chart": forms.HiddenInput(),
+            "rate_uom": forms.Select(choices=[("", "—")] + Uom.choices),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["material"].queryset = Material.objects.exclude(mat_class=MaterialClass.METAL).order_by(
+            "item_code"
+        )

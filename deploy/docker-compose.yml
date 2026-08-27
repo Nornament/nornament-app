@@ -40,6 +40,8 @@ services:
       MEDIA_ACCESS_KEY: ${MEDIA_ACCESS_KEY}
       MEDIA_SECRET_KEY: ${MEDIA_SECRET_KEY}
       MEDIA_DIRECT_UPLOAD: ${MEDIA_DIRECT_UPLOAD:-true}
+      MEDIA_WEBP_QUALITY: ${MEDIA_WEBP_QUALITY:-82}
+      MEDIA_WEBP_ON_UPLOAD: ${MEDIA_WEBP_ON_UPLOAD:-true}
       # Set these three only while migrating: each deploy then restores the
       # dump from BACKUP_BUCKET and re-runs load_legacy. Remove at cutover.
       BACKUP_BUCKET: ${BACKUP_BUCKET}

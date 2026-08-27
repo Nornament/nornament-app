@@ -97,7 +97,26 @@ python manage.py import_logins logins.csv
 python manage.py import_device_backup backups/*.json
 python manage.py push_inline_media      # CRM photos -> the bucket
 python manage.py audit_media            # and prove none went missing
+python manage.py media_to_webp --dry-run  # what is still JPEG/PNG
+python manage.py media_to_webp          # re-encode it, and repoint the rows
 ```
+
+### WebP
+
+New uploads are re-encoded to WebP as they are confirmed, so this is only for
+what was in the bucket before that existed. `media_to_webp` walks every row
+still marked JPEG, PNG, TIFF or BMP, writes a `.webp` object beside the
+original and repoints the row at it. Set `MEDIA_WEBP_QUALITY` (default 82) to
+trade size against how the photographs look on a showroom screen; anything with
+transparency is encoded losslessly regardless, and any conversion that comes out
+no smaller than its original is dropped.
+
+**The original object is left in the bucket.** Only the row moves, so a
+conversion you dislike is undone by pointing `storage_key` back and nothing a
+`--dry-run` did not warn you about is destroyed. Stopping and re-running is
+safe: a converted row says `image/webp` and is skipped next pass. Setting
+`MEDIA_WEBP_ON_UPLOAD=false` turns off the upload-time half and leaves this
+command available.
 
 **Run `push_inline_media` after every `load_legacy`.** The stock app kept its
 media in R2 and `app.media_asset` points at the keys, so those come across as

@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Pieces · Nornament{% endblock %}
 {% block content %}
+{% comment %}The legacy filter bar: category, location, status, price — two
+chips in a row are an or, two rows are an and. The search box is this port's
+own; the legacy searched from the top bar instead.{% endcomment %}
 <form class="filterbar" method="get" action="{% url 'stock:piece_list' %}">
-  {% for value in selected_states %}<input type="hidden" name="state" value="{{ value }}">{% endfor %}
-  {% for value in selected_locations %}<input type="hidden" name="location" value="{{ value }}">{% endfor %}
+  {% for key, values in picked.items %}{% for value in values %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}{% endfor %}
   <div class="frow">
     <label class="flabel" for="q">Search</label>
     <input id="q" type="search" name="q" value="{{ q }}" placeholder="Jewel code, style, HUID"
@@ -12,9 +14,9 @@
            hx-include="closest form">
   </div>
   <div class="frow">
-    <div class="flabel">Status</div>
+    <div class="flabel">Category</div>
     <div class="fchips">
-      {% for chip in state_chips %}<a class="fchip" aria-pressed="{% if chip.active %}true{% else %}false{% endif %}" href="{% url 'stock:piece_list' %}?{{ chip.qs }}">{{ chip.label }}</a>{% endfor %}
+      {% for chip in category_chips %}<a class="fchip" aria-pressed="{% if chip.active %}true{% else %}false{% endif %}" href="{% url 'stock:piece_list' %}?{{ chip.qs }}">{{ chip.label }}</a>{% endfor %}
     </div>
   </div>
   <div class="frow">
@@ -23,11 +25,26 @@
       {% for chip in location_chips %}<a class="fchip" aria-pressed="{% if chip.active %}true{% else %}false{% endif %}" href="{% url 'stock:piece_list' %}?{{ chip.qs }}">{{ chip.label }}</a>{% endfor %}
     </div>
   </div>
+  <div class="frow">
+    <div class="flabel">Status</div>
+    <div class="fchips">
+      {% for chip in state_chips %}<a class="fchip" aria-pressed="{% if chip.active %}true{% else %}false{% endif %}" href="{% url 'stock:piece_list' %}?{{ chip.qs }}">{{ chip.label }}</a>{% endfor %}
+    </div>
+  </div>
+  {% if caps.view_sale %}
+  <div class="frow">
+    <div class="flabel">Price</div>
+    <div class="fchips">
+      {% for chip in price_chips %}<a class="fchip" aria-pressed="{% if chip.active %}true{% else %}false{% endif %}" href="{% url 'stock:piece_list' %}?{{ chip.qs }}">{{ chip.label }}</a>{% endfor %}
+    </div>
+  </div>
+  {% endif %}
   <div class="fsummary">
-    <span><b>{{ total }}</b> piece{{ total|pluralize }}</span>
+    <span><b>{{ total }}</b> piece{{ total|pluralize }}{% if active_filters %} · {{ active_filters }} filter{{ active_filters|pluralize }} on{% endif %}</span>
     <button class="btn sm" type="submit">Search</button>
-    <a class="btn sm" href="{% url 'stock:piece_list' %}">Clear all</a>
+    {% if active_filters or unpriced_only or q %}<a class="btn sm" href="{% url 'stock:piece_list' %}">Clear all</a>{% endif %}
     <a class="btn sm" href="{% url 'stock:piece_export' %}?{{ filter_qs }}">Export CSV</a>
+    {% if unpriced_only %}<span class="chip c-ser">showing unpriced only</span>{% endif %}
     <span style="margin-left:auto">Location and status are separate questions, so they filter together —
       <b>Mumbai + On approval</b> is a valid ask.</span>
   </div>

@@ -299,8 +299,19 @@ label.f{display:block;font-size:12px;color:var(--ink-2);margin:0 0 5px;font-weig
   text-transform:uppercase;letter-spacing:.06em}
 .editable{cursor:text;border-bottom:1px dashed var(--rule);padding-bottom:1px}
 .editable:hover,.editable:focus{border-bottom-color:var(--brand);outline:none}
-.editable .pen{opacity:0;margin-left:7px;font-size:11px;color:var(--brand)}
-.editable:hover .pen,.editable:focus .pen{opacity:1}
+.editable .pen{opacity:0;margin-left:7px;font-size:11px;color:var(--brand);
+  border:0;background:none;padding:0 2px;cursor:pointer;transition:opacity .12s}
+.editable:hover .pen,.editable:focus .pen,.editable .pen:focus-visible{opacity:1}
+/* the field itself only exists once the pencil is clicked */
+.editable form{display:none}
+.editable.editing{border-bottom-color:transparent;cursor:default}
+.editable.editing .shown{display:none}
+.editable.editing form{display:inline-flex;align-items:center;gap:5px}
+.pbtn{border:1px solid var(--line);background:var(--surface);color:var(--ink-2);
+  border-radius:6px;padding:2px 7px;font-size:12px;line-height:1.5;cursor:pointer}
+.pbtn:hover{border-color:var(--brand);color:var(--ink)}
+.pbtn.ok{border-color:color-mix(in srgb,var(--good) 55%,transparent);color:var(--good-ink)}
+.pbtn.no:hover{border-color:var(--critical);color:var(--critical-ink)}
 .unset{color:var(--muted);font-style:italic;font-weight:400}
 input.inplace,select.inplace{width:auto;min-width:110px;max-width:230px;padding:3px 7px;
   font-size:13px;border:1px solid var(--brand);border-radius:6px;text-align:right;
