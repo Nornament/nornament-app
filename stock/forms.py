@@ -12,7 +12,9 @@ ledger honest.
 from django import forms
 from django.utils import timezone
 
-from .enums import Uom
+from decimal import Decimal
+
+from .enums import ChargeBasis, Uom
 from .models import (
     Category,
     Collection,
@@ -20,6 +22,7 @@ from .models import (
     Material,
     MaterialCategory,
     Piece,
+    RateChart,
     RateChartLine,
     Scenario,
     Style,
@@ -122,19 +125,55 @@ class PieceForm(forms.ModelForm):
         return self.cleaned_data.get("huid") or None
 
 
+#: how a making line may be charged, and nothing else. The BOM editor offers
+#: exactly these two: per gram of net metal weight, or a fixed charge.
+MAKING_BASES = [
+    (ChargeBasis.BY_NET_METAL_WT, "Per gram of net metal weight"),
+    (ChargeBasis.FLAT, "Fixed charge"),
+]
+
+
 class BomLineForm(forms.Form):
-    """One row of the bill of materials editor."""
+    """One row of the bill of materials editor.
+
+    The rates are on the row because they used not to be: the editor rebuilt
+    every line from four fields, so saving a correction to one stone silently
+    reset the making rate — and the basis with it — on all of them.
+    """
 
     material = forms.CharField(label="Material", max_length=64)
     size_band = forms.CharField(label="Size", max_length=64, required=False)
-    qty_value = forms.DecimalField(label="Qty", max_digits=12, decimal_places=4, min_value=0)
+    qty_value = forms.DecimalField(label="Qty", max_digits=12, decimal_places=4, min_value=0, required=False)
     qty_uom = forms.ChoiceField(label="Unit", choices=Uom.choices)
+    pcs = forms.IntegerField(label="Pcs", min_value=0, required=False)
+    basis = forms.ChoiceField(label="Charged", choices=MAKING_BASES, required=False)
+    cost_rate = forms.DecimalField(label="Cost rate", max_digits=14, decimal_places=4, min_value=0, required=False)
+    sale_rate = forms.DecimalField(label="Sale rate", max_digits=14, decimal_places=4, min_value=0, required=False)
 
     def clean_material(self):
-        code = self.cleaned_data["material"].strip()
+        code = self.cleaned_data["material"].strip().upper()
         if not Material.objects.filter(item_code=code).exists():
             raise forms.ValidationError(f"{code} is not a material code.")
         return code
+
+    def clean(self):
+        cleaned = super().clean()
+        code = cleaned.get("material")
+        material = Material.objects.filter(item_code=code).select_related("category").first() if code else None
+        if material is None:
+            return cleaned
+        if material.is_labour:
+            # a making line is one of the two options, never by quantity
+            cleaned["basis"] = cleaned.get("basis") or ChargeBasis.BY_NET_METAL_WT
+            if cleaned["basis"] not in dict(MAKING_BASES):
+                self.add_error("basis", "Making is charged per gram of net metal weight, or as a fixed charge.")
+            cleaned["qty_value"] = None if cleaned["basis"] == ChargeBasis.BY_NET_METAL_WT else Decimal(1)
+            cleaned["qty_uom"] = Uom.GM
+        else:
+            cleaned["basis"] = ChargeBasis.BY_QTY
+            if cleaned.get("qty_value") is None:
+                self.add_error("qty_value", "A material line needs a quantity.")
+        return cleaned
 
 
 BomLineFormSet = forms.formset_factory(BomLineForm, extra=0, can_delete=True)
@@ -327,3 +366,101 @@ class RateChartLineForm(forms.ModelForm):
         self.fields["material"].queryset = Material.objects.exclude(category="METAL").order_by(
             "item_code"
         )
+
+
+class ScenarioForm(forms.ModelForm):
+    """The scenario builder — the design's four controls plus the caps.
+
+    ``spread_over`` is a checkbox per material category rather than the design
+    mockup's three canned combinations: the categories are a table, so the
+    combinations cannot be enumerated in a dropdown honestly.
+    """
+
+    spread_over = forms.MultipleChoiceField(
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label="Spread the remainder across",
+        help_text="Tick nothing and every non-metal category on the piece absorbs it.",
+    )
+
+    class Meta:
+        model = Scenario
+        fields = [
+            "code",
+            "name",
+            "method",
+            "chart",
+            "target_pct",
+            "spread_over",
+            "spread_by",
+            "min_multiple",
+            "max_multiple",
+            "is_default",
+            "is_active",
+            "note",
+        ]
+        labels = {
+            "code": "Code *",
+            "name": "Name *",
+            "method": "Method *",
+            "chart": "Rate chart",
+            "target_pct": "Percentage over current cost",
+            "spread_by": "In proportion to",
+            "min_multiple": "Lowest multiple of cost",
+            "max_multiple": "Highest multiple of cost",
+            "is_default": "Default for the catalogue",
+            "is_active": "Active",
+            "note": "Note",
+        }
+        widgets = {"note": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # metal prices from its live rate and making from the figure on the
+        # line, so neither is offered as somewhere a markup could land
+        self.absorbers = list(
+            MaterialCategory.objects.filter(is_priceable=True).exclude(pk__in=["METAL", "LABOUR"])
+        )
+        self.fields["spread_over"].choices = [(c.pk, c.name) for c in self.absorbers]
+        self.fields["chart"].queryset = RateChart.objects.order_by("-is_default", "code", "-version_no")
+        if self.instance.pk:
+            self.fields["code"].disabled = True
+            self.initial.setdefault("spread_over", list(self.instance.spread_over or []))
+        # one decimal field per category, for the multiplier method
+        for category in self.absorbers:
+            self.fields[f"mult_{category.pk}"] = forms.DecimalField(
+                required=False,
+                min_value=0,
+                max_digits=8,
+                decimal_places=3,
+                label=category.name,
+                initial=(self.instance.multipliers or {}).get(category.pk) if self.instance.pk else None,
+            )
+
+    @property
+    def multiplier_fields(self):
+        return [self[f"mult_{c.pk}"] for c in self.absorbers]
+
+    def clean(self):
+        cleaned = super().clean()
+        method = cleaned.get("method")
+        if method == Scenario.VALUE_ADDED and cleaned.get("target_pct") is None:
+            self.add_error("target_pct", "A target margin scenario needs a percentage.")
+        if method == Scenario.MULTIPLIER and not any(
+            cleaned.get(f"mult_{c.pk}") is not None for c in self.absorbers
+        ):
+            self.add_error(None, "A multiplier scenario needs a factor on at least one category.")
+        low, high = cleaned.get("min_multiple"), cleaned.get("max_multiple")
+        if low is not None and high is not None and low > high:
+            self.add_error("max_multiple", "The highest multiple cannot be below the lowest.")
+        cleaned["multipliers"] = {
+            c.pk: str(cleaned[f"mult_{c.pk}"]) for c in self.absorbers if cleaned.get(f"mult_{c.pk}") is not None
+        }
+        return cleaned
+
+    def save(self, commit=True):
+        scenario = super().save(commit=False)
+        scenario.multipliers = self.cleaned_data["multipliers"]
+        if commit:
+            scenario.save()
+        return scenario

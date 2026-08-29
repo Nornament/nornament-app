@@ -20,7 +20,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q, Sum
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.forms import modelform_factory
 from django.urls import reverse
@@ -48,6 +48,7 @@ from .forms import (
     RateChartLineForm,
     RepairForm,
     SaleForm,
+    ScenarioForm,
     StyleForm,
 )
 from .masking import allowed, piece_row
@@ -542,6 +543,7 @@ def _scenario_prices(request, piece):
             | margin_of(price.price)
             | {
                 "scenario_id": scenario.pk,
+                "target_pct": scenario.target_pct,
                 "in_use": scenario.pk == piece.scenario_id,
                 "is_default": scenario.is_default,
                 "may_switch": services.may_switch_to(request.user, scenario),
@@ -1297,7 +1299,7 @@ def settings_view(request):
             "chart_in_use": chart.lines.filter(material__bom_lines__isnull=False).exists() if chart else False,
         }
     elif tab == "scen":
-        context["scenarios"] = Scenario.objects.prefetch_related("roles__group").order_by("code")
+        context |= _scenario_tab(request)
     elif tab == "users":
         from accounts.models import User
 
@@ -1321,6 +1323,101 @@ def settings_view(request):
     return render(request, "stock/settings.html", context)
 
 
+def _scenario_role_rows(scenario):
+    """Every role, with what this scenario grants it.
+
+    A role that cannot see a sale price cannot be granted a scenario at all —
+    the checkbox is shown disabled rather than hidden so the screen says why.
+    """
+    from django.contrib.auth.models import Group
+
+    granted = {r.group_id: r for r in scenario.roles.all()} if scenario and scenario.pk else {}
+    rows = []
+    for group in Group.objects.prefetch_related("permissions").order_by("name"):
+        may_price = any(p.codename == "view_sale" for p in group.permissions.all())
+        role = granted.get(group.pk)
+        rows.append(
+            {
+                "group": group,
+                "label": ROLE_GROUPS.get(group.name, {}).get("name", group.name),
+                "may_price": may_price,
+                "may_see": bool(role and role.may_see) and may_price,
+                "may_switch": bool(role and role.may_switch) and may_price,
+            }
+        )
+    return rows
+
+
+def _scenario_tab(request):
+    """The Scenarios tab: the list, and one scenario open under it."""
+    scenarios = list(Scenario.objects.prefetch_related("roles__group").order_by("-is_default", "code"))
+    picked = request.GET.get("scenario")
+    editing = Scenario() if picked == "new" else next((s for s in scenarios if str(s.pk) == picked), None)
+    return {
+        "scenarios": scenarios,
+        "editing": editing,
+        "form": ScenarioForm(instance=editing) if editing is not None else None,
+        "role_rows": _scenario_role_rows(editing),
+    }
+
+
+@transaction.atomic
+def _scenario_post(request):
+    """Create or edit a scenario, and the roles it is granted to."""
+    from .models import ScenarioRole
+
+    back = f"{reverse('stock:settings')}?tab=scen"
+    pk = request.POST.get("pk") or None
+    instance = get_object_or_404(Scenario, pk=pk) if pk else None
+
+    if request.POST.get("delete"):
+        if instance is None:
+            raise Http404("No such scenario.")
+        if instance.pieces.exists():
+            messages.error(request, f"{instance.name} is pricing live pieces. Retire it instead.")
+        else:
+            services.log(request.user, "REFERENCE_DELETED", "scenario", str(instance.pk), instance.name)
+            instance.delete()
+            messages.success(request, f"{instance.name} is gone.")
+        return redirect(back)
+
+    # one default, enforced by a partial unique index. The old one has to stand
+    # down *before* the form validates, because ModelForm checks the table's own
+    # constraints — and if the form then turns out invalid the whole thing is
+    # rolled back, so a refused save cannot leave the catalogue with no default.
+    if request.POST.get("is_default"):
+        Scenario.objects.exclude(pk=pk or 0).filter(is_default=True).update(is_default=False)
+
+    form = ScenarioForm(request.POST, instance=instance)
+    if not form.is_valid():
+        transaction.set_rollback(True)
+        messages.error(
+            request,
+            "; ".join(f"{field}: {error[0]}" for field, error in form.errors.items()),
+        )
+        return redirect(f"{back}&scenario={pk or 'new'}")
+    scenario = form.save()
+
+    see = set(request.POST.getlist("may_see"))
+    switch = set(request.POST.getlist("may_switch"))
+    for row in _scenario_role_rows(scenario):
+        group, key = row["group"], str(row["group"].pk)
+        # switching is a price decision, so it implies being able to see the
+        # scenario at all; a role with no sale price gets neither
+        wants_switch = row["may_price"] and key in switch
+        wants_see = row["may_price"] and (key in see or wants_switch)
+        if wants_see:
+            ScenarioRole.objects.update_or_create(
+                scenario=scenario, group=group, defaults={"may_see": True, "may_switch": wants_switch}
+            )
+        else:
+            ScenarioRole.objects.filter(scenario=scenario, group=group).delete()
+
+    services.log(request.user, "REFERENCE_SAVED", "scenario", str(scenario.pk), scenario.name)
+    messages.success(request, f"{scenario.name} saved.")
+    return redirect(back)
+
+
 def _settings_post(request, tab):
     """Category, location and material writes. Everything else is read-only here."""
     services.require(request.user, EDIT_BOM, "You cannot change reference data.")
@@ -1328,6 +1425,8 @@ def _settings_post(request, tab):
         return _chart_line_post(request)
     if tab == "mats" and request.FILES.get("csv"):
         return _material_import(request)
+    if tab == "scen":
+        return _scenario_post(request)
     forms = {"cats": (CategoryForm, Category), "locs": (LocationForm, Location), "mats": (MaterialForm, Material)}
     if tab not in forms:
         raise PermissionDenied("That tab has nothing to save.")
@@ -1567,6 +1666,11 @@ def piece_bom_edit(request, jewel_code):
                 "size_band": line.size_band or "",
                 "qty_value": line.qty_value,
                 "qty_uom": line.qty_uom,
+                "pcs": line.pcs,
+                "basis": line.basis,
+                "cost_rate": line.cost_rate,
+                "sale_rate": line.sale_rate,
+                "is_labour": line.material.is_labour,
             }
             for line in BomLine.objects.filter(piece=piece, version_no=version.version_no)
             .select_related("material")
@@ -1579,16 +1683,27 @@ def piece_bom_edit(request, jewel_code):
     if request.method == "POST":
         formset = BomLineFormSet(request.POST, prefix="line")
         if formset.is_valid():
-            lines = [
-                {
-                    "material": entry["material"],
-                    "size_band": entry.get("size_band") or "",
-                    "qty_value": entry["qty_value"],
-                    "qty_uom": entry["qty_uom"],
-                }
-                for entry in formset.cleaned_data
-                if entry and not entry.get("DELETE")
+            # a rate column the reader may not see is not on the form, so it
+            # is carried forward off the row it came from rather than saved as
+            # blank — the editor must not be able to wipe what it cannot show
+            masked = [
+                field
+                for capability, field in ((VIEW_COST, "cost_rate"), (VIEW_SALE, "sale_rate"))
+                if not request.user.has_perm(capability)
             ]
+            lines = []
+            for index, entry in enumerate(formset.cleaned_data):
+                if not entry or entry.get("DELETE"):
+                    continue
+                was = existing[index] if index < len(existing) else {}
+                line = {
+                    key: entry.get(key)
+                    for key in ("material", "qty_value", "qty_uom", "pcs", "basis", "cost_rate", "sale_rate")
+                } | {"size_band": entry.get("size_band") or ""}
+                if was.get("material") == line["material"]:
+                    for field in masked:
+                        line[field] = was.get(field)
+                lines.append(line)
             note = request.POST.get("note") or None
             try:
                 # fork first, then write the lines onto the fork: ``set_bom``
@@ -1613,6 +1728,9 @@ def piece_bom_edit(request, jewel_code):
             "version": version,
             "formset": formset,
             "materials": Material.objects.filter(is_active=True).order_by("item_code")[:800],
+            "labour_codes": list(
+                Material.objects.filter(is_active=True, category_id="LABOUR").values_list("item_code", flat=True)
+            ),
             "uoms": Uom.choices,
         },
     )

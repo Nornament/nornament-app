@@ -302,8 +302,17 @@ class Scenario(AppModel):
 
     CHART = "CHART"
     VALUE_ADDED = "VALUE_ADDED"
-    METHODS = [(CHART, "Chart"), (VALUE_ADDED, "Value added")]
-    SPREAD_BY = [("COST", "Cost"), ("WEIGHT", "Weight")]
+    MULTIPLIER = "MULTIPLIER"
+    METHODS = [
+        (CHART, "Rate chart \u2014 take the sale rate as written"),
+        (VALUE_ADDED, "Target margin \u2014 cost + %, absorbed by the chosen categories"),
+        (MULTIPLIER, "Category multipliers \u2014 a factor per material category"),
+    ]
+    SPREAD_BY = [
+        ("COST", "Their cost"),
+        ("WEIGHT", "Their weight"),
+        ("CHART", "Their rate-chart sale value"),
+    ]
 
     scenario_id = models.AutoField(primary_key=True)
     code = models.CharField(max_length=32, unique=True)
@@ -313,8 +322,17 @@ class Scenario(AppModel):
         "RateChart", null=True, blank=True, on_delete=models.SET_NULL, db_column="chart_id", related_name="scenarios"
     )
     target_pct = models.DecimalField(max_digits=8, decimal_places=3, null=True, blank=True)
-    spread_over = models.JSONField(default=list, help_text='Material categories the markup lands on, e.g. ["DIAMOND","POLKI"].')
+    spread_over = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Material categories the markup lands on, e.g. ["DIAMOND","POLKI"]. Empty means every priceable non-metal category.',
+    )
     spread_by = models.CharField(max_length=8, choices=SPREAD_BY, default="COST")
+    multipliers = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Category multipliers, e.g. {"DIAMOND": "2.5"}. A category left out passes at 1\u00d7.',
+    )
     min_multiple = models.DecimalField(max_digits=8, decimal_places=3, default=Decimal("1.0"))
     max_multiple = models.DecimalField(max_digits=8, decimal_places=3, default=Decimal("8.0"))
     is_default = models.BooleanField(default=False)

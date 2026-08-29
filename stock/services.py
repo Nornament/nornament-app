@@ -15,7 +15,7 @@ a user is allowed to *see* — masking is a view/template concern, stated once i
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -100,6 +100,22 @@ def line_weight_gm(qty, uom):
     if qty is None:
         return ZERO
     return Decimal(qty) * Decimal(GRAMS_PER_UNIT.get(uom, "0"))
+
+
+def charge_base(line, metal_gm):
+    """What a line's rate is multiplied by, from its charge basis.
+
+    Making is charged per gram of *net metal* weight: the stones are not made,
+    so they are never in the base. ``FLAT`` is the fixed-charge alternative —
+    the two options a making line is offered in the BOM editor.
+    """
+    if line.basis == ChargeBasis.FLAT:
+        return Decimal(1)
+    if line.basis == ChargeBasis.BY_PIECE:
+        return Decimal(line.pcs or 0)
+    if line.basis == ChargeBasis.BY_NET_METAL_WT:
+        return metal_gm
+    return Decimal(line.qty_value or 0)
 
 
 # ── metal rates ──────────────────────────────────────────────────────────
@@ -221,13 +237,7 @@ def recost_piece(piece, version_no=None, user=None):
         if line.basis == ChargeBasis.BY_NET_METAL_WT:
             line.qty_value = metal_gm
             line.qty_uom = "GM"
-            base = metal_gm
-        elif line.basis == ChargeBasis.BY_PIECE:
-            base = Decimal(line.pcs or 0)
-        elif line.basis == ChargeBasis.FLAT:
-            base = Decimal(1)
-        else:
-            base = Decimal(line.qty_value or 0)
+        base = charge_base(line, metal_gm)
         line.cost_amount = round_to((line.cost_rate or ZERO) * base, ldp)
         line.sale_amount = round_to((line.sale_rate or ZERO) * base, ldp)
         line.save(update_fields=["qty_value", "qty_uom", "cost_amount", "sale_amount"])
@@ -260,35 +270,28 @@ def recost_piece(piece, version_no=None, user=None):
     return version
 
 
-def _scenario_stone_rates(piece, scenario, lines):
-    """The sale rate a scenario puts on each stone line.
+def _spread_categories(scenario, stones):
+    """The material categories a scenario's markup is allowed to land on.
 
-    A chart scenario reads that chart line by line, so its total is exact. A
-    value-added one only has a target for the stones as a whole, so it is
-    spread across them in proportion to what they cost — the lines that carry
-    the most cost carry the most of the markup.
+    Named individually on the scenario. Naming nothing means every non-metal,
+    non-labour category the piece actually carries — a scenario with an empty
+    list still has to be able to price.
     """
-    stones = [
-        line for line in lines if not (line.material.is_metal or line.material.is_labour)
-    ]
-    if scenario.method == scenario.CHART:
-        return {
-            line.line_no: chart_rate(line.material.item_code, line.size_band, "SALE", scenario.chart_id)
-            or line.sale_rate
-            for line in stones
-        }
-    cost_total = sum(((l.cost_rate or ZERO) * Decimal(l.qty_value or 0) for l in stones), ZERO)
-    if not cost_total:
-        return {}
-    stone_sale = scenario_price(piece, scenario).stone_sale
-    rates = {}
-    for line in stones:
-        qty = Decimal(line.qty_value or 0)
-        if not qty:
-            continue
-        share = ((line.cost_rate or ZERO) * qty) / cost_total
-        rates[line.line_no] = stone_sale * share / qty
-    return rates
+    present = {line.material.category_id for line in stones}
+    picked = {str(code).upper() for code in (scenario.spread_over or [])}
+    return (picked & present) if picked else present
+
+
+def _multiplier(scenario, category_code):
+    """A category's factor under the multiplier method. Unnamed passes at 1x."""
+    raw = (scenario.multipliers or {}).get(category_code)
+    return Decimal(str(raw)) if raw not in (None, "") else Decimal(1)
+
+
+def _scenario_stone_rates(piece, scenario, lines):
+    """The sale rate a scenario puts on each stone line."""
+    priced = _priced(piece, scenario, lines=lines)
+    return priced.line_rates, priced.line_amounts
 
 
 def sale_lines(piece, version_no=None, scenario=None):
@@ -304,23 +307,22 @@ def sale_lines(piece, version_no=None, scenario=None):
     metal_gm = net_metal_weight(piece.pk, version_no)
     metal_rate = alloy_sale_rate(piece.metal_purity)
     lines = _lines_for(piece.pk, version_no)
-    stone_rates = _scenario_stone_rates(piece, scenario, lines) if scenario else {}
+    stone_rates, stone_amounts = _scenario_stone_rates(piece, scenario, lines) if scenario else ({}, {})
     priced = []
     for line in lines:
         rate = line.sale_rate
         if line.material.is_metal:
             rate = metal_rate
-            amount = rate * Decimal(line.qty_value or 0)
-        elif line.basis == ChargeBasis.BY_NET_METAL_WT:
-            amount = (rate or ZERO) * metal_gm
-        elif line.basis == ChargeBasis.BY_PIECE:
-            amount = (rate or ZERO) * Decimal(line.pcs or 0)
-        elif line.basis == ChargeBasis.FLAT:
-            amount = rate or ZERO
+            amount = round_to(rate * Decimal(line.qty_value or 0), ldp)
+        elif line.material.is_labour:
+            amount = round_to((rate or ZERO) * charge_base(line, metal_gm), ldp)
+        elif line.line_no in stone_amounts:
+            # the scenario already decided this line, down to the rupee — take
+            # its figure rather than recompute rate × qty and round again
+            rate, amount = stone_rates.get(line.line_no, rate), stone_amounts[line.line_no]
         else:
-            rate = stone_rates.get(line.line_no, rate)
-            amount = (rate or ZERO) * Decimal(line.qty_value or 0)
-        priced.append({"line": line, "sale_rate": rate, "sale_amount": round_to(amount, ldp)})
+            amount = round_to((rate or ZERO) * charge_base(line, metal_gm), ldp)
+        priced.append({"line": line, "sale_rate": rate, "sale_amount": amount})
     return priced
 
 
@@ -345,14 +347,8 @@ def current_cost(piece, version_no=None):
     for line in _lines_for(piece.pk, version_no):
         if line.material.is_metal:
             amount = rate * Decimal(line.qty_value or 0)
-        elif line.basis == ChargeBasis.BY_NET_METAL_WT:
-            amount = (line.cost_rate or ZERO) * metal_gm
-        elif line.basis == ChargeBasis.BY_PIECE:
-            amount = (line.cost_rate or ZERO) * Decimal(line.pcs or 0)
-        elif line.basis == ChargeBasis.FLAT:
-            amount = line.cost_rate or ZERO
         else:
-            amount = (line.cost_rate or ZERO) * Decimal(line.qty_value or 0)
+            amount = (line.cost_rate or ZERO) * charge_base(line, metal_gm)
         total += round_to(amount, ldp)
     return total
 
@@ -373,6 +369,14 @@ class ScenarioPrice:
     cost_today: Decimal
     price: Decimal
     capped: str | None = None
+    #: per-stone-line sale amount, already rounded — the BOM tab shows these
+    #: back, so the two screens add up to the same figure by construction
+    line_amounts: dict = field(default_factory=dict)
+    #: the lowest target the piece can carry, when metal and making already
+    #: eat the one asked for. ``None`` when the target landed cleanly.
+    min_pct: Decimal | None = None
+    #: per-stone-line sale rate, so the BOM tab shows the same arithmetic
+    line_rates: dict = field(default_factory=dict)
 
 
 def may_switch_to(user, scenario):
@@ -414,12 +418,135 @@ def set_piece_scenario(user, piece, scenario=None):
     return scenario
 
 
-def scenario_price(piece, scenario=None):
-    """``app.scenario_price`` — one scenario's asking price for one piece.
+def _priced(piece, scenario, version_no=None, lines=None):
+    """One scenario against one piece — the totals *and* the per-line rates.
 
-    Metal always passes through at its live rate; making is whatever the line
-    says; only stones move. That rule is the model.
+    One function so the Pricing tab and the BOM tab cannot drift apart. Metal
+    always passes at the live rate and making keeps the figure on its own line;
+    a scenario may only move stones, and only in the categories it names.
     """
+    version_no = version_no or piece.current_bom_version
+    if lines is None:
+        lines = _lines_for(piece.pk, version_no)
+    ldp = line_dp()
+
+    # every figure below is a sum of *rounded lines*, never a rounded sum: that
+    # is how ``current_cost`` and ``sale_lines`` add up, and a total reached the
+    # other way lands a rupee off theirs often enough to be noticed
+    metal_gm = sum((line_weight_gm(l.qty_value, l.qty_uom) for l in lines if l.material.is_metal), ZERO)
+    sale_rate, cost_rate = alloy_sale_rate(piece.metal_purity), alloy_cost_rate(piece.metal_purity)
+    metal_sale = sum(
+        (round_to(sale_rate * Decimal(l.qty_value or 0), ldp) for l in lines if l.material.is_metal), ZERO
+    )
+    metal_cost = sum(
+        (round_to(cost_rate * Decimal(l.qty_value or 0), ldp) for l in lines if l.material.is_metal), ZERO
+    )
+
+    making_sale = making_cost = ZERO
+    for line in (l for l in lines if l.material.is_labour):
+        base = charge_base(line, metal_gm)
+        making_sale += round_to((line.sale_rate or ZERO) * base, ldp)
+        making_cost += round_to((line.cost_rate or ZERO) * base, ldp)
+
+    stones = [l for l in lines if not (l.material.is_metal or l.material.is_labour)]
+    cost, chart, weight = {}, {}, {}
+    for line in stones:
+        qty = Decimal(line.qty_value or 0)
+        cost[line.line_no] = (line.cost_rate or ZERO) * qty
+        rate = chart_rate(line.material.item_code, line.size_band, "SALE", scenario.chart_id)
+        chart[line.line_no] = (rate if rate is not None else (line.sale_rate or ZERO)) * qty
+        weight[line.line_no] = line_weight_gm(qty, line.qty_uom)
+    stone_cost = sum((round_to(v, ldp) for v in cost.values()), ZERO)
+    cost_today = metal_cost + making_cost + stone_cost
+
+    capped = min_pct = None
+    if scenario.method == scenario.CHART:
+        sale = dict(chart)
+    elif scenario.method == scenario.MULTIPLIER:
+        sale = {l.line_no: cost[l.line_no] * _multiplier(scenario, l.material.category_id) for l in stones}
+    else:
+        # Target margin. The asking price *is* cost + %, so what the named
+        # categories absorb is worked backwards out of it — it is never a
+        # markup added on top of metal and making.
+        absorbers = _spread_categories(scenario, stones)
+        # a line with no quantity has nothing to carry a rate on — leaving it in
+        # would hand it a share the BOM tab could never show back
+        taking = [l for l in stones if l.material.category_id in absorbers and l.qty_value]
+        sale = {
+            l.line_no: round_to(chart[l.line_no], ldp)
+            for l in stones
+            if l.line_no not in {t.line_no for t in taking}
+        }
+        held = sum(sale.values(), ZERO)
+        floor_at = metal_sale + making_sale + held
+        target = round_to(cost_today * (1 + (scenario.target_pct or ZERO) / Decimal(100)), ldp)
+        absorb_cost = sum((cost[l.line_no] for l in taking), ZERO)
+        remainder = target - floor_at
+
+        if not taking:
+            # nothing on this piece is in the categories this scenario names,
+            # so the target simply cannot be reached — say so rather than quote
+            # the chart price as if it had been
+            capped = "no absorber" if remainder else None
+            remainder = ZERO
+        else:
+            low, high = absorb_cost * scenario.min_multiple, absorb_cost * scenario.max_multiple
+            if remainder < low:
+                # the trap: on a heavy gold piece the metal and the making can
+                # already exceed the target, and the stones would have to be
+                # priced below what they cost. Refuse the number and say what
+                # the lowest one this piece can carry actually is.
+                remainder, capped = low, "floor" if remainder >= ZERO else "below cost"
+                if cost_today:
+                    min_pct = round_to((floor_at + low) / cost_today * 100 - 100, 1)
+            elif remainder > high:
+                remainder, capped = high, "ceiling"
+
+        basis = {"WEIGHT": weight, "CHART": chart}.get(scenario.spread_by, cost)
+        share_total = sum((basis[l.line_no] for l in taking), ZERO)
+        remainder = round_to(remainder, ldp)
+        # the last absorber takes whatever the rounding left over, so the lines
+        # add up to the remainder to the rupee and the price lands on the target
+        allocated = ZERO
+        for index, line in enumerate(taking):
+            if index == len(taking) - 1:
+                sale[line.line_no] = remainder - allocated
+                continue
+            share = (basis[line.line_no] / share_total) if share_total else (Decimal(1) / len(taking))
+            sale[line.line_no] = round_to(remainder * share, ldp)
+            allocated += sale[line.line_no]
+
+    # the per-line figure is the one both tabs show, so it is what the total is
+    # built from — the Pricing tab cannot then disagree with the BOM tab
+    line_amounts = {no: round_to(amount, ldp) for no, amount in sale.items()}
+    stone_sale = sum(line_amounts.values(), ZERO)
+    quantities = {l.line_no: l.qty_value for l in stones}
+    line_rates = {
+        no: amount / Decimal(quantities[no]) for no, amount in sale.items() if quantities.get(no)
+    }
+    return ScenarioPrice(
+        scenario=scenario.code,
+        scenario_name=scenario.name,
+        method=scenario.method,
+        metal_gm=round_to(metal_gm, 3),
+        metal_cost=metal_cost,
+        metal_sale=metal_sale,
+        making_cost=making_cost,
+        making_sale=making_sale,
+        stone_cost=stone_cost,
+        stone_sale=stone_sale,
+        stone_multiple=round_to(stone_sale / stone_cost, 2) if stone_cost > 0 else None,
+        cost_today=cost_today,
+        price=metal_sale + making_sale + stone_sale,
+        capped=capped,
+        min_pct=min_pct,
+        line_rates=line_rates,
+        line_amounts=line_amounts,
+    )
+
+
+def scenario_price(piece, scenario=None):
+    """``app.scenario_price`` — one scenario's asking price for one piece."""
     from .models import Scenario
 
     piece = _as_piece(piece)
@@ -429,72 +556,7 @@ def scenario_price(piece, scenario=None):
         scenario = Scenario.objects.get(pk=scenario)
     if scenario is None:
         raise ServiceError("No pricing scenario is set up.")
-
-    version_no = piece.current_bom_version
-    lines = _lines_for(piece.pk, version_no)
-    metal_gm = sum(
-        (line_weight_gm(l.qty_value, l.qty_uom) for l in lines if l.material.is_metal), ZERO
-    )
-    metal_sale = round_to(alloy_sale_rate(piece.metal_purity) * metal_gm, 0)
-    metal_cost = round_to(alloy_cost_rate(piece.metal_purity) * metal_gm, 0)
-
-    making_sale = making_cost = ZERO
-    for line in (l for l in lines if l.material.is_labour):
-        if line.basis == ChargeBasis.FLAT:
-            making_sale += line.sale_rate or ZERO
-            making_cost += line.cost_rate or ZERO
-        elif line.basis == ChargeBasis.BY_PIECE:
-            making_sale += (line.sale_rate or ZERO) * Decimal(line.pcs or 1)
-            making_cost += (line.cost_rate or ZERO) * Decimal(line.pcs or 1)
-        else:
-            making_sale += (line.sale_rate or ZERO) * metal_gm
-            making_cost += (line.cost_rate or ZERO) * metal_gm
-
-    stone_cost = stone_chart = ZERO
-    for line in lines:
-        if line.material.is_metal or line.material.is_labour:
-            continue
-        qty = Decimal(line.qty_value or 0)
-        stone_cost += (line.cost_rate or ZERO) * qty
-        rate = chart_rate(line.material.item_code, line.size_band, "SALE", scenario.chart_id)
-        stone_chart += (rate if rate is not None else (line.sale_rate or ZERO)) * qty
-
-    capped = None
-    if scenario.method == scenario.CHART:
-        stone_sale = stone_chart
-    else:
-        # value added = everything except metal. Target a markup on that, and
-        # let the stones carry whatever is left after making.
-        va_cost = stone_cost + making_cost
-        stone_sale = va_cost * (1 + (scenario.target_pct or ZERO) / Decimal(100)) - making_sale
-        if stone_cost > 0:
-            multiple = stone_sale / stone_cost
-            if multiple < scenario.min_multiple:
-                stone_sale = stone_cost * scenario.min_multiple
-                capped = "floor"
-            elif multiple > scenario.max_multiple:
-                stone_sale = stone_cost * scenario.max_multiple
-                capped = "ceiling"
-        elif stone_sale > 0:
-            stone_sale = ZERO
-            capped = "no stones"
-
-    return ScenarioPrice(
-        scenario=scenario.code,
-        scenario_name=scenario.name,
-        method=scenario.method,
-        metal_gm=round_to(metal_gm, 3),
-        metal_cost=metal_cost,
-        metal_sale=metal_sale,
-        making_cost=round_to(making_cost, 0),
-        making_sale=round_to(making_sale, 0),
-        stone_cost=round_to(stone_cost, 0),
-        stone_sale=round_to(stone_sale, 0),
-        stone_multiple=round_to(stone_sale / stone_cost, 2) if stone_cost > 0 else None,
-        cost_today=metal_cost + round_to(making_cost, 0) + round_to(stone_cost, 0),
-        price=metal_sale + round_to(making_sale, 0) + round_to(stone_sale, 0),
-        capped=capped,
-    )
+    return _priced(piece, scenario)
 
 
 def piece_gaps(piece):
