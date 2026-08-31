@@ -283,3 +283,37 @@ def test_the_material_csv_round_trips_and_one_bad_row_saves_nothing(client, admi
     assert not Material.objects.filter(item_code="BADGOLD").exists()
     assert Material.objects.get(item_code="DRKL").item_name == "Diamond RKL edited"  # rolled back
     assert "Nothing was saved" in response.content.decode()
+
+
+def test_the_rate_chart_csv_round_trips_and_a_metal_row_saves_nothing(client, admin_user_, chart):
+    """The export is the upload template, and a row the Add rate modal refuses rolls the file back."""
+    from stock.models import RateChartLine
+
+    client.force_login(admin_user_)
+    url = reverse("stock:rate_chart_export")
+    sheet = client.get(url, {"chart": chart.pk}).content.decode()
+    assert sheet.splitlines()[0] == "item_code,size_band,cost_rate,sale_rate,rate_uom"
+    assert "DRKL" in sheet
+    assert "DRKL" in client.get(url, {"chart": chart.pk, "sample": 1}).content.decode()
+
+    settings_url = f"{reverse('stock:settings')}?tab=charts&chart={chart.pk}"
+    edited = sheet.replace("150000.0000", "160000") + "MAKING,,1500,1800,GM\n"
+    client.post(settings_url, {"chart": chart.pk, "csv": SimpleUploadedFile("rates.csv", edited.encode())})
+    assert RateChartLine.objects.get(chart=chart, material__item_code="DRKL").cost_rate == Decimal("160000")
+    assert RateChartLine.objects.filter(chart=chart, material__item_code="MAKING").exists()
+
+    # gold is a metal: it prices from its live rate and the chart must not override it
+    bad = "item_code,size_band,cost_rate,sale_rate,rate_uom\nDRKL,,1,1,CT\nG,,5000,6000,GM\n"
+    response = client.post(
+        settings_url, {"chart": chart.pk, "csv": SimpleUploadedFile("rates.csv", bad.encode())}, follow=True
+    )
+    assert not RateChartLine.objects.filter(chart=chart, material__item_code="G").exists()
+    assert RateChartLine.objects.get(chart=chart, material__item_code="DRKL").cost_rate == Decimal("160000")
+    assert "Nothing was saved" in response.content.decode()
+
+    chart.is_locked = True
+    chart.save(update_fields=["is_locked"])
+    locked = client.post(
+        settings_url, {"chart": chart.pk, "csv": SimpleUploadedFile("rates.csv", edited.encode())}, follow=True
+    )
+    assert "is locked" in locked.content.decode()

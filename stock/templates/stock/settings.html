@@ -151,6 +151,9 @@
         <select name="chart" onchange="this.form.submit()">
           {% for c in charts %}<option value="{{ c.pk }}" {% if chart and c.pk == chart.pk %}selected{% endif %}>{{ c.code }} v{{ c.version_no }}{% if c.is_default %} · default{% endif %}</option>{% endfor %}
         </select></form>
+      {% if caps.edit_bom and chart %}
+      <button type="button" class="btn" onclick="document.getElementById('ratebulkdlg').showModal()">⇅ Bulk CSV</button>
+      {% endif %}
       {% if caps.edit_bom and chart and not chart.is_locked %}
       <button type="button" class="btn primary" onclick="rateEdit(this)">+ Add rate</button>
       {% endif %}
@@ -186,6 +189,38 @@
     A <b>locked</b> chart refuses edits: fork it, so a quote from March still reconciles in September.
     {% if chart_in_use %} <b>This one has priced live stock.</b>{% endif %}</div>
 </div>
+
+{% if caps.edit_bom and chart %}
+<dialog class="modal" id="ratebulkdlg">
+  <form method="post" enctype="multipart/form-data">{% csrf_token %}
+    <input type="hidden" name="chart" value="{{ chart.pk }}">
+    <header><h3>Bulk import / export</h3>
+      <p>The export and the upload are the same columns in the same order, so the file you take out
+        is the file you edit and put back. It is this chart only — a rate belongs to a version.</p></header>
+    <div class="content">
+      <div class="row" style="margin-bottom:14px">
+        <a class="btn" href="{% url 'stock:rate_chart_export' %}?chart={{ chart.pk }}">⇩ Export {{ chart.code }} v{{ chart.version_no }} ({{ lines|length }})</a>
+        <a class="btn" href="{% url 'stock:rate_chart_export' %}?chart={{ chart.pk }}&amp;sample=1">⇩ Sample CSV</a>
+      </div>
+      {% if chart.is_locked %}
+      <div class="note" style="margin:0"><b>{{ chart }} is locked</b>, so it takes no upload. Fork it and
+        put the sheet on the fork — a quote priced in March has to still reconcile in September.</div>
+      {% else %}
+      <div class="field"><label class="f" for="ratecsv">CSV to upload</label>
+        <input id="ratecsv" type="file" name="csv" accept=".csv,text/csv" required></div>
+      <div class="note" style="margin:0"><b>item_code</b> and <b>size_band</b> together are the key: a pair
+        already on this chart is updated, a new one is added. A metal is refused — it prices from its live
+        rate. One row the Add rate modal would have refused rolls the whole file back, and every row that
+        does land is written to the audit log exactly as an edit here would be.</div>
+      {% endif %}
+    </div>
+    <footer>
+      <button class="btn" formmethod="dialog" formnovalidate>Cancel</button>
+      {% if not chart.is_locked %}<button class="btn primary">Upload</button>{% endif %}
+    </footer>
+  </form>
+</dialog>
+{% endif %}
 
 {% if caps.edit_bom and line_form and not chart.is_locked %}
 <dialog class="modal" id="ratedlg">

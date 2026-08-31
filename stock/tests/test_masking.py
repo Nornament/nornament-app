@@ -183,7 +183,7 @@ def test_the_locked_tabs_refuse_a_sales_login(client, sales_user, priced_and_sol
     _login(client, sales_user)
     for name in (
         "stock:melt_list", "stock:data", "stock:audit", "stock:settings", "stock:reports",
-        "stock:material_export",
+        "stock:material_export", "stock:rate_chart_export",
     ):
         assert client.get(reverse(name)).status_code == 403, f"{name} let a SALES login in"
 
@@ -260,7 +260,7 @@ def test_every_stock_and_crm_screen_is_in_the_sales_walk():
         "stock:count_detail", "stock:count_list", "stock:piece_rows",
         # asserted to 403 for SALES in test_the_locked_tabs_refuse_a_sales_login
         "stock:melt_list", "stock:data", "stock:audit", "stock:settings", "stock:reports",
-        "stock:material_export",
+        "stock:material_export", "stock:rate_chart_export",
         # gated on edit_bom, and asserted to 403 below
         "stock:piece_new", "stock:piece_edit", "stock:piece_bom_edit",
         "stock:style_new", "stock:style_edit",

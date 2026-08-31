@@ -1422,7 +1422,7 @@ def _settings_post(request, tab):
     """Category, location and material writes. Everything else is read-only here."""
     services.require(request.user, EDIT_BOM, "You cannot change reference data.")
     if tab == "charts":
-        return _chart_line_post(request)
+        return _rate_chart_import(request) if request.FILES.get("csv") else _chart_line_post(request)
     if tab == "mats" and request.FILES.get("csv"):
         return _material_import(request)
     if tab == "scen":
@@ -1554,6 +1554,139 @@ def _material_import(request):
         )
         messages.success(request, f"{created} material(s) added, {updated} updated.")
     return redirect(f"{reverse('stock:settings')}?tab=mats")
+
+
+#: the rate sheet's columns, in order. ``item_code`` + ``size_band`` are the
+#: key an upload matches on, so the file that comes out is the file that goes back in.
+RATE_CHART_COLUMNS = ["item_code", "size_band", "cost_rate", "sale_rate", "rate_uom"]
+
+
+def _rate_columns(user):
+    """The sheet minus the rates this reader may not see.
+
+    The column is left out rather than blanked: a blank cell means "no rate" and
+    would wipe one on the way back in, where an absent column can only be kept.
+    """
+    hidden = {
+        field for capability, field in ((VIEW_COST, "cost_rate"), (VIEW_SALE, "sale_rate")) if not user.has_perm(capability)
+    }
+    return [column for column in RATE_CHART_COLUMNS if column not in hidden]
+
+
+@login_required
+@tab_required("admin")
+def rate_chart_export(request):
+    """One chart's rates as CSV, and the template an upload comes back on.
+
+    ``?sample=1`` writes five rows instead of the whole chart — the same columns
+    either way, because a template that does not match the export is a template
+    nobody can round-trip.
+    """
+    picked = request.GET.get("chart") or ""
+    chart = RateChart.objects.filter(pk=picked).first() if picked.isdigit() else RateChart.objects.first()
+    columns = _rate_columns(request.user)
+    sample = bool(request.GET.get("sample"))
+    lines = (
+        RateChartLine.objects.filter(chart=chart).select_related("material").order_by("material__item_code", "size_band")
+        if chart
+        else RateChartLine.objects.none()
+    )
+    if sample:
+        lines = lines[:5]
+
+    name = "rate-chart-sample" if sample else f"rate-chart-{chart.code}-v{chart.version_no}" if chart else "rate-chart"
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="{name}-{timezone.localdate():%Y-%m-%d}.csv"'
+    writer = csv.writer(response)
+    writer.writerow(columns)
+    rows = 0
+    for line in lines:
+        values = {
+            "item_code": line.material.item_code,
+            "size_band": line.size_band,
+            "cost_rate": line.cost_rate if line.cost_rate is not None else "",
+            "sale_rate": line.sale_rate if line.sale_rate is not None else "",
+            "rate_uom": line.rate_uom or "",
+        }
+        writer.writerow([values[column] for column in columns])
+        rows += 1
+    if sample and not rows:
+        # an empty chart still has to hand back something fillable
+        filler = {"item_code": "DRKL", "size_band": "1.0mm", "cost_rate": "4500", "sale_rate": "6200", "rate_uom": "CT"}
+        writer.writerow([filler[column] for column in columns])
+    services.log(request.user, "EXPORT", "rate_chart_line", name, f"{rows} rows", row_count=rows)
+    return response
+
+
+def _rate_chart_import(request):
+    """Upsert one chart's rates from a CSV, keyed on ``item_code`` + ``size_band``.
+
+    Every row goes through ``RateChartLineForm``, so an upload cannot write a
+    rate the Add rate modal would have refused — including a metal, which prices
+    from its live rate and is not a chart's to override. One bad row rolls the
+    whole file back: a half-priced chart is the state nobody can describe after.
+    """
+    chart = get_object_or_404(RateChart, pk=request.POST.get("chart"))
+    back = f"{reverse('stock:settings')}?tab=charts&chart={chart.pk}"
+    if chart.is_locked:
+        messages.error(request, f"{chart} is locked. Fork it to change a rate.")
+        return redirect(back)
+    try:
+        rows = list(csv.DictReader(io.TextIOWrapper(request.FILES["csv"], encoding="utf-8-sig")))
+    except (UnicodeDecodeError, csv.Error):
+        messages.error(request, "That file is not readable as CSV. Export the sheet again and edit that.")
+        return redirect(back)
+
+    columns = _rate_columns(request.user)
+    created = updated = 0
+    errors = []
+    with transaction.atomic():
+        for number, row in enumerate(rows, start=2):  # row 1 is the header
+            code = (row.get("item_code") or "").strip()
+            band = (row.get("size_band") or "").strip()
+            if not code:
+                errors.append(f"row {number}: no item_code")
+                continue
+            material = Material.objects.filter(item_code=code).first()
+            if material is None:
+                errors.append(f"row {number} ({code}): not a material — add it on the Materials tab first")
+                continue
+            existing = RateChartLine.objects.filter(chart=chart, material=material, size_band=band).first()
+            # snapshot first: validating binds the posted values onto the instance
+            before = _rate_snapshot(existing) if existing else {}
+            data = {"chart": chart.pk, "material": material.pk, "size_band": band}
+            for column in ("cost_rate", "sale_rate", "rate_uom"):
+                # a column this reader could not export is not theirs to
+                # overwrite either: the row keeps what it already said
+                data[column] = (row.get(column) or "").strip() if column in columns else (before.get(column) or "")
+            form = RateChartLineForm(data, instance=existing)
+            if not form.is_valid():
+                errors.append(f"row {number} ({code}): " + "; ".join(f"{f}: {e[0]}" for f, e in form.errors.items()))
+                continue
+            line = form.save()
+            after = _rate_snapshot(line)
+            services.log(
+                request.user,
+                "UPDATE" if before else "INSERT",
+                "rate_chart_line",
+                line.pk,
+                detail=_rate_diff(before, after),
+                old_values=before or None,
+                new_values=after,
+            )
+            updated += bool(existing)
+            created += not existing
+        if errors:
+            transaction.set_rollback(True)
+
+    if errors:
+        messages.error(request, f"Nothing was saved — {len(errors)} row(s) were refused. " + " · ".join(errors[:5]))
+    else:
+        services.log(
+            request.user, "IMPORT", "rate_chart_line", str(chart.pk), f"{created} new, {updated} updated", row_count=len(rows)
+        )
+        messages.success(request, f"{created} rate(s) added, {updated} updated.")
+    return redirect(back)
 
 
 #: what a rate history entry records — the four values that can move
