@@ -439,26 +439,52 @@ class StatusUpdateForm(forms.Form):
 
 
 class PurchaseForm(forms.ModelForm):
-    """Add Purchase — writes a ``stock.Sale`` row, not a CRM row."""
+    """Add/Edit Purchase — writes a ``stock.Sale`` row, not a CRM row.
+
+    ``category`` is not a Sale column under that name; it maps to
+    ``product_category``, which is what FoN commission bands read.
+    """
 
     category = forms.ChoiceField(choices=PRODUCT_CATEGORIES, label="Category")
 
     class Meta:
         model = Sale
-        fields = ["sold_price", "sold_on", "invoice_no", "description"]
+        fields = ["sold_price", "sold_on", "invoice_no", "description", "remarks"]
         labels = {
             "sold_price": "Amount (₹) *",
             "sold_on": "Date *",
             "invoice_no": "Invoice no.",
             "description": "Description",
+            "remarks": "Remarks",
         }
-        widgets = {"sold_on": DateInput}
+        widgets = {
+            "sold_on": DateInput,
+            "description": forms.Textarea(attrs={"rows": 2}),
+            "remarks": forms.Textarea(attrs={"rows": 2}),
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["sold_price"].required = True
         self.fields["sold_on"].required = True
-        self.fields["sold_on"].initial = timezone.localdate()
+        if self.instance and self.instance.pk:
+            self.fields["category"].initial = self.instance.product_category or "cat1"
+        else:
+            self.fields["sold_on"].initial = timezone.localdate()
+
+
+class CsvUploadForm(forms.Form):
+    """The one control both bulk-upload screens need."""
+
+    csv_file = forms.FileField(label="CSV file", widget=forms.FileInput(attrs={"accept": ".csv,text/csv"}))
+
+    def clean_csv_file(self):
+        upload = self.cleaned_data["csv_file"]
+        if upload.size > 5 * 1024 * 1024:
+            raise forms.ValidationError("That file is over 5 MB — split it, or import it in parts.")
+        if not upload.name.lower().endswith((".csv", ".txt")):
+            raise forms.ValidationError("Save the sheet as CSV first — .xlsx cannot be read here.")
+        return upload
 
 
 class GiftForm(forms.ModelForm):

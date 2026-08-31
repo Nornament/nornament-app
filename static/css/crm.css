@@ -87,6 +87,7 @@ tr:hover td{background:#F9F8F6;cursor:pointer}
 .mt{font-size:17px;font-weight:600;letter-spacing:-0.03em;font-family:'Newsreader',Georgia,serif}
 .mc{overflow-y:auto;flex:1;padding:18px 24px}
 .mf{padding:14px 24px;border-top:1px solid #E8E8E4;display:flex;justify-content:flex-end;gap:8px;flex-shrink:0}
+.mform{flex:1;min-height:0;display:flex;flex-direction:column}
 .mcl{background:none;border:none;font-size:18px;cursor:pointer;color:var(--mu);padding:2px;line-height:1}
 .mcl:hover{color:#111111}
 .tabs{border-bottom:1px solid #E8E8E4;display:flex;gap:0;margin-bottom:18px;overflow-x:auto;flex-shrink:0}
@@ -322,3 +323,41 @@ a{text-decoration:none}
    .btn, .chip, .ni and friends keep the colours their own rules give them. */
 .main a:not([class]){color:inherit}
 .pc,.srch-row,.mob-card,.kanban-card a,.sheet-it{color:inherit}
+
+/* ── Mobile row layouts ───────────────────────────────────────────────────
+   The legacy app swapped its tables for MobRows and MobileStages under 768px
+   via useIsMobile. Server-rendered, both layouts ship and CSS picks: a table
+   with nine columns is not a phone screen, and `overflow-x:auto` on it is a
+   scroll bar where the legacy had a card. */
+.only-mobile{display:none}
+@media(max-width:768px){
+  .only-desktop{display:none!important}
+  .only-mobile{display:block}
+}
+
+/* The legacy report bars — `width .3s`, filled from the left. */
+.bar-track{height:8px;background:var(--bg);border-radius:4px;overflow:hidden}
+.bar-fill{height:100%;background:var(--acc);border-radius:4px;transition:width .3s}
+
+/* ── The quote calculator's printable sheet ───────────────────────────────
+   The legacy built a print document and called window.print(); so does this.
+   On screen the sheet is hidden; on paper everything else is. */
+#print-sheet{display:none}
+.lnk{background:none;border:none;padding:0;color:var(--acc);text-decoration:underline;cursor:pointer;font:inherit;font-size:11px}
+@media print{
+  .sb,.ph,.bottom-nav,.no-print,dialog{display:none!important}
+  .main{margin-left:0}
+  body{background:#fff}
+  #print-sheet{display:block;background-size:100% auto;background-repeat:no-repeat;background-position:top center;
+    padding:45mm 18mm 30mm;min-height:297mm}
+  #print-sheet table{width:100%;border-collapse:collapse;margin-bottom:14px}
+  #print-sheet th,#print-sheet td{padding:5px 7px;border-bottom:1px solid #ddd;font-size:11px}
+  #print-sheet h3{font-family:'Newsreader',Georgia,serif;font-size:14px;margin:14px 0 6px}
+  #print-sheet h3 small{color:#777;font-weight:400}
+  #print-sheet h2{font-family:'Newsreader',Georgia,serif;font-size:17px}
+  .print-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:18px}
+  .print-brand{font-family:'Cinzel',serif;font-size:15px;letter-spacing:3px;color:#b08c3c}
+  .print-meta{font-size:11px;color:#666}
+  .print-foot{font-size:10px;color:#777;margin-top:20px}
+  @page{margin:0}
+}

@@ -715,6 +715,7 @@ class Sale(AppModel):
     )
     invoice_no = models.CharField(max_length=80, blank=True, null=True)
     description = models.TextField(blank=True, null=True)
+    remarks = models.TextField(blank=True, null=True, help_text="The legacy purchase form's free-text remarks.")
     legacy_id = models.CharField(max_length=64, blank=True, null=True, unique=True)
     created_at = models.DateTimeField(default=timezone.now)
 

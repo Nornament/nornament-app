@@ -1,0 +1,13 @@
+{% load crm_extras %}
+{% for customer in customers %}
+<a class="srch-row" data-customer="{{ customer.pk }}" href="{% url 'crm:customer_detail' customer.pk %}?tab=Docs">
+  <div class="av">{{ customer.name|initials }}</div>
+  <div style="flex:1;min-width:0">
+    <div class="fw" style="font-size:13.5px">{{ customer.name }}</div>
+    <div class="sm mu">{{ customer.customer_code }}{% if customer.mobile %} · {{ customer.mobile }}{% endif %}</div>
+  </div>
+  <span class="mu">›</span>
+</a>
+{% empty %}
+<div class="es"><div class="ei">👥</div><p>No customers match</p></div>
+{% endfor %}

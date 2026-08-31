@@ -1,4 +1,4 @@
-# One image, one process. No build step for the front end beyond fetching htmx.
+# One image, one process. No build step for the front end beyond fetching htmx and pdf.js.
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
@@ -16,9 +16,9 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
-# htmx is fetched here rather than committed: no third-party blob in the repo,
+# htmx and pdf.js are fetched here rather than committed: no third-party blob in the repo,
 # and still no build step. If the fetch fails the app degrades to page loads.
-RUN python manage.py vendor_assets || echo "htmx not fetched — the app will use full page loads"
+RUN python manage.py vendor_assets || echo "vendored assets not fetched — full page loads, no invoice reader"
 
 RUN chmod +x deploy/entrypoint.sh deploy/backup.sh
 RUN useradd --create-home --uid 10001 app && chown -R app /app

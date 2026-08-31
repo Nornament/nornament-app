@@ -94,3 +94,8 @@ class MediaAsset(models.Model):
     def is_video(self):
         """An <img> cannot draw a video, so every tile has to ask this first."""
         return self.kind == MediaKind.VIDEO or (self.mime_type or "").startswith("video/")
+
+    @property
+    def is_image(self):
+        """The only kind an <img> can draw. A KYC PDF gets a file card instead."""
+        return not self.is_video and (self.mime_type or "").startswith("image/")

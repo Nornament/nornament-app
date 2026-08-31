@@ -18,7 +18,7 @@ from __future__ import annotations
 from calendar import monthrange
 from dataclasses import dataclass, field
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.db.models import Q, Sum
 from django.utils import timezone
@@ -133,6 +133,21 @@ def fon_register(on=None):
 
 
 # ── reporting ────────────────────────────────────────────────────────────
+def default_making_rate():
+    """What a new quote line starts at, per gram of metal.
+
+    Kept in ``CrmSetting`` so it moves without a deploy — the legacy
+    calculator hardcoded it, and a hardcoded rate is a rate nobody updates.
+    """
+    from .models import CrmSetting
+
+    row = CrmSetting.objects.filter(pk="default_making_rate").first()
+    try:
+        return Decimal(str((row.value or {}).get("per_gram", 1500))) if row else Decimal("1500")
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal("1500")
+
+
 def revenue_between(start, end, source=None):
     """One revenue number. ``source=None`` means both ledgers, which is the point."""
     rows = Sale.objects.filter(sold_on__gte=start, sold_on__lte=end)

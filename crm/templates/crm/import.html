@@ -1,0 +1,78 @@
+{% extends "crm_base.html" %}
+{% load crm_extras %}
+{% comment %}The legacy MassUploadModal / PurchaseBulkUpload, as a page: get the
+template, drop the file, read what it understood, then commit. Confirming posts
+the same CSV text back, so what is written is what was on screen.
+{% endcomment %}
+{% block title %}{{ spec.title }} · Nornament CRM{% endblock %}
+{% block back %}<a class="btn btn-s btn-sm" style="margin-right:8px" href="{% url 'crm:customer_list' %}">← Back</a>{% endblock %}
+{% block heading %}{{ spec.title }}{% endblock %}
+{% block subheading %}{% if preview %}Check this, then confirm{% else %}CSV only — headers are matched loosely{% endif %}{% endblock %}
+
+{% block content %}
+{% if not preview %}
+<div class="card mb16" style="max-width:820px">
+  <div class="it mb12">1 · Start from the template</div>
+  <p class="sm mu mb12">Column names do not have to match exactly — case, spaces and punctuation are ignored,
+    and the usual aliases are accepted ({% for name in spec.template %}{{ name }}{% if not forloop.last %} · {% endif %}{% endfor %}).</p>
+  <a class="btn btn-s btn-sm" href="{% url 'crm:import_template' kind %}">⬇️ Download template CSV</a>
+</div>
+
+<div class="card" style="max-width:820px">
+  <div class="it mb12">2 · Upload the file</div>
+  <form method="post" enctype="multipart/form-data">{% csrf_token %}
+    {% for field in form %}{% include "crm/_field.html" %}{% endfor %}
+    <button class="btn btn-p">Read the file</button>
+  </form>
+  <p class="sm mu mt8">Nothing is written yet — the next screen shows what was understood, row by row.</p>
+</div>
+
+{% else %}
+<div class="card mb16">
+  <div class="fl ia jb g8" style="flex-wrap:wrap">
+    <div>
+      <div class="it">{{ ok_count }} row{{ ok_count|pluralize }} will be imported{% if bad_count %}, {{ bad_count }} skipped{% endif %}</div>
+      <div class="sm mu mt4">Columns read: {% for name in headers %}{{ name }}{% if not forloop.last %} · {% endif %}{% endfor %}</div>
+    </div>
+    <form method="post" class="fl g8">{% csrf_token %}
+      <input type="hidden" name="csv_text" value="{{ csv_text }}">
+      <a class="btn btn-s" href="{% url 'crm:bulk_import' kind %}">Start over</a>
+      <button class="btn btn-p" name="commit" value="1" {% if not ok_count %}disabled{% endif %}>Import {{ ok_count }} row{{ ok_count|pluralize }}</button>
+    </form>
+  </div>
+</div>
+
+<div class="card" style="padding:0">
+  <div style="overflow-x:auto;max-height:60vh">
+    <table>
+      <thead><tr><th style="width:34px">#</th>{% for column in spec.columns %}<th>{{ column }}</th>{% endfor %}<th></th></tr></thead>
+      <tbody>
+      {% for row in preview %}
+      <tr style="{% if row.problem %}opacity:.55{% endif %}">
+        <td class="sm mu">{{ forloop.counter }}</td>
+        {% if kind == 'customers' %}
+          <td class="fw">{{ row.parsed.name|default:"—" }}</td>
+          <td class="sm">{{ row.parsed.mobile|default:"—" }}</td>
+          <td class="sm mu">{{ row.parsed.customer_code|default:"auto" }}</td>
+          <td class="sm">{{ row.parsed.email|default:"—" }}</td>
+          <td class="sm">{{ row.parsed.location|default:"—" }}</td>
+          <td class="sm">{{ row.parsed.birth_date|date:"d M Y"|default:"—" }}</td>
+          <td class="sm">{{ row.parsed.customer_type|default:"Regular" }}</td>
+          <td class="sm">{{ row.parsed.temperature|default:"Warm" }}</td>
+        {% else %}
+          <td class="fw">{% if row.customer %}{{ row.customer.name }}<div class="ncode">{{ row.customer.customer_code }}</div>{% else %}<span class="mu">—</span>{% endif %}</td>
+          <td class="sm">{{ row.sold_on|date:"d M Y"|default:"—" }}</td>
+          <td class="tr fw">{% if row.sold_price %}{{ row.sold_price|inr }}{% else %}—{% endif %}</td>
+          <td class="sm">{% firstof categories|lookup:row.category row.category %}</td>
+          <td class="sm">{{ row.description|default:"—"|truncatechars:36 }}</td>
+          <td class="sm mu">{{ row.invoice_no|default:"—" }}</td>
+        {% endif %}
+        <td>{% if row.problem %}<span class="badge bh">{{ row.problem }}</span>{% else %}<span class="badge bf">ok</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

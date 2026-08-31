@@ -1,5 +1,5 @@
 {% extends "crm_base.html" %}
-{% load crm_extras %}
+{% load crm_extras static %}
 {% block title %}{{ customer.name }} · Nornament CRM{% endblock %}
 {% block back %}<a class="btn btn-s btn-sm" style="margin-right:8px" href="{% url 'crm:customer_list' %}">← Back</a>{% endblock %}
 {% block heading %}{{ customer.name }}{% endblock %}
@@ -147,33 +147,115 @@
 {% if lifetime_value is None %}
 <div class="es"><div class="ei">🔒</div><p>Purchase amounts are not shown to this login.</p></div>
 {% else %}
-<div class="fl jb ia mb14"><div class="sm mu">{{ purchase_count }} purchase{{ purchase_count|pluralize }} · {{ lifetime_value|inr }} lifetime</div></div>
-<div class="card mb16" style="padding:0">
-  <table>
-    <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Invoice</th><th class="tr">Amount</th><th></th></tr></thead>
-    <tbody>
-    {% for sale in sales %}
-    <tr><td class="sm mu">{{ sale.sold_on|date:"d M Y" }}</td>
-        <td>{{ sale.piece.jewel_code|default:sale.description|default:"—" }}</td>
-        <td class="sm">{% firstof categories|lookup:sale.product_category sale.product_category "—" %}</td>
-        <td class="sm mu">{{ sale.invoice_no|default:"—" }}</td>
-        <td class="tr fw">{{ sale.sold_price|inr }}</td>
-        <td>{% if caps.adjust_stock and sale.source == 'CRM' %}
-          <form method="post" action="{% url 'crm:delete_purchase' customer.pk sale.pk %}" onsubmit="return confirm('Remove this purchase from the ledger?')">{% csrf_token %}
-            <button class="BI" title="Delete">🗑</button></form>{% endif %}</td></tr>
-    {% empty %}<tr><td colspan="6"><div class="es"><div class="ei">💎</div><p>No purchases yet</p></div></td></tr>{% endfor %}
-    </tbody>
-  </table>
+{% comment %}The legacy layout: a row of FY chips and three buttons, a one-line
+summary, then a card per purchase with the amount as the headline. Not a table
+— the amount is what you are looking for, and a table buries it in column six.
+{% endcomment %}
+<div class="fl ia jb mb10 g8" style="flex-wrap:wrap">
+  <div class="fl ia g8" style="flex-wrap:wrap">
+    <span class="sm mu">FY:</span>
+    <a class="chip{% if not fy %} act{% endif %}" href="?tab=Purchases">All Time</a>
+    {% for value, label in financial_years %}
+    <a class="chip{% if fy == value|stringformat:'s' %} act{% endif %}" href="?tab=Purchases&amp;fy={{ value }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+  {% if caps.adjust_stock %}
+  <div class="fl g8">
+    <a class="btn btn-s btn-sm" href="{% url 'crm:bulk_import' 'purchases' %}">📥 Bulk</a>
+    <button class="btn btn-s btn-sm" type="button" onclick="document.getElementById('invoice').showModal()">📄 Invoice</button>
+    <button class="btn btn-p btn-sm" type="button" onclick="document.getElementById('addp').showModal()">+ Add</button>
+  </div>
+  {% endif %}
 </div>
+
+<div class="sm mu mb10">{{ shown_count }} purchase{{ shown_count|pluralize }} ·
+  {% if fy %}{{ shown_value|inr }} in this FY{% else %}{{ lifetime_value|inr }} lifetime{% endif %}</div>
+
+{% for sale in sales %}
+<div class="pc"{% if caps.adjust_stock and sale.source == 'CRM' %} style="cursor:pointer"
+     onclick="location='{% url 'crm:edit_purchase' customer.pk sale.pk %}'"{% endif %}>
+  {% with thumb=sale_thumbs|lookup:sale.pk %}
+  {% if thumb %}<img class="pi" src="{{ thumb }}" alt="">{% else %}<div class="pip">🪙</div>{% endif %}
+  {% endwith %}
+  <div style="flex:1;min-width:0">
+    <div class="fl jb ia">
+      <div>
+        <div class="pa">{{ sale.sold_price|inr }}</div>
+        <div class="pm">{{ sale.sold_on|date:"d M Y" }} · {% firstof categories|lookup:sale.product_category sale.product_category "Uncategorised" %}</div>
+      </div>
+      <div class="fl g8" onclick="event.stopPropagation()">
+        {% if sale.source == 'CRM' %}
+          {% if caps.adjust_stock %}
+          <a class="BI" href="{% url 'crm:edit_purchase' customer.pk sale.pk %}" title="Edit">✏️</a>
+          <form method="post" action="{% url 'crm:delete_purchase' customer.pk sale.pk %}" onsubmit="return confirm('Delete this purchase from the ledger?')">{% csrf_token %}
+            <button class="BI" title="Delete">🗑</button></form>
+          {% endif %}
+        {% else %}
+        {% if sale.piece %}<a class="badge bf" href="{% url 'stock:piece_detail' sale.piece.jewel_code %}" title="Sold from stock — edit it in the stock app">STOCK</a>
+        {% else %}<span class="badge bf" title="Sold from stock — edit it in the stock app">STOCK</span>{% endif %}
+        {% endif %}
+      </div>
+    </div>
+    {% comment %}firstof, not default: — `default:` evaluates its argument even
+    when it is not used, and a CRM purchase has no piece to take a jewel_code
+    off.{% endcomment %}
+    {% if sale.description or sale.piece_id %}
+    <div class="sm mt4">{% firstof sale.description sale.piece.jewel_code %}</div>{% endif %}
+    {% if sale.invoice_no %}<div class="sm mu mt4">🧾 {{ sale.invoice_no }}</div>{% endif %}
+    {% if sale.remarks %}<div class="sm mu mt4">📝 {{ sale.remarks }}</div>{% endif %}
+  </div>
+</div>
+{% empty %}
+<div class="es"><div class="ei">🛍</div><p>No purchases{% if fy %} in this financial year{% endif %}</p></div>
+{% endfor %}
+
 {% if caps.adjust_stock %}
-<div class="card">
-  <div class="it mb12">Add Purchase</div>
-  <form method="post" action="{% url 'crm:add_purchase' customer.pk %}">{% csrf_token %}
-    <div class="fr2">{% for field in purchase_form %}{% include "crm/_field.html" %}{% endfor %}</div>
-    <button class="btn btn-p">Add</button>
-    <p class="sm mu mt8">This writes a sale into the one ledger, tagged CRM — the same row FoN and reports read.</p>
-  </form>
-</div>
+{# ── Add Purchase, as the modal the legacy used ────────────────────────── #}
+<dialog id="addp" class="mo" style="z-index:300;border:none;max-width:100%;max-height:100%;width:100%;height:100%"
+        onclick="if(event.target===this)this.close()">
+  <div class="md" style="max-width:560px">
+    <div class="mh"><div class="mt">Add Purchase</div>
+      <button class="mcl" type="button" onclick="document.getElementById('addp').close()">✕</button></div>
+    <form class="mform" method="post" action="{% url 'crm:add_purchase' customer.pk %}" enctype="multipart/form-data" id="purchase-form">
+      {% csrf_token %}
+      <div class="mc">
+        <div class="fr2">
+          {% include "crm/_field.html" with field=purchase_form.sold_price %}
+          {% include "crm/_field.html" with field=purchase_form.sold_on %}
+          {% include "crm/_field.html" with field=purchase_form.category %}
+          {% include "crm/_field.html" with field=purchase_form.invoice_no %}
+        </div>
+        {% include "crm/_field.html" with field=purchase_form.description %}
+        {% include "crm/_field.html" with field=purchase_form.remarks %}
+        <div class="fg"><label for="purchase-photos">Purchase photos</label>
+          <input id="purchase-photos" name="photos" type="file" accept="image/*,application/pdf" multiple capture="environment"></div>
+        <p class="sm mu">This writes a sale into the one ledger, tagged CRM — the same row FoN and reports read.</p>
+      </div>
+      <div class="mf">
+        <button class="btn btn-s" type="button" onclick="document.getElementById('addp').close()">Cancel</button>
+        <button class="btn btn-p">Add purchase</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+{# ── The legacy InvoiceUploadModal: read a bill, fill the form above ──── #}
+<dialog id="invoice" class="mo" style="z-index:300;border:none;max-width:100%;max-height:100%;width:100%;height:100%"
+        onclick="if(event.target===this)this.close()">
+  <div class="md" style="max-width:560px">
+    <div class="mh"><div class="mt">🧾 Read an invoice</div>
+      <button class="mcl" type="button" onclick="document.getElementById('invoice').close()">✕</button></div>
+    <div class="mc">
+      <label class="drop-zone" style="display:block">
+        <input type="file" id="invoice-file" accept=".pdf,image/*" data-worker="{% static 'vendor/pdf.worker.min.js' %}">
+        <span class="sm mu">Drop the invoice here, or tap to choose<br>PDF or photo</span>
+      </label>
+      <div class="sm mu mt8" id="invoice-status"></div>
+      <p class="sm mu mt8">Whatever it reads goes into the Add Purchase form — nothing is saved until you press Add,
+        and every field stays editable. A bill it cannot read is a bill you type in, same as before.</p>
+    </div>
+  </div>
+</dialog>
 {% endif %}
 {% endif %}
 
@@ -280,8 +362,14 @@
 
 {# ── Docs ────────────────────────────────────────────────────────────── #}
 {% elif tab == 'Docs' %}
-<div class="fl jb ia mb14"><div class="it">Documents &amp; Photos ({{ media|length }})</div></div>
-{% include "crm/_media.html" with media=media media_scope="customer" media_id=customer.pk %}
+<div class="fl jb ia mb14"><div class="it">Documents &amp; KYC ({{ media|length }})</div>
+  <span class="sm mu">Aadhaar, PAN, contracts, photos — anything that belongs to this client</span></div>
+{% include "crm/_media.html" with media=media media_scope="customer" media_id=customer.pk docs=1 %}
 {% endif %}
 </div>
 {% endblock %}
+
+{% block extra_js %}{% if caps.adjust_stock and tab == 'Purchases' %}
+<script src="{% static 'vendor/pdf.min.js' %}" defer></script>
+<script src="{% static 'js/crm-invoice.js' %}" defer></script>
+{% endif %}{% endblock %}

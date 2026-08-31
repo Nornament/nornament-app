@@ -55,7 +55,10 @@
     <div class="card mb14">
       <div class="it mb12">Revenue by Category</div>
       {% for label, amount in by_category %}
-      <div class="fl ia jb mb8"><span class="sm">{{ label }}</span><span class="fw">{{ amount|inr }}</span></div>
+      <div style="margin-bottom:9px">
+        <div class="fl ia jb mb4"><span class="sm">{{ label }}</span><span class="fw">{{ amount|inr }}</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:{% widthratio amount category_peak 100 %}%"></div></div>
+      </div>
       {% endfor %}
     </div>
     {% endif %}
@@ -63,8 +66,11 @@
     <div class="card mb14">
       <div class="it mb12">Customer Source</div>
       {% for row in by_source %}
-      <div class="fl ia jb" style="margin-bottom:6px"><span class="sm">{{ row.reference_type|default:"Unknown" }}</span>
-        <span class="sm fw">{{ row.n }}</span></div>
+      <div style="margin-bottom:9px">
+        <div class="fl ia jb mb4"><span class="sm">{{ row.reference_type|default:"Unknown" }}</span>
+          <span class="sm fw">{{ row.n }}</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:{% widthratio row.n source_peak 100 %}%;background:var(--gold)"></div></div>
+      </div>
       {% empty %}<div class="sm mu">No customers yet.</div>{% endfor %}
     </div>
 

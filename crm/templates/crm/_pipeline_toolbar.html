@@ -1,6 +1,11 @@
 {% comment %}Status chips plus the List / Kanban / + New row — the legacy module
-toolbar, identical on all four screens.{% endcomment %}
-<div class="fl ia jb mb16 g8" style="flex-wrap:wrap">
+toolbar, identical on all four screens.
+
+Desktop only: on a phone the stage bar in _mobile_pipeline.html is this same
+status filter, and rendering both stacks two rows of chips that do the same
+thing. Kanban is a desktop view anyway — the stage bar is what replaced it.
+{% endcomment %}
+<div class="fl ia jb mb16 g8 only-desktop" style="flex-wrap:wrap">
   <div class="fl ia g8" style="flex-wrap:wrap">
     <a class="chip{% if not selected_status %} act{% endif %}" href="?{% if view_mode == 'kanban' %}view=kanban{% endif %}">All</a>
     {% for status in statuses %}

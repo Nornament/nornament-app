@@ -20,4 +20,6 @@ venv/
 staticfiles/
 media/
 static/vendor/htmx.min.js
+static/vendor/pdf.min.js
+static/vendor/pdf.worker.min.js
 db.sqlite3

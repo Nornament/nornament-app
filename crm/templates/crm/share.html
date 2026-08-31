@@ -1,0 +1,24 @@
+{% extends "crm_base.html" %}
+{% load crm_extras static %}
+{% comment %}The legacy ShareAttachSheet, as a page. A photo shared into the app
+from WhatsApp or the camera roll lands here; picking a customer attaches it.
+{% endcomment %}
+{% block title %}Attach shared photo · Nornament CRM{% endblock %}
+{% block heading %}Attach shared photo{% endblock %}
+{% block subheading %}Pick the customer it belongs to{% endblock %}
+
+{% block content %}
+<div class="card mb16">
+  <div id="share-strip" class="fl g8" style="overflow-x:auto;padding-bottom:4px"></div>
+  <div class="sm mu mt8" id="share-status">Reading what was shared…</div>
+</div>
+
+<div class="card" id="share-picker" hidden>
+  <div class="fg"><label for="share-q">Attach to customer</label>
+    <input type="search" id="share-q" placeholder="Search name / code / phone…"
+           hx-get="{% url 'crm:share_customers' %}" hx-target="#share-rows" hx-trigger="keyup changed delay:250ms" name="q"></div>
+  <div id="share-rows">{% include "crm/_share_rows.html" %}</div>
+</div>
+{% endblock %}
+
+{% block extra_js %}<script src="{% static 'js/crm-share.js' %}" defer></script>{% endblock %}

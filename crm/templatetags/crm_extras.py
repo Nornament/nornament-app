@@ -178,3 +178,30 @@ def follow_up_text(customer_name):
         f"Hello {first}, this is Nornament. It has been a while — we have some new pieces "
         "we think you will love. May we share a few pictures?"
     )
+
+
+@register.filter
+def paired_fields(form):
+    """Group a form's fields for the two-column pipeline layout.
+
+    Short controls pair up; anything rendered as a textarea takes the full
+    width on its own. Yields ``(is_wide, [fields])`` so the template stays a
+    plain loop rather than four hand-written column layouts, one per module.
+    """
+    from django import forms as django_forms
+
+    rows, pending = [], []
+    for field in form:
+        if isinstance(field.field.widget, django_forms.Textarea):
+            if pending:
+                rows.append((False, pending))
+                pending = []
+            rows.append((True, [field]))
+            continue
+        pending.append(field)
+        if len(pending) == 2:
+            rows.append((False, pending))
+            pending = []
+    if pending:
+        rows.append((False, pending))
+    return rows

@@ -89,3 +89,65 @@ def to_webp(asset, data=None, quality=None):
     asset.width_px, asset.height_px = width, height
     asset.save(update_fields=fields)
     return saved
+
+
+def attach_uploads(files, scope, entity_id, user, kind=None):
+    """Take files off a normal form POST and put them in the bucket.
+
+    The JS path (presign → PUT → confirm) needs an entity that already exists,
+    which is why the legacy app could photograph an enquiry while creating it
+    and this one could not. A form that posts ``multipart/form-data`` can:
+    the row is saved first, then its files land here in the same request.
+
+    Returns the assets that made it. A file the bucket refuses is skipped and
+    reported, never silently dropped — the caller turns that into a message.
+    """
+    from django.contrib.auth import get_user_model  # noqa: F401  (kept lazy, as elsewhere)
+
+    saved, refused = [], []
+    for upload in files or []:
+        mime = upload.content_type or storage.guess_mime(upload.name)
+        if not storage.is_serveable(mime):
+            refused.append(f"{upload.name} ({mime})")
+            continue
+        data = upload.read()
+        key = storage.build_key(scope, entity_id, upload.name)
+        try:
+            storage.put_bytes(key, data, mime)
+        except storage.StorageNotConfigured as error:
+            refused.append(f"{upload.name} ({error})")
+            continue
+        asset = MediaAsset.objects.create(
+            media_ref=next_media_ref(),
+            kind=kind or kind_for(mime),
+            storage_key=key,
+            file_name=upload.name,
+            mime_type=mime,
+            bytes=len(data),
+            file_size_kb=int(len(data) / 1024) or None,
+            sha256=storage.sha256_of(data),
+            confirmed_at=timezone.now(),
+            uploaded_by=user,
+            scope=scope,
+            scope_id=str(entity_id),
+        )
+        saved.append(asset)
+    return saved, refused
+
+
+def kind_for(mime):
+    """PHOTO / VIDEO / DOCUMENT off the content type."""
+    from stock.enums import MediaKind
+
+    mime = (mime or "").lower()
+    if mime.startswith("video/"):
+        return MediaKind.VIDEO
+    if mime.startswith("image/"):
+        return MediaKind.PHOTO
+    return MediaKind.DOCUMENT
+
+
+def next_media_ref():
+    last = MediaAsset.objects.exclude(media_ref=None).order_by("-media_id").values_list("media_ref", flat=True).first()
+    number = int(last[1:]) + 1 if last and last[1:].isdigit() else 1
+    return f"M{number:06d}"

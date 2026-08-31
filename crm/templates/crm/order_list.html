@@ -22,7 +22,8 @@
 {% if view_mode == 'kanban' %}
   {% include "crm/_kanban.html" %}
 {% else %}
-<div class="card" style="padding:0">
+<div class="only-mobile">{% include "crm/_mobile_pipeline.html" %}</div>
+<div class="card only-desktop" style="padding:0">
   <div style="overflow-x:auto">
     <table>
       <thead><tr><th style="width:44px;padding:6px 8px"></th><th>Order</th><th>Customer</th><th>Item</th>

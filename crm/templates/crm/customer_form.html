@@ -10,7 +10,7 @@ posts in one go would hide validation errors on the tabs you are not looking
 at, which is how a required field goes missing without anyone noticing.
 {% endcomment %}
 <div class="card" style="max-width:920px">
-  <form method="post">{% csrf_token %}
+  <form method="post" enctype="multipart/form-data">{% csrf_token %}
     {% if form.non_field_errors %}<div class="al al-b">{{ form.non_field_errors }}</div>{% endif %}
 
     <div class="it mb12">Basic Info</div>
@@ -52,6 +52,19 @@ at, which is how a required field goes missing without anyone noticing.
     </div>
 
     <div class="divL"></div>
+    <div class="it mb12">Relationships</div>
+    <p class="sm mu mb8">Spouse, children, whoever else buys for them. Add more from the profile later.</p>
+    <div id="people">
+      <div class="fr3 person-row">
+        <div class="fg"><label>Name</label><input type="text" name="person_name"></div>
+        <div class="fg"><label>Relation</label><input type="text" name="person_relation" placeholder="Wife, son, mother…"></div>
+        <div class="fg"><label>Phone</label><input type="tel" name="person_phone"></div>
+      </div>
+    </div>
+    <button class="add-btn" type="button"
+            onclick="var r=document.querySelector('.person-row').cloneNode(true);r.querySelectorAll('input').forEach(function(i){i.value=''});document.getElementById('people').appendChild(r)">+ Add person</button>
+
+    <div class="divL"></div>
     <div class="it mb12">Personal &amp; Tags</div>
     {% include "crm/_field.html" with field=form.personal_observation %}
     {% include "crm/_field.html" with field=form.client_personal_info %}
@@ -74,6 +87,11 @@ at, which is how a required field goes missing without anyone noticing.
     <p class="sm mu">A level 1 earns on their whole downline; levels 2 and 3 earn a flat override on their own billing.
       Commission is computed off the sale ledger, so the payout follows whatever the shop actually billed.</p>
 
+    <div class="divL"></div>
+    <div class="it mb12">📷 Photos</div>
+    <div class="fg"><label for="photos">Photo / ID</label>
+      <input id="photos" name="photos" type="file" accept="image/*,video/*,.pdf" multiple capture="environment"></div>
+
     <div class="fl g8 mt16">
       <button class="btn btn-p">Save</button>
       <a class="btn btn-s" href="{% if customer %}{% url 'crm:customer_detail' customer.pk %}{% else %}{% url 'crm:customer_list' %}{% endif %}">Cancel</a>
@@ -83,7 +101,7 @@ at, which is how a required field goes missing without anyone noticing.
 
 {% if customer %}
 <div class="card mt16" style="max-width:920px">
-  <div class="it mb12">📷 Photos</div>
+  <div class="it mb12">📷 Photos on file</div>
   {% include "crm/_media.html" with media=customer_media media_scope="customer" media_id=customer.pk %}
 </div>
 {% endif %}

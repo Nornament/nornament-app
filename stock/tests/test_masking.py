@@ -123,6 +123,12 @@ SALES_SCREENS = [
     ("crm:settings", {}),
     ("crm:reports", {}),
     ("crm:calculator", {}),
+    ("crm:share", {}),
+    ("crm:share_customers", {}),
+    ("crm:manifest", {}),
+    ("crm:service_worker", {}),
+    ("crm:bulk_import", {"kind": "customers"}),
+    ("crm:import_template", {"kind": "customers"}),
 ]
 
 
@@ -196,6 +202,24 @@ def test_the_write_screens_refuse_a_login_without_edit_bom(client, sales_user, p
     assert client.get(reverse("stock:style_new")).status_code == 403
 
 
+def test_the_purchase_screens_refuse_a_login_without_adjust_stock(client, sales_user, crm_world):
+    """Editing a purchase moves a row the revenue and FoN numbers are read off.
+
+    The bulk purchase importer writes the same rows in a hundred at a time, so
+    it is gated on the same capability rather than on being a different screen.
+    """
+    from stock.models import Sale
+
+    _login(client, sales_user)
+    sale = Sale.objects.filter(source=Sale.CRM).first()
+    if sale is not None:
+        response = client.get(
+            reverse("crm:edit_purchase", kwargs={"pk": sale.customer_id, "sale_pk": sale.pk})
+        )
+        assert response.status_code == 302, "a SALES login reached the edit-purchase screen"
+    assert client.get(reverse("crm:bulk_import", kwargs={"kind": "purchases"})).status_code == 302
+
+
 def test_margin_and_admin_are_closed_to_sales(client, sales_user, priced_and_sold):
     _login(client, sales_user)
     assert client.get(reverse("stock:margin_report")).status_code == 403
@@ -254,6 +278,10 @@ def test_every_stock_and_crm_screen_is_in_the_sales_walk():
         "crm:add_gift", "crm:delete_gift", "crm:add_occasion", "crm:delete_occasion",
         "crm:add_person", "crm:delete_person", "crm:add_outreach", "crm:delete_outreach",
         "crm:pipeline_status", "crm:pipeline_delete", "crm:enquiry_convert", "crm:material_convert",
+        "crm:quick_customer", "crm:quote_attach",
+        # needs a CRM sale this fixture does not create; refused for SALES in
+        # test_the_purchase_screens_refuse_a_login_without_adjust_stock
+        "crm:edit_purchase",
         # gated whole, and asserted to 403 above
         "stock:piece_bom", "stock:margin_report",
         # need an object that this fixture does not create

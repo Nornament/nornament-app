@@ -114,3 +114,36 @@ def distribute_to_total(item, target):
         return item
     item.making_rate = max(ZERO, round_to((target - item.goods) / item.metal_grams, 2))
     return item
+
+
+def stone_rates(chart=None):
+    """Every priced material on the default chart, for the calculator's picker.
+
+    The legacy calculator had no such list — a stone rate was typed in from
+    memory. These come off the same rate chart the BOM screens price against,
+    so a quote and a costing cannot disagree about what a stone is worth.
+    """
+    from stock.models import RateChart, RateChartLine
+
+    chart_id = chart.pk if isinstance(chart, RateChart) else chart
+    if chart_id is None:
+        default = RateChart.objects.filter(is_default=True).first()
+        if default is None:
+            return []
+        chart_id = default.pk
+    lines = (
+        RateChartLine.objects.filter(chart_id=chart_id, sale_rate__isnull=False)
+        .select_related("material")
+        .order_by("material__item_code", "size_band")
+    )
+    return [
+        {
+            "code": line.material.item_code,
+            "name": line.material.item_name,
+            "band": line.size_band or "",
+            "uom": line.rate_uom or line.material.default_uom or "ct",
+            "sale_rate": float(line.sale_rate or 0),
+            "cost_rate": float(line.cost_rate or 0),
+        }
+        for line in lines
+    ]

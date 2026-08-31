@@ -1,0 +1,48 @@
+{% load crm_extras %}
+{% comment %}The legacy MobileStages: a scrolling strip of stages with counts,
+then the records in the chosen one as cards with ‹ › move buttons. The strip is
+the same status filter the desktop toolbar uses, so a stage tap is a URL, not
+client state.{% endcomment %}
+<div class="stage-bar">
+  <a class="stage-chip{% if not selected_status %} on{% endif %}" href="?">All<span class="ct">{{ rows|length }}</span></a>
+  {% for status in statuses %}
+  <a class="stage-chip{% if selected_status == status %} on{% endif %}" href="?status={{ status|urlencode }}">
+    {{ status }}<span class="ct">{{ status_counts|lookup:status|default:0 }}</span></a>
+  {% endfor %}
+</div>
+
+{% for row in rows %}
+<div class="mob-card">
+  <a class="mob-thumb" href="{% url spec.detail_url row.pk %}">
+    {% with url=thumbs|lookup:row.pk %}
+    {% if url %}<img src="{{ url }}" alt="" style="width:100%;height:100%;object-fit:cover">
+    {% else %}<span style="font-family:'Newsreader',serif;font-size:18px">N</span>{% endif %}
+    {% endwith %}
+  </a>
+  <a href="{% url spec.detail_url row.pk %}" style="flex:1;min-width:0;color:inherit">
+    <div class="fl ia g8 jb">
+      <div class="fw" style="font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{% firstof row|pipeline_title row|pipeline_code %}</div>
+      {% include "crm/_status_chip.html" with status=row.status %}
+    </div>
+    <div class="sm mu" style="margin-top:2px">{{ row|pipeline_code }}{% if row.customer %} · {{ row.customer.name }}{% endif %}</div>
+    <div class="sm mu" style="margin-top:2px">
+      {% if row.expected_delivery %}Due {{ row.expected_delivery|date:"d M" }}
+      {% elif row.follow_up_date %}Follow-up {{ row.follow_up_date|date:"d M" }}
+      {% elif row.expected_return %}Return {{ row.expected_return|date:"d M" }}
+      {% elif row.received_date %}Received {{ row.received_date|date:"d M" }}{% endif %}
+    </div>
+  </a>
+  <div class="fl g8" style="flex-shrink:0">
+    {% with back=row.status|prev_status:statuses forward=row.status|next_status:statuses %}
+    <form method="post" action="{% url 'crm:pipeline_status' kind row.pk %}">{% csrf_token %}
+      <input type="hidden" name="status" value="{{ back }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <button class="mv-btn" {% if not back %}disabled{% endif %} title="Back a stage">‹</button></form>
+    <form method="post" action="{% url 'crm:pipeline_status' kind row.pk %}">{% csrf_token %}
+      <input type="hidden" name="status" value="{{ forward }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <button class="mv-btn" {% if not forward %}disabled{% endif %} title="On a stage">›</button></form>
+    {% endwith %}
+  </div>
+</div>
+{% empty %}
+<div class="es"><div class="ei">◇</div><p>Nothing {% if selected_status %}in “{{ selected_status }}”{% else %}here{% endif %}</p></div>
+{% endfor %}

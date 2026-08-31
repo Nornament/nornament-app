@@ -1,16 +1,29 @@
-{% comment %}The legacy photo grid plus its uploader. Upload goes through
-mediahub: presign, PUT, confirm — the same three calls the stock side uses.{% endcomment %}
-<div class="photo-grid">
+{% comment %}The legacy photo grid and its uploader, plus CustomerDocs' file
+cards. Upload goes through mediahub: presign, PUT, confirm — the same three
+calls the stock side uses. `docs=1` widens the accept list to PDFs and Office
+files and switches the tiles to the doc grid the stylesheet already carries.
+{% endcomment %}
+<div class="{% if docs %}doc-grid{% else %}photo-grid{% endif %}">
   {% for asset, url in media %}
-  <div class="photo-thumb">
-    {% if url %}<img src="{{ url }}" alt="{{ asset.caption|default:asset.file_name }}" loading="lazy">
-    {% else %}<div class="pip" style="width:100%;height:100%;border:none">{{ asset.kind }}</div>{% endif %}
-    {% if caps.edit_bom %}<button type="button" class="photo-del" data-detach="{% url 'mediahub:detach' asset.pk %}" title="Remove">✕</button>{% endif %}
+  {% if asset.is_image %}
+  <div class="{% if docs %}doc-thumb{% else %}photo-thumb{% endif %}">
+    <a href="{{ url }}" target="_blank" rel="noopener"><img src="{{ url }}" alt="{{ asset.caption|default:asset.file_name }}" loading="lazy"></a>
+    {% if caps.edit_bom %}<button type="button" class="{% if docs %}doc-del{% else %}photo-del{% endif %}" data-detach="{% url 'mediahub:detach' asset.pk %}" title="Remove">✕</button>{% endif %}
   </div>
+  {% else %}
+  <div class="doc-file" style="position:relative">
+    <a href="{{ url }}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:5px">
+      <span class="doc-file-icon">{% if asset.is_video %}🎬{% elif 'pdf' in asset.mime_type %}📕{% else %}📄{% endif %}</span>
+      <span class="doc-file-name" title="{{ asset.file_name }}">{{ asset.file_name|default:asset.kind }}</span>
+    </a>
+    {% if caps.edit_bom %}<button type="button" class="doc-del" data-detach="{% url 'mediahub:detach' asset.pk %}" title="Remove">✕</button>{% endif %}
+  </div>
+  {% endif %}
   {% endfor %}
 </div>
 <label class="drop-zone mt8" style="display:block">
-  <input type="file" accept="image/*,video/*" multiple data-upload-scope="{{ media_scope }}" data-upload-id="{{ media_id }}">
-  <span class="sm mu">Drop photos here, or tap to choose</span>
+  <input type="file" multiple data-upload-scope="{{ media_scope }}" data-upload-id="{{ media_id }}"
+         accept="{% if docs %}image/*,video/*,.pdf,.doc,.docx{% else %}image/*,video/*{% endif %}">
+  <span class="sm mu">{% if docs %}Drop KYC, contracts or photos here, or tap to choose{% else %}Drop photos here, or tap to choose{% endif %}</span>
 </label>
 <div class="sm mu mt4" data-upload-status></div>

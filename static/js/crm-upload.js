@@ -14,7 +14,7 @@
       body: JSON.stringify({
         scope: scope, entity_id: entityId, file_name: file.name,
         mime_type: file.type, bytes: file.size,
-        kind: file.type.startsWith('video') ? 'VIDEO' : 'PHOTO'
+        kind: file.type.startsWith('video') ? 'VIDEO' : file.type.startsWith('image') ? 'PHOTO' : 'DOCUMENT'
       })
     });
     if (!reserve.ok) throw new Error((await reserve.json()).error || 'could not reserve an upload');
@@ -37,6 +37,10 @@
     });
     if (!done.ok) throw new Error((await done.json()).error || 'the file did not land in the bucket');
   }
+
+  /* the share-target page needs the same three calls for a File it pulled out
+     of a cache rather than off an <input> */
+  window.nornamentUpload = upload;
 
   document.addEventListener('change', async function (event) {
     const input = event.target.closest('[data-upload-scope]');

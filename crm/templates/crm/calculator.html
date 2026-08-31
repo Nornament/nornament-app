@@ -1,86 +1,106 @@
 {% extends "crm_base.html" %}
-{% load crm_extras %}
+{% load crm_extras static %}
+{% comment %}The legacy jewellery_quote_calculator.html: multi-item, multi-component,
+every number editable, back-solve on an item or on the grand total, print onto
+the shop's letterhead, import a Gati quotation, attach the result to an enquiry.
+
+The rates are the difference. The old file carried its own PURITY table, which
+is how 925 silver came to be priced off the gold rate. These come from
+MetalPurity and the default RateChart, so a purity prices off its own metal and
+an admin rate change moves the quote.
+{% endcomment %}
 {% block title %}Quote Calculator · Nornament CRM{% endblock %}
 {% block heading %}Quote Calculator{% endblock %}
-{% block subheading %}Live rates from the database{% endblock %}
+{% block subheading %}Live rates · {{ purities|length }} purit{{ purities|length|pluralize:"y,ies" }} · {{ stones|length }} priced material{{ stones|length|pluralize }}{% endblock %}
+{% block actions %}
+<button class="btn btn-s btn-sm" type="button" id="clear-quote">Clear</button>
+<button class="btn btn-s btn-sm" type="button" id="print-quote">⬇ Export PDF</button>
+<button class="btn btn-p btn-sm" type="button" id="add-item">+ Add Item</button>
+{% endblock %}
 
 {% block content %}
-<div class="card mb16">
-  <div class="it mb12">Gold &amp; metal rates</div>
+{{ rates|json_script:"quote-rates" }}
+
+<div class="card mb16 no-print">
+  <div class="it mb12">Today's rates</div>
   <div class="fl g8" style="flex-wrap:wrap">
     {% for purity in purities %}
     <span class="mt-tag" style="font-size:12px;padding:6px 12px">{{ purity.karat }} {{ purity.metal_name }} · {{ purity.sale_rate|inr }}/g{% if caps.view_cost %}&nbsp;<span class="mu">(cost {{ purity.cost_rate|inr }})</span>{% endif %}</span>
+    {% empty %}
+    <span class="sm mu">No metal purities configured — add them in Settings before quoting.</span>
     {% endfor %}
   </div>
-  <p class="sm mu mt8">Each purity prices off the metal it belongs to — which is what the old calculator got wrong for silver.</p>
+  <p class="sm mu mt8">Each purity prices off the metal it belongs to — which is what the old calculator got wrong for silver.
+    Stone rates come from the default rate chart; type over any rate and the row will say it no longer matches.</p>
 </div>
 
-<div class="card mb16">
-  <div class="it mb12">Item</div>
-  <form method="post">{% csrf_token %}
-    <div class="fr3">
-      <div class="fg"><label for="name">Item</label><input id="name" name="name" type="text" placeholder="Earrings"></div>
-      <div class="fg"><label for="code">Code</label><input id="code" name="code" type="text" placeholder="ER00738"></div>
-      <div class="fg"><label for="karat">Karat</label>
-        <select id="karat" name="karat">{% for purity in purities %}<option value="{{ purity.karat }}">{{ purity.karat }} ({{ purity.metal_name }})</option>{% endfor %}</select></div>
-    </div>
-    <div class="fr2">
-      <div class="fg"><label for="grams">Metal grams</label><input id="grams" name="grams" type="number" step="0.001" value="0"></div>
-      <div class="fg"><label for="making_rate">Making / g</label><input id="making_rate" name="making_rate" type="number" step="1" value="1500"></div>
-    </div>
+<div id="quote-root" class="no-print"></div>
 
-    <div class="divL"></div>
-    <div class="it mb12">Stones</div>
-    {% for i in "12345" %}
-    <div class="fr3">
-      <div class="fg"><label for="stone_material_{{ forloop.counter }}">Stone {{ forloop.counter }} material</label>
-        <input id="stone_material_{{ forloop.counter }}" name="stone_material_{{ forloop.counter }}" type="text" placeholder="Material code"></div>
-      <div class="fg"><label for="stone_ct_{{ forloop.counter }}">Carats</label>
-        <input id="stone_ct_{{ forloop.counter }}" name="stone_ct_{{ forloop.counter }}" type="number" step="0.001"></div>
-      <div class="fg"><label for="stone_band_{{ forloop.counter }}">Size band</label>
-        <input id="stone_band_{{ forloop.counter }}" name="stone_band_{{ forloop.counter }}" type="text"></div>
-    </div>
-    {% endfor %}
-
-    <div class="divL"></div>
-    <div class="fr2">
-      <div class="fg"><label for="target_total">Item total — type a target to back-solve (optional)</label>
-        <input id="target_total" name="target_total" type="number" step="1"></div>
-      <div class="fg" style="display:flex;align-items:flex-end"><button class="btn btn-p wf">Calculate</button></div>
-    </div>
-    <p class="sm mu">Rounding to a total moves the making charge, never a stone rate —
-      a stone rate no chart agrees with is a quote nobody can reconcile later.</p>
-  </form>
-</div>
-
-{% for item in items %}
-<div class="card mb16" style="padding:0">
-  <div class="fl ia jb" style="padding:12px 14px;border-bottom:1px solid var(--bdr)">
-    <div class="it">{{ item.name }}</div><div class="ncode">{{ item.code }}</div>
-  </div>
-  <table>
-    <thead><tr><th>Component</th><th class="tr">Weight</th><th class="tr">Rate</th><th class="tr">Amount</th></tr></thead>
-    <tbody>
-    {% for component in item.components %}
-    <tr><td>{{ component.label }}{% if component.detail %}<div class="sm mu">{{ component.detail }}</div>{% endif %}</td>
-        <td class="tr">{{ component.weight }} {{ component.unit }}</td>
-        <td class="tr">{{ component.rate|floatformat:0 }}</td>
-        <td class="tr fw">{{ component.amount|inr }}</td></tr>
-    {% endfor %}
-    <tr><td>Making Charges<div class="sm mu">{{ item.metal_grams }} g × {{ item.making_rate|floatformat:2 }}/g</div></td>
-        <td></td><td></td><td class="tr fw">{{ item.making|inr }}</td></tr>
-    </tbody>
-  </table>
-  <div class="fl ia jb" style="padding:10px 14px;background:#fbfcfd">
-    <span class="sl">Item Total</span><span class="fw" style="font-size:16px">{{ item.total|inr }}</span>
-  </div>
-</div>
-{% endfor %}
-
-{% if items %}
-<div style="background:#111;border-radius:12px;margin-top:4px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between">
+<div class="fl ia jb g8 mb16 no-print" style="background:#111;border-radius:12px;padding:14px 18px;flex-wrap:wrap">
   <span style="font-size:13px;color:rgba(255,255,255,.7);letter-spacing:.04em;text-transform:uppercase">Grand Total</span>
-  <span style="font-size:26px;font-weight:800;color:var(--gold);letter-spacing:-.02em">{{ total|inr }}</span>
+  <div class="fl ia g12">
+    <span style="font-size:26px;font-weight:800;color:var(--gold);letter-spacing:-.02em" id="grand-total">₹0</span>
+    <input type="number" step="1" id="grand-target" title="Type a target to spread the difference across making charges"
+           style="width:150px;text-align:right;background:#1d1d1d;color:#fff;border-color:#333">
+  </div>
+</div>
+
+<div class="g2 no-print">
+  <div class="card">
+    <div class="it mb12">📂 Import a Gati quotation</div>
+    <label class="drop-zone" style="display:block">
+      <input type="file" id="gati-file" accept=".pdf" data-worker="{% static 'vendor/pdf.worker.min.js' %}">
+      <span class="sm mu">Drop the Gati ERP PDF here, or tap to choose</span>
+    </label>
+    <div class="sm mu mt8" id="gati-status"></div>
+    <p class="sm mu mt8">Lines it can read become items. Check every rate before quoting — a PDF is text, not a price list.</p>
+  </div>
+
+  <div class="card">
+    <div class="it mb12">🖼 Letterhead</div>
+    <label class="drop-zone" style="display:block;padding:18px">
+      <input type="file" id="letterhead-file" accept="image/*">
+      <span class="sm mu">Drop a scan of the letterhead (PNG or JPEG)</span>
+    </label>
+    <div class="sm mu mt8" id="letterhead-status"></div>
+    <div class="fr3 mt12">
+      <div class="fg"><label for="lh-top">Top margin (mm)</label><input type="number" id="lh-top" value="45"></div>
+      <div class="fg"><label for="lh-bottom">Bottom (mm)</label><input type="number" id="lh-bottom" value="30"></div>
+      <div class="fg"><label for="lh-side">Sides (mm)</label><input type="number" id="lh-side" value="18"></div>
+    </div>
+    <p class="sm mu">It prints behind the quote. Nothing is uploaded — the image stays in this browser tab.</p>
+  </div>
+</div>
+
+{% if enquiries %}
+<div class="card mt16 no-print">
+  <div class="it mb12">↗ Attach to an enquiry</div>
+  <form method="post" action="{% url 'crm:quote_attach' %}" class="fl ia g8" style="flex-wrap:wrap">{% csrf_token %}
+    <input type="hidden" name="quote" id="quote-payload">
+    <select name="enquiry" style="width:auto;min-width:280px;flex:1">
+      {% for enquiry in enquiries %}
+      <option value="{{ enquiry.pk }}">{{ enquiry.enquiry_code }} — {{ enquiry.customer.name|default:"unknown" }}{% if enquiry.item_of_interest %} · {{ enquiry.item_of_interest|truncatechars:40 }}{% endif %}</option>
+      {% endfor %}
+    </select>
+    <button class="btn btn-p">Attach quote</button>
+  </form>
+  <p class="sm mu mt8">Writes the quote onto the enquiry as a status update, so it shows up on its timeline
+    and moves it to “Quote Sent”. The calculator itself stays a scratchpad.</p>
 </div>
 {% endif %}
+
+{# ── the printable sheet ─────────────────────────────────────────────── #}
+<div id="print-sheet">
+  <div class="print-head">
+    <div class="print-brand">NORNAMENT</div>
+    <div class="print-meta">Quotation · {{ today|date:"d M Y" }}</div>
+  </div>
+  <div id="print-body"></div>
+  <p class="print-foot">Rates as on {{ today|date:"d M Y" }} and subject to change. This is a quotation, not an invoice.</p>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'vendor/pdf.min.js' %}" defer></script>
+<script src="{% static 'js/crm-quote.js' %}" defer></script>
 {% endblock %}

@@ -4,9 +4,8 @@
 {% block heading %}Customers{% endblock %}
 {% block subheading %}{{ grand_total }} total{% endblock %}
 {% block actions %}
-<a class="BI" href="{% url 'crm:search' %}" title="Search everything" style="min-width:38px;min-height:38px;display:flex;align-items:center;justify-content:center">
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 21l-4.35-4.35"/><path d="M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"/></svg>
-</a>
+<a class="btn btn-s btn-sm" href="{% url 'crm:bulk_import' 'customers' %}">📤 Mass Upload</a>
+{% if caps.adjust_stock %}<a class="btn btn-s btn-sm" href="{% url 'crm:bulk_import' 'purchases' %}">💳 Bulk Purchases</a>{% endif %}
 <a class="btn btn-s btn-sm" href="{% url 'crm:customer_export' %}">⬇️ Export</a>
 <a class="btn btn-p" href="{% url 'crm:customer_new' %}">+ Add Customer</a>
 {% endblock %}

@@ -1,0 +1,34 @@
+{% extends "crm_base.html" %}
+{% load crm_extras %}
+{% comment %}The legacy "Edit Purchase" modal. Only CRM-sourced rows reach here —
+a stock sale is the stock app's to change.{% endcomment %}
+{% block title %}Edit purchase · {{ customer.name }}{% endblock %}
+{% block back %}<a class="btn btn-s btn-sm" style="margin-right:8px" href="{{ back }}">← Back</a>{% endblock %}
+{% block heading %}Edit purchase{% endblock %}
+{% block subheading %}{{ customer.name }} · {{ customer.customer_code }}{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:720px">
+  <form method="post" enctype="multipart/form-data">{% csrf_token %}
+    <div class="fr2">
+      {% include "crm/_field.html" with field=form.sold_price %}
+      {% include "crm/_field.html" with field=form.sold_on %}
+      {% include "crm/_field.html" with field=form.category %}
+      {% include "crm/_field.html" with field=form.invoice_no %}
+    </div>
+    {% include "crm/_field.html" with field=form.description %}
+    {% include "crm/_field.html" with field=form.remarks %}
+    <div class="fg"><label for="photos">Purchase photos</label>
+      <input id="photos" name="photos" type="file" accept="image/*,application/pdf" multiple capture="environment"></div>
+    <div class="fl g8 mt16">
+      <button class="btn btn-p">Save changes</button>
+      <a class="btn btn-s" href="{{ back }}">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<div class="card mt16" style="max-width:720px">
+  <div class="it mb12">📷 Purchase photos</div>
+  {% include "crm/_media.html" with media=media media_scope="sale" media_id=sale.pk %}
+</div>
+{% endblock %}

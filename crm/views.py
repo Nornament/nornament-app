@@ -11,17 +11,21 @@ typed array, and the quote calculator reads live rates from the database
 instead of a hardcoded purity table.
 """
 import csv
+import json
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Count, DecimalField, Q, Sum, Value
 from django.db.models.functions import Coalesce, TruncMonth
-from django.http import Http404, HttpResponse
+from django.contrib.staticfiles import finders
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -31,7 +35,7 @@ from mediahub import services as media_services
 from mediahub.models import MediaAsset
 from stock.masking import allowed
 from stock.models import Sale
-from . import forms as crm_forms, quote, services
+from . import forms as crm_forms, imports, quote, services
 from .models import (
     ClientMaterial,
     Customer,
@@ -137,6 +141,23 @@ PIPELINES = {
 
 
 # ── shared helpers ───────────────────────────────────────────────────────
+def _attach_posted_files(request, scope, entity_id, field="photos"):
+    """The legacy forms photographed a record while creating it; this does too.
+
+    The JS uploader needs an entity that already exists, so a brand-new enquiry
+    could not carry a photo. A multipart form can: the row is saved, then its
+    files go to the bucket in the same request.
+    """
+    files = request.FILES.getlist(field)
+    if not files:
+        return
+    saved, refused = media_services.attach_uploads(files, scope, entity_id, request.user)
+    if saved:
+        messages.success(request, f"{len(saved)} file{'s' if len(saved) != 1 else ''} attached.")
+    for name in refused:
+        messages.error(request, f"Could not attach {name}.")
+
+
 def _crm_media(scope, ids):
     """Confirmed, live media for CRM rows -> {scope_id: [(asset, url|None), ...]}.
 
@@ -176,6 +197,20 @@ def _next_occurrence(when, today):
         if candidate >= today:
             return candidate
     return when
+
+
+def _financial_year_bounds(start_year):
+    """1 April to 31 March — the year the reports screen already works in."""
+    return date(start_year, 4, 1), date(start_year + 1, 3, 31)
+
+
+def _financial_years(sales):
+    """Every FY this customer bought in, newest first, as (value, label)."""
+    years = set()
+    for sold_on in sales.values_list("sold_on", flat=True):
+        if sold_on:
+            years.add(sold_on.year if sold_on.month >= 4 else sold_on.year - 1)
+    return [(year, f"FY {year}-{str(year + 1)[2:]}") for year in sorted(years, reverse=True)]
 
 
 def _reminders(today, horizon=30):
@@ -491,13 +526,41 @@ def customer_detail(request, pk):
     if tab == "Timeline":
         context["timeline"] = _timeline(customer)
     if allowed(request.user, "sold_price"):
-        context["sales"] = Sale.objects.filter(customer=customer).select_related("piece").order_by("-sold_on")
+        sales = Sale.objects.filter(customer=customer).select_related("piece").order_by("-sold_on")
+        context["financial_years"] = _financial_years(sales)
+        chosen = request.GET.get("fy") or ""
+        if chosen.isdigit():
+            start, end = _financial_year_bounds(int(chosen))
+            sales = sales.filter(sold_on__gte=start, sold_on__lte=end)
+        context["fy"] = chosen
+        context["sales"] = sales
+        context["sale_thumbs"] = _thumbs("sale", sales)
+        context["shown_value"] = sales.aggregate(total=Sum("sold_price"))["total"] or Decimal("0")
+        context["shown_count"] = sales.count()
         context["lifetime_value"] = services.customer_lifetime_value(customer)
         context["year_value"] = Sale.objects.filter(
             customer=customer, sold_on__year=timezone.localdate().year
         ).aggregate(total=Sum("sold_price"))["total"] or Decimal("0")
         context["purchase_count"] = Sale.objects.filter(customer=customer).count()
     return render(request, "crm/customer_detail.html", context)
+
+
+def _save_inline_people(request, customer):
+    """The legacy form's Relationships tab, which edited ``relatedPeople[]``
+    inside the create modal rather than making you save first."""
+    names = request.POST.getlist("person_name")
+    relations = request.POST.getlist("person_relation")
+    phones = request.POST.getlist("person_phone")
+    for index, name in enumerate(names):
+        name = (name or "").strip()
+        if not name:
+            continue
+        RelatedPerson.objects.create(
+            customer=customer,
+            name=name,
+            relation=(relations[index] if index < len(relations) else "").strip(),
+            phone=(phones[index] if index < len(phones) else "").strip(),
+        )
 
 
 @login_required
@@ -510,6 +573,8 @@ def customer_form(request, pk=None):
             saved.updated_at = timezone.now()
             saved.save()
             form.save_m2m()
+            _attach_posted_files(request, "customer", saved.pk)
+            _save_inline_people(request, saved)
             messages.success(request, f"{saved.name} saved.")
             return redirect("crm:customer_detail", pk=saved.pk)
     else:
@@ -552,40 +617,161 @@ def customer_apply_temperature(request, pk):
 
 @login_required
 def customer_export(request):
-    """``doMasterExport`` — every customer as one CSV.
+    """``doMasterExport`` — every customer, every column the legacy sheet had.
+
+    CSV rather than the legacy XLSX: the columns are what the sheet is for, and
+    a CSV needs no dependency to write and opens in Excel the same way.
 
     Money columns only for a login allowed to see sale prices; the masking rule
     does not stop at the screen.
     """
     show_money = allowed(request.user, "sold_price")
     response = HttpResponse(content_type="text/csv")
-    response["Content-Disposition"] = 'attachment; filename="nornament-customers.csv"'
+    response["Content-Disposition"] = (
+        f'attachment; filename="nornament-customers-{timezone.localdate():%Y-%m-%d}.csv"'
+    )
     writer = csv.writer(response)
     header = [
         "Customer Code", "Name", "Mobile", "Landline", "Email", "Address", "Location",
-        "Birthday", "Anniversary", "Engagement Date", "Wedding Date", "Customer Type",
-        "Temperature", "Referred By", "Salesperson", "Payment", "FoN", "FoN Level", "Observations",
+        "Birthday", "Anniversary", "Engagement Date", "Wedding Date",
+        "Customer Type", "Temperature", "Tier",
+        "Metal Preference", "Salesperson", "Payment Preference",
+        "Reference Type", "Referrer Code",
+        "Is FoN", "FoN Level",
+        "Total Orders", "Total Repairs", "Total Enquiries",
+        "Personal Observation", "Client Info", "Created", "Last Updated",
     ]
     if show_money:
-        header.append("Lifetime Value")
+        header += ["Credit Limit", "Outstanding Balance", "Total Purchases (INR)"]
     writer.writerow(header)
-    rows = Customer.objects.select_related("referrer")
+
+    rows = (
+        Customer.objects.select_related("referrer")
+        .annotate(
+            n_orders=Count("orders", distinct=True),
+            n_repairs=Count("repairs", distinct=True),
+            n_enquiries=Count("enquirys", distinct=True),
+        )
+        .order_by("name")
+    )
     if show_money:
-        rows = rows.annotate(value=Sum("sales__sold_price")).order_by("name")
+        rows = rows.annotate(value=Sum("sales__sold_price"))
     for customer in rows:
+        # the legacy carried these two on the blob and this model has no column
+        # for them; the ETL parked them in `extra`, so that is where they come
+        # from rather than being quietly reported as zero
+        extra = customer.extra or {}
         line = [
             customer.customer_code, customer.name, customer.mobile, customer.landline, customer.email,
-            customer.address, customer.location, customer.birth_date or "", customer.anniversary_date or "",
-            customer.engagement_date or "", customer.wedding_date or "", customer.customer_type,
-            customer.temperature,
-            customer.referrer.name if customer.referrer else customer.reference_type,
+            customer.address, customer.location,
+            customer.birth_date or "", customer.anniversary_date or "",
+            customer.engagement_date or "", customer.wedding_date or "",
+            customer.customer_type, customer.temperature, extra.get("tier", ""),
+            ", ".join(customer.metal_preference or []),
             customer.salesperson_preference, customer.payment_preference,
-            "Yes" if customer.is_fon else "", customer.fon_level or "", customer.personal_observation,
+            customer.reference_type,
+            customer.referrer.customer_code if customer.referrer else "",
+            "Yes" if customer.is_fon else "No", customer.fon_level or "",
+            customer.n_orders, customer.n_repairs, customer.n_enquiries,
+            customer.personal_observation, customer.client_personal_info,
+            customer.created_at.date() if customer.created_at else "",
+            customer.updated_at.date() if customer.updated_at else "",
         ]
         if show_money:
-            line.append(customer.value or 0)
+            line += [extra.get("creditLimit", ""), extra.get("outstandingBalance", ""), customer.value or 0]
         writer.writerow(line)
     return response
+
+
+# ── bulk import: the legacy MassUploadModal and PurchaseBulkUpload ───────
+IMPORTS = {
+    "customers": {
+        "title": "Mass upload customers",
+        "template": imports.CUSTOMER_TEMPLATE,
+        "file_name": "nornament_customer_template.csv",
+        "preview": imports.preview_customers,
+        "commit": imports.import_customers,
+        "done": "crm:customer_list",
+        "columns": ["Name", "Mobile", "Code", "Email", "Location", "Birth date", "Type", "Temp"],
+    },
+    "purchases": {
+        "title": "Bulk upload purchases",
+        "template": imports.PURCHASE_TEMPLATE,
+        "file_name": "nornament_purchase_template.csv",
+        "preview": imports.preview_purchases,
+        "commit": imports.import_purchases,
+        "done": "crm:customer_list",
+        "columns": ["Customer", "Date", "Amount", "Category", "Description", "Invoice"],
+    },
+}
+
+
+def _import_spec(kind):
+    spec = IMPORTS.get(kind)
+    if spec is None:
+        raise Http404(f"no importer named {kind!r}")
+    return spec
+
+
+@login_required
+def import_template(request, kind):
+    """The template download both legacy modals offered before anything else."""
+    spec = _import_spec(kind)
+    response = HttpResponse(imports.template_csv(spec["template"]), content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="{spec["file_name"]}"'
+    return response
+
+
+@login_required
+def bulk_import(request, kind):
+    """Drop a CSV, see what it understood, then commit.
+
+    The preview is not decoration. Confirming posts back the same CSV text it
+    was shown, so what gets written is exactly what was on screen — and a row
+    the preview objected to is never written at all.
+    """
+    spec = _import_spec(kind)
+    if kind == "purchases" and not request.user.has_perm("accounts.adjust_stock"):
+        messages.error(request, "You do not have permission to record sales.")
+        return redirect("crm:customer_list")
+
+    context = {
+        "nav": "customers",
+        "kind": kind,
+        "spec": spec,
+        "form": crm_forms.CsvUploadForm(),
+        "categories": services.CATEGORY_LABELS,
+    }
+    if request.method != "POST":
+        return render(request, "crm/import.html", context)
+
+    raw = request.POST.get("csv_text")
+    if raw is None:
+        form = crm_forms.CsvUploadForm(request.POST, request.FILES)
+        if not form.is_valid():
+            context["form"] = form
+            return render(request, "crm/import.html", context)
+        raw = imports.text_of(form.cleaned_data["csv_file"])
+
+    headers, rows = imports.read_csv(raw)
+    if not rows:
+        messages.error(request, "That file has headers but no data rows.")
+        return render(request, "crm/import.html", context)
+
+    preview = spec["preview"](rows)
+    if request.POST.get("commit"):
+        created, skipped = spec["commit"](preview)
+        messages.success(request, f"Imported {created} row{'s' if created != 1 else ''}, skipped {skipped}.")
+        return redirect(spec["done"])
+
+    context |= {
+        "headers": headers,
+        "preview": preview,
+        "csv_text": raw,
+        "ok_count": sum(1 for row in preview if not row["problem"]),
+        "bad_count": sum(1 for row in preview if row["problem"]),
+    }
+    return render(request, "crm/import.html", context)
 
 
 # ── the customer's own sub-records ───────────────────────────────────────
@@ -636,9 +822,47 @@ def add_purchase(request, pk):
         product_category=form.cleaned_data["category"],
         invoice_no=form.cleaned_data.get("invoice_no") or None,
         description=form.cleaned_data.get("description") or None,
+        remarks=form.cleaned_data.get("remarks") or None,
     )
+    _attach_posted_files(request, "sale", sale.pk)
     messages.success(request, f"Purchase of {sale.sold_price} recorded.")
     return redirect(back)
+
+
+@login_required
+def edit_purchase(request, pk, sale_pk):
+    """The legacy Edit Purchase modal. Only a CRM-sourced row: a stock sale is
+    the stock app's to change, and editing it here would move a number the
+    margin report depends on."""
+    customer = get_object_or_404(Customer, pk=pk)
+    sale = get_object_or_404(Sale, pk=sale_pk, customer=customer, source=Sale.CRM)
+    back = f"{reverse('crm:customer_detail', args=[pk])}?tab=Purchases"
+    if not request.user.has_perm("accounts.adjust_stock"):
+        messages.error(request, "You do not have permission to change a sale.")
+        return redirect(back)
+    if request.method == "POST":
+        form = crm_forms.PurchaseForm(request.POST, instance=sale)
+        if form.is_valid():
+            saved = form.save(commit=False)
+            saved.product_category = form.cleaned_data["category"]
+            saved.save()
+            _attach_posted_files(request, "sale", sale.pk)
+            messages.success(request, "Purchase updated.")
+            return redirect(back)
+    else:
+        form = crm_forms.PurchaseForm(instance=sale)
+    return render(
+        request,
+        "crm/purchase_form.html",
+        {
+            "nav": "customers",
+            "customer": customer,
+            "sale": sale,
+            "form": form,
+            "back": back,
+            "media": _crm_media("sale", [sale.pk]).get(str(sale.pk), []),
+        },
+    )
 
 
 @login_required
@@ -862,6 +1086,7 @@ def pipeline_form(request, kind, pk=None):
             saved = form.save(commit=False)
             saved.updated_at = timezone.now()
             saved.save()
+            _attach_posted_files(request, spec["media_scope"], saved.pk)
             if created:
                 StatusEvent.objects.create(
                     entity_type=kind,
@@ -886,7 +1111,14 @@ def pipeline_form(request, kind, pk=None):
     return render(
         request,
         "crm/pipeline_form.html",
-        {"nav": kind, "kind": kind, "spec": spec, "form": form, "row": row},
+        {
+            "nav": kind,
+            "kind": kind,
+            "spec": spec,
+            "form": form,
+            "row": row,
+            "media": _crm_media(spec["media_scope"], [row.pk]).get(str(row.pk), []) if row else [],
+        },
     )
 
 
@@ -1004,6 +1236,7 @@ def reports(request):
         "by_source": Customer.objects.values("reference_type").annotate(n=Count("pk")).order_by("-n"),
         "fon_members": Customer.objects.filter(is_fon=True).count(),
     }
+    context["source_peak"] = max((row["n"] for row in context["by_source"]), default=0) or 1
     if allowed(request.user, "sold_price"):
         context["revenue"] = {
             "all": services.revenue_between(year_start, today),
@@ -1032,6 +1265,7 @@ def reports(request):
         context["by_category"] = [
             (label, by_category.get(key) or Decimal("0")) for key, label in services.CATEGORY_LABELS.items()
         ]
+        context["category_peak"] = max((amount for _, amount in context["by_category"]), default=Decimal("0")) or 1
     if allowed(request.user, "margin_amt"):
         context["margin"] = services.margin_between(year_start, today)
     return render(request, "crm/reports.html", context)
@@ -1039,37 +1273,79 @@ def reports(request):
 
 @login_required
 def calculator(request):
-    """The quote calculator, reading live rates rather than a hardcoded table."""
-    items = []
-    if request.method == "POST":
-        karat = request.POST.get("karat") or "18K"
-        try:
-            grams = Decimal(request.POST.get("grams") or "0")
-            making_rate = Decimal(request.POST.get("making_rate") or "0")
-        except InvalidOperation:
-            messages.error(request, "Weights and rates have to be numbers.")
-            grams = making_rate = Decimal("0")
-        item = quote.QuoteItem(
-            name=request.POST.get("name") or "Item",
-            code=request.POST.get("code", ""),
-            making_rate=making_rate,
-            components=[quote.metal_component(f"Metal ({karat})", karat, grams)],
-        )
-        for index in range(1, 6):
-            carats = request.POST.get(f"stone_ct_{index}")
-            material = request.POST.get(f"stone_material_{index}")
-            if carats and material:
-                item.components.append(
-                    quote.stone_component(material, material, Decimal(carats), request.POST.get(f"stone_band_{index}", ""))
-                )
-        if request.POST.get("target_total"):
-            quote.distribute_to_total(item, request.POST["target_total"])
-        items.append(item)
+    """The quote calculator.
+
+    The arithmetic runs in the browser because a quote is a scratchpad — but
+    every rate it starts from comes from here, off ``MetalPurity`` and the
+    default ``RateChart``. The standalone HTML file carried its own ``PURITY``
+    table, which is how 925 silver came to be priced off the gold rate.
+    """
+    purities = quote.purity_rates()
+    stones = quote.stone_rates()
     return render(
         request,
         "crm/calculator.html",
-        {"nav": "quote", "items": items, "purities": quote.purity_rates(), "total": quote.quote_total(items)},
+        {
+            "nav": "quote",
+            "today": timezone.localdate(),
+            "purities": purities,
+            "stones": stones,
+            "rates": {
+                "metals": [
+                    {"karat": row["karat"], "metal_name": row["metal_name"], "sale_rate": float(row["sale_rate"] or 0)}
+                    for row in purities
+                ],
+                "stones": stones,
+                "default_making": float(services.default_making_rate()),
+            },
+            "enquiries": Enquiry.objects.exclude(status__in=["Lost", "Order Confirmed"])
+            .select_related("customer")
+            .order_by("-enquiry_date")[:50],
+        },
     )
+
+
+@login_required
+@require_POST
+def quote_attach(request):
+    """``shareToEnquiry`` — put the quote on the enquiry it belongs to.
+
+    Written as a status update rather than into a field of its own: it is a
+    thing that happened on a date, it belongs on the timeline, and the enquiry
+    moves to "Quote Sent" the same way every other stage change does.
+    """
+    enquiry = get_object_or_404(Enquiry, pk=request.POST.get("enquiry"))
+    try:
+        payload = json.loads(request.POST.get("quote") or "{}")
+    except json.JSONDecodeError:
+        payload = {}
+    items = payload.get("items") or []
+    if not items:
+        messages.error(request, "Add at least one item before attaching a quote.")
+        return redirect("crm:calculator")
+
+    lines = []
+    for item in items:
+        name = str(item.get("name") or "Item")[:80]
+        total = Decimal(str(item.get("total") or 0)) if item.get("total") is not None else None
+        if total is None:
+            goods = sum(
+                Decimal(str(c.get("weight") or 0)) * Decimal(str(c.get("rate") or 0))
+                for c in item.get("components") or []
+            )
+            grams = sum(
+                Decimal(str(c.get("weight") or 0))
+                for c in item.get("components") or []
+                if c.get("kind") == "metal"
+            )
+            total = goods + grams * Decimal(str(item.get("makingRate") or 0))
+        lines.append(f"{name} — ₹{total:,.0f}")
+    grand = Decimal(str(payload.get("total") or 0))
+    note = "Quote: " + "; ".join(lines) + f". Total ₹{grand:,.0f}."
+
+    services.log_status(enquiry, "enquiry", "Quote Sent", note=note[:2000], by=str(request.user))
+    messages.success(request, f"Quote attached to {enquiry.enquiry_code}.")
+    return redirect("crm:enquiry_detail", pk=enquiry.pk)
 
 
 @login_required
@@ -1079,6 +1355,102 @@ def search(request):
     results = services.search(query)
     template = "crm/_search_results.html" if request.headers.get("HX-Request") else "crm/search.html"
     return render(request, template, {"nav": "search", "q": query, "results": results})
+
+
+# ── PWA: installable, and a target for "share to Nornament" ──────────────
+@login_required
+def manifest(request):
+    """The legacy manifest.json, pointed at Django's URLs.
+
+    ``share_target`` posts to ``share-target``, which nothing serves: the
+    service worker intercepts it. It has to — a share POST arrives from another
+    app, so SameSite=Lax withholds the session cookie and the request would
+    reach Django logged out.
+    """
+    return JsonResponse(
+        {
+            "name": "Nornament CRM",
+            "short_name": "Nornament",
+            "description": "Nornament Jewellery CRM — Customers, Orders, Repairs",
+            "start_url": reverse("crm:dashboard"),
+            "scope": reverse("crm:dashboard"),
+            "display": "standalone",
+            "background_color": "#F7F6F3",
+            "theme_color": "#B08C3C",
+            "icons": [
+                {"src": static("img/icon-192.png"), "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+                {"src": static("img/icon-512.png"), "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+            ],
+            "share_target": {
+                "action": reverse("crm:dashboard") + "share-target",
+                "method": "POST",
+                "enctype": "multipart/form-data",
+                "params": {
+                    "title": "title",
+                    "text": "text",
+                    "files": [{"name": "media", "accept": ["image/*", "video/*", "application/pdf"]}],
+                },
+            },
+        },
+        content_type="application/manifest+json",
+    )
+
+
+def service_worker(request):
+    """Served from /crm/ so its scope is /crm/ — a worker's scope cannot be
+    broader than the path it is served from, and /static/ would be too narrow."""
+    path = finders.find("js/crm-sw.js")
+    if not path:
+        raise Http404("service worker not collected")
+    with open(path, "rb") as handle:
+        response = HttpResponse(handle.read(), content_type="text/javascript")
+    response["Service-Worker-Allowed"] = reverse("crm:dashboard")
+    return response
+
+
+@login_required
+def share_inbox(request):
+    """``ShareAttachSheet`` — a photo shared into the app, waiting for a customer."""
+    return render(request, "crm/share.html", {"nav": "customers", "customers": _share_customers(request)})
+
+
+@login_required
+def share_customers(request):
+    """The picker's live rows, for HTMX."""
+    return render(request, "crm/_share_rows.html", {"customers": _share_customers(request)})
+
+
+def _share_customers(request):
+    query = (request.GET.get("q") or "").strip()
+    rows = Customer.objects.all()
+    if query:
+        rows = rows.filter(
+            Q(name__icontains=query) | Q(customer_code__icontains=query) | Q(mobile__icontains=query)
+        )
+    return rows.order_by("name")[:8]
+
+
+@login_required
+@require_POST
+def quick_customer(request):
+    """The legacy forms let you name a walk-in without leaving the enquiry.
+
+    Returns to wherever you were, with ``?customer=<pk>`` so the form you came
+    from selects the person you just created.
+    """
+    name = (request.POST.get("name") or "").strip()
+    if not name:
+        messages.error(request, "A name is the one thing a customer needs.")
+        return _redirect_back(request, reverse("crm:customer_list"))
+    customer = services.quick_customer(name, request.POST.get("phone", ""))
+    messages.success(request, f"{customer.name} added as {customer.customer_code}.")
+    target = request.POST.get("next")
+    if target and url_has_allowed_host_and_scheme(
+        target, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        joiner = "&" if "?" in target else "?"
+        return redirect(f"{target}{joiner}customer={customer.pk}")
+    return redirect("crm:customer_detail", pk=customer.pk)
 
 
 @login_required

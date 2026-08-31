@@ -1,20 +1,62 @@
 {% extends "crm_base.html" %}
-{% block title %}{% if row %}Edit {{ row }}{% else %}New{% endif %} · Nornament CRM{% endblock %}
+{% load crm_extras %}
+{% comment %}The legacy New/Edit modals for the four pipeline modules.
+
+Short fields pair up two to a row; anything long — a design brief, stone
+details, an issue — gets the full width, because a textarea in a half-column is
+a textarea nobody types into. The field order comes from each form's Meta, so
+the grouping follows the form rather than being restated per module.
+{% endcomment %}
+{% block title %}{% if row %}Edit {{ row }}{% else %}New {{ spec.singular }}{% endif %} · Nornament CRM{% endblock %}
 {% block back %}<a class="btn btn-s btn-sm" style="margin-right:8px" href="{% if row %}{% url spec.detail_url row.pk %}{% else %}{% url spec.list_url %}{% endif %}">← Back</a>{% endblock %}
 {% block heading %}{% if row %}Edit — {{ row }}{% else %}New {{ spec.singular }}{% endif %}{% endblock %}
 {% block subheading %}{{ spec.title }}{% endblock %}
 
 {% block content %}
-<div class="card" style="max-width:860px">
-  <form method="post">{% csrf_token %}
+<div class="card" style="max-width:900px">
+  <form method="post" enctype="multipart/form-data">{% csrf_token %}
     {% if form.non_field_errors %}<div class="al al-b">{{ form.non_field_errors }}</div>{% endif %}
-    <div class="fr2">
-      {% for field in form %}{% include "crm/_field.html" %}{% endfor %}
-    </div>
+
+    {# short fields two-up, long ones on their own row — see the note above #}
+    {% for wide, fields in form|paired_fields %}
+      {% if wide %}
+        {% for field in fields %}{% include "crm/_field.html" %}{% endfor %}
+      {% else %}
+        <div class="fr2">{% for field in fields %}{% include "crm/_field.html" %}{% endfor %}</div>
+      {% endif %}
+    {% endfor %}
+
+    <div class="divL"></div>
+    <div class="it mb12">{{ spec.icon }} Photos &amp; videos</div>
+    <p class="sm mu mb8">Pics shared, reference images, before/after — attached the moment this is saved.</p>
+    <div class="fg"><input id="photos" name="photos" type="file" accept="image/*,video/*,.pdf" multiple capture="environment"></div>
+
     <div class="fl g8 mt16">
       <button class="btn btn-p">Save</button>
       <a class="btn btn-s" href="{% if row %}{% url spec.detail_url row.pk %}{% else %}{% url spec.list_url %}{% endif %}">Cancel</a>
     </div>
   </form>
 </div>
+
+{% if not row %}
+{# T18: the legacy forms let you name a walk-in without abandoning the enquiry #}
+<div class="card mt16" style="max-width:900px">
+  <div class="it mb12">Customer not on file yet?</div>
+  <form method="post" action="{% url 'crm:quick_customer' %}" class="fl g8 ia" style="flex-wrap:wrap">{% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <input type="text" name="name" placeholder="Full name" required style="flex:1;min-width:180px">
+    <input type="tel" name="phone" placeholder="Mobile" style="flex:1;min-width:150px">
+    <button class="btn btn-s">+ Add and select</button>
+  </form>
+  <p class="sm mu mt8">Creates the customer with the next code and comes straight back here with them selected.
+    Anything else about them can be filled in later.</p>
+</div>
+{% endif %}
+
+{% if row %}
+<div class="card mt16" style="max-width:900px">
+  <div class="it mb12">📷 Already attached</div>
+  {% include "crm/_media.html" with media=media media_scope=spec.media_scope media_id=row.pk %}
+</div>
+{% endif %}
 {% endblock %}

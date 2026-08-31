@@ -44,6 +44,7 @@ class MediaKind(models.TextChoices):
     CERTIFICATE_SCAN = "CERTIFICATE_SCAN", "Certificate scan"
     JOB_CARD_SCAN = "JOB_CARD_SCAN", "Job card scan"
     GRAPH = "GRAPH", "Graph"
+    DOCUMENT = "DOCUMENT", "Document"
 
 
 class StockState(models.TextChoices):

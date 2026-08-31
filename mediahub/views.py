@@ -18,7 +18,7 @@ from stock.models import Piece, Style
 from . import services, storage
 from .models import MediaAsset
 
-CRM_SCOPES = {"customer", "order", "enquiry", "repair", "client_material"}
+CRM_SCOPES = {"customer", "order", "enquiry", "repair", "client_material", "sale"}
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +33,7 @@ def _resolve_owner(scope, entity_id):
     raise ValueError(f"unknown media scope {scope!r}")
 
 
-def _next_media_ref():
-    last = MediaAsset.objects.exclude(media_ref=None).order_by("-media_id").values_list("media_ref", flat=True).first()
-    number = int(last[1:]) + 1 if last and last[1:].isdigit() else 1
-    return f"M{number:06d}"
+_next_media_ref = services.next_media_ref
 
 
 @login_required

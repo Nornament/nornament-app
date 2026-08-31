@@ -8,16 +8,26 @@ urlpatterns = [
     path("", views.dashboard, name="dashboard"),
     path("search/", views.search, name="search"),
     path("settings/", views.settings_view, name="settings"),
+    # ── PWA ──────────────────────────────────────────────────────────────
+    path("manifest.webmanifest", views.manifest, name="manifest"),
+    path("sw.js", views.service_worker, name="service_worker"),
+    path("share/", views.share_inbox, name="share"),
+    path("share/customers/", views.share_customers, name="share_customers"),
+    # ── bulk import ──────────────────────────────────────────────────────
+    path("import/<str:kind>/", views.bulk_import, name="bulk_import"),
+    path("import/<str:kind>/template/", views.import_template, name="import_template"),
     # ── customers ────────────────────────────────────────────────────────
     path("customers/", views.customer_list, name="customer_list"),
     path("customers/rows/", views.customer_rows, name="customer_rows"),
     path("customers/new/", views.customer_form, name="customer_new"),
     path("customers/export/", views.customer_export, name="customer_export"),
+    path("customers/quick/", views.quick_customer, name="quick_customer"),
     path("customers/<int:pk>/", views.customer_detail, name="customer_detail"),
     path("customers/<int:pk>/edit/", views.customer_form, name="customer_edit"),
     path("customers/<int:pk>/delete/", views.customer_delete, name="customer_delete"),
     path("customers/<int:pk>/temperature/", views.customer_apply_temperature, name="customer_temperature"),
     path("customers/<int:pk>/purchase/", views.add_purchase, name="add_purchase"),
+    path("customers/<int:pk>/purchase/<int:sale_pk>/edit/", views.edit_purchase, name="edit_purchase"),
     path("customers/<int:pk>/purchase/<int:sale_pk>/delete/", views.delete_purchase, name="delete_purchase"),
     path("customers/<int:pk>/gift/", views.add_gift, name="add_gift"),
     path("customers/<int:pk>/occasion/", views.add_occasion, name="add_occasion"),
@@ -47,4 +57,5 @@ urlpatterns = [
     path("fon/<int:pk>/", views.fon_detail, name="fon_detail"),
     path("reports/", views.reports, name="reports"),
     path("calculator/", views.calculator, name="calculator"),
+    path("calculator/attach/", views.quote_attach, name="quote_attach"),
 ]

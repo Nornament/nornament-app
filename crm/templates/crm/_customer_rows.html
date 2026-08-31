@@ -1,5 +1,6 @@
 {% load crm_extras %}
-<div class="card" style="padding:0">
+<div class="only-mobile">{% include "crm/_mobile_customers.html" %}</div>
+<div class="card only-desktop" style="padding:0">
   <div style="overflow-x:auto">
     <table class="cust-table">
       <thead><tr><th>Customer</th><th>Contact</th><th>Location</th><th>Status</th><th>Type</th><th>FoN</th>
