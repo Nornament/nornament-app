@@ -1002,3 +1002,51 @@ class ActivityLog(AppModel):
 
     def __str__(self):
         return f"{self.action} {self.table_name} {self.record_pk}"
+
+
+class ImportBatch(AppModel):
+    """One run of the spreadsheet importer, from upload to the last image.
+
+    The workbook itself is kept rather than the parse: re-reading 992 rows
+    costs about two seconds, and staging tables for data thrown away at commit
+    would be three models nobody ever queries again. What is worth keeping is
+    the decisions a human made, and how far the images got.
+    """
+
+    class Status(models.TextChoices):
+        UPLOADED = "UPLOADED", "Uploaded"
+        REVIEWING = "REVIEWING", "Reviewing"
+        COMMITTING = "COMMITTING", "Committing"
+        IMAGES = "IMAGES", "Attaching images"
+        DONE = "DONE", "Done"
+        FAILED = "FAILED", "Failed"
+
+    batch_id = models.AutoField(primary_key=True)
+    media = models.ForeignKey(
+        "mediahub.MediaAsset", on_delete=models.PROTECT, db_column="media_id", related_name="import_batches"
+    )
+    source = models.CharField(max_length=32, default="IVY")
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.UPLOADED)
+    decisions = models.JSONField(default=dict, blank=True)
+    result = models.JSONField(default=dict, blank=True)
+    images_done = models.IntegerField(default=0)
+    images_total = models.IntegerField(default=0)
+    created_at = models.DateTimeField(default=timezone.now)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        db_column="created_by", related_name="+",
+    )
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "import_batch"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.source} import #{self.batch_id}"
+
+    @property
+    def images_pct(self):
+        if not self.images_total:
+            return 0
+        return int(self.images_done * 100 / self.images_total)
