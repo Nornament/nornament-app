@@ -15,6 +15,7 @@ from decimal import Decimal
 
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 
 from crm import services
 from crm.models import Customer, Order
@@ -280,3 +281,35 @@ def test_another_customers_purchase_at_the_same_price_is_never_claimed(order, cu
     theirs.refresh_from_db()
     assert theirs.crm_order_id is None
     assert Sale.objects.filter(customer=other).count() == 1
+
+
+# ── a purchase shows the photo of the order it was billed from ───────────
+# The legacy CRM had no purchase entity to photograph — a purchase was an
+# entry in the customer's purchases[] array — so scope='sale' media does not
+# exist for any migrated row and the Purchases tab showed a placeholder for
+# every one of them. The photos are on the order, which crm_order now names.
+def test_a_purchase_falls_back_to_the_photo_of_its_order(order, customer):
+    from mediahub.models import MediaAsset
+
+    from crm import views
+
+    MediaAsset.objects.create(
+        scope="order",
+        scope_id=str(order.pk),
+        mime_type="image/jpeg",
+        file_name="piece.jpg",
+        inline_data=b"not-a-real-jpeg",
+        confirmed_at=timezone.now(),
+    )
+    sale = services.record_order_delivery(order, amount=Decimal("450000"))
+
+    thumbs = views._sale_thumbs([sale])
+
+    assert thumbs.get(sale.pk), "a purchase with no media of its own should show its order's photo"
+
+
+def test_a_purchase_with_no_order_still_shows_no_photo(customer):
+    from crm import views
+
+    walk_in = services.record_purchase(customer, sold_on=date(2026, 6, 1), sold_price=Decimal("1000"))
+    assert views._sale_thumbs([walk_in]) == {}

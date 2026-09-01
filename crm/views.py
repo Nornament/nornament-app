@@ -187,6 +187,27 @@ def _thumbs(scope, rows):
     return {int(scope_id): items[0][1] for scope_id, items in media.items() if items}
 
 
+def _sale_thumbs(sales):
+    """A purchase shows its own photo, or the one from the order it was billed from.
+
+    The legacy CRM had nothing to photograph a purchase against — a purchase
+    was an entry in the customer's ``purchases[]`` array, not an entity — so
+    every migrated purchase has no media of its own and asking for ``sale``
+    scope alone returns nothing at all. The photos of the piece are on the
+    order that produced it, which ``crm_order`` now names.
+    """
+    thumbs = _thumbs("sale", sales)
+    pending = {sale.crm_order_id: sale.pk for sale in sales if sale.pk not in thumbs and sale.crm_order_id}
+    if not pending:
+        return thumbs
+    media = _crm_media("order", list(pending))
+    for order_id, sale_pk in pending.items():
+        items = media.get(str(order_id))
+        if items:
+            thumbs[sale_pk] = items[0][1]
+    return thumbs
+
+
 def _status_counts(model):
     counts = dict(model.objects.values_list("status").annotate(n=Count("pk")))
     return [(status, counts.get(status, 0)) for status in model.STATUSES]
@@ -539,7 +560,7 @@ def customer_detail(request, pk):
             sales = sales.filter(sold_on__gte=start, sold_on__lte=end)
         context["fy"] = chosen
         context["sales"] = sales
-        context["sale_thumbs"] = _thumbs("sale", sales)
+        context["sale_thumbs"] = _sale_thumbs(sales)
         context["shown_value"] = sales.aggregate(total=Sum("sold_price"))["total"] or Decimal("0")
         context["shown_count"] = sales.count()
         context["lifetime_value"] = services.customer_lifetime_value(customer)
