@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Python code follows the surrounding style: docstrings explain *why*, not *what*; no type annotations (the codebase uses none).
+- Python code follows the surrounding style: docstrings explain *why*, not *what*. The codebase uses no type annotations, so do not add them to functions — the one exception is dataclass field declarations in `ivy.py` and `analyse.py`, where annotations are what makes `@dataclass` work at all.
 - Reuse `stock.services` rather than writing new BOM/ledger code. Specifically: `services.set_bom`, `services.new_bom_version`, `services.receive_piece`, `services.recost_piece`.
 - Reuse `mediahub.services.attach_uploads` for images. Write no new S3 code.
 - Never use `ChargeBasis.BY_NET_METAL_WT` for imported metal lines. `recost_piece` snaps every such line to the piece's *total* net metal weight, so a piece with two metal lines (e.g. `G14K` plus `GC14K`) would have both inflated to the total. Imported metal lines use `BY_QTY` with the sheet's own net weight.
@@ -1026,6 +1026,30 @@ def parsed():
     return ivy.parse(build_workbook())
 
 
+@pytest.fixture
+def import_reference(db, rates, materials):
+    """What the shared fixtures do not cover but this workbook needs.
+
+    ``materials`` creates METAL/DIAMOND/SETTING/LABOUR only, and ``rates``
+    creates 18K and 925 only. The sample workbook carries a Foil Polki line
+    and 14K gold, so without these the guesser produces a category that does
+    not exist and a purity it is right to refuse.
+    """
+    from stock.models import MaterialCategory, MetalPurity
+
+    for order, code in enumerate(["POLKI", "OTHER"], start=5):
+        MaterialCategory.objects.get_or_create(
+            code=code, defaults={"name": code.title(), "sort_order": order}
+        )
+    MetalPurity.objects.get_or_create(
+        karat="14K",
+        defaults={
+            "sale_factor": "0.6000", "true_fineness": "0.5833",
+            "metal": rates["gold"], "sort_order": 4,
+        },
+    )
+
+
 def test_a_material_already_in_the_register_is_mapped_not_created(parsed, materials):
     """``materials`` fixture creates DRFGH SI-I among others."""
     Material.objects.get_or_create(
@@ -1037,7 +1061,7 @@ def test_a_material_already_in_the_register_is_mapped_not_created(parsed, materi
     assert row.action == "map"
 
 
-def test_an_unknown_material_is_proposed_as_a_creation(parsed, materials):
+def test_an_unknown_material_is_proposed_as_a_creation(parsed, materials, import_reference):
     plan = analyse(parsed)
     row = next(r for r in plan.materials if r.key == "SP01C")
     assert row.action == "create"
@@ -1345,7 +1369,7 @@ from stock.importers.commit import attach_images, commit
 from stock.models import BomLine, BomVersion, ImportBatch
 
 
-def test_commit_creates_materials_styles_and_pieces(parsed, materials, admin_user_):
+def test_commit_creates_materials_styles_and_pieces(parsed, materials, import_reference, admin_user_):
     plan = analyse(parsed)
     result = commit(parsed, default_decisions(plan), admin_user_)
     assert result["pieces_created"] == 3
@@ -1353,7 +1377,7 @@ def test_commit_creates_materials_styles_and_pieces(parsed, materials, admin_use
     assert Style.objects.filter(style_code="ER00502").exists()
 
 
-def test_imported_pieces_carry_what_the_source_system_said(parsed, materials, admin_user_):
+def test_imported_pieces_carry_what_the_source_system_said(parsed, materials, import_reference, admin_user_):
     plan = analyse(parsed)
     commit(parsed, default_decisions(plan), admin_user_)
     piece = Piece.objects.get(jewel_code="24P00111")
@@ -1362,7 +1386,7 @@ def test_imported_pieces_carry_what_the_source_system_said(parsed, materials, ad
     assert piece.src_net_wt_gm == Decimal("8.228")
 
 
-def test_every_material_line_lands_on_the_bom(parsed, materials, admin_user_):
+def test_every_material_line_lands_on_the_bom(parsed, materials, import_reference, admin_user_):
     plan = analyse(parsed)
     commit(parsed, default_decisions(plan), admin_user_)
     piece = Piece.objects.get(jewel_code="24P00111")
@@ -1370,7 +1394,7 @@ def test_every_material_line_lands_on_the_bom(parsed, materials, admin_user_):
     assert lines.count() == 6          # 3 diamond + 1 metal + 2 stone
 
 
-def test_metal_lines_keep_their_own_weight(parsed, materials, admin_user_):
+def test_metal_lines_keep_their_own_weight(parsed, materials, import_reference, admin_user_):
     """BY_NET_METAL_WT would have snapped this to the piece total."""
     plan = analyse(parsed)
     commit(parsed, default_decisions(plan), admin_user_)
@@ -1382,7 +1406,7 @@ def test_metal_lines_keep_their_own_weight(parsed, materials, admin_user_):
     assert metal.basis == "BY_QTY"
 
 
-def test_pieces_land_not_received_when_no_location_is_chosen(parsed, materials, admin_user_):
+def test_pieces_land_not_received_when_no_location_is_chosen(parsed, materials, import_reference, admin_user_):
     plan = analyse(parsed)
     commit(parsed, default_decisions(plan), admin_user_)
     piece = Piece.objects.get(jewel_code="24P00088")
@@ -1390,7 +1414,7 @@ def test_pieces_land_not_received_when_no_location_is_chosen(parsed, materials, 
     assert piece.location_id is None
 
 
-def test_choosing_a_location_receives_the_piece(parsed, materials, admin_user_, locations):
+def test_choosing_a_location_receives_the_piece(parsed, materials, import_reference, admin_user_, locations):
     from stock.models import Location
 
     plan = analyse(parsed)
@@ -1401,7 +1425,7 @@ def test_choosing_a_location_receives_the_piece(parsed, materials, admin_user_, 
     assert piece.location_id == where.pk
 
 
-def test_an_existing_piece_is_left_alone_when_skipped(parsed, piece, materials, admin_user_):
+def test_an_existing_piece_is_left_alone_when_skipped(parsed, piece, materials, import_reference, admin_user_):
     existing = Piece.objects.first()
     existing.jewel_code = "24P00095"
     existing.sub_category = "UNTOUCHED"
@@ -1414,7 +1438,7 @@ def test_an_existing_piece_is_left_alone_when_skipped(parsed, piece, materials, 
 
 
 def test_updating_an_existing_piece_adds_a_version_and_keeps_the_old_one(
-    parsed, piece, materials, admin_user_
+    parsed, piece, materials, import_reference, admin_user_
 ):
     existing = Piece.objects.first()
     existing.jewel_code = "24P00095"
@@ -1437,7 +1461,7 @@ def test_updating_an_existing_piece_adds_a_version_and_keeps_the_old_one(
 
 
 def test_images_are_attached_in_chunks_and_are_resumable(
-    parsed, materials, admin_user_, settings, tmp_path
+    parsed, materials, import_reference, admin_user_, settings, tmp_path
 ):
     """Each chunk does its share, and the counter is what makes it resumable."""
     from mediahub.models import MediaAsset
@@ -1529,6 +1553,13 @@ def _resolve_materials(decisions):
         if existing:
             resolved[key] = existing
             continue
+        if fields.get("category_id") == "METAL" and not fields.get("metal_id"):
+            # the view blocks this too; refusing here as well keeps a bad
+            # decisions blob from reaching material_metal_required as an
+            # IntegrityError halfway through the transaction
+            raise ValueError(
+                f"{code} is a metal with no metal resolved. Set its metal and purity first."
+            )
         resolved[key] = Material.objects.create(**fields)
     return resolved
 
