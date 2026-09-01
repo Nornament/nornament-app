@@ -236,7 +236,8 @@ ws = load_workbook(build_workbook())['Sheet1']
 assert ws['A1'].value == 'IVY Karigar Private Limited'
 assert ws['C3'].value == 'Style No'
 assert ws['C4'].value == 'ER00502'
-assert ws['C5'].value == 'RG00113' or ws['C5'].value is None
+assert ws['C5'].value == 'ER00409'   # product 2 opens on row 5 and runs to row 7
+assert ws['C8'].value == 'RG00113'
 print('parent rows:', [r for r in range(4, 12) if ws.cell(row=r, column=3).value])
 print('ok')
 "
