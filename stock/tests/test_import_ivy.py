@@ -102,3 +102,89 @@ def test_the_footer_row_does_not_leak_into_the_last_block():
     last = ivy.parse(build_workbook())[-1]
     assert last.jewel_code == "24P00095"
     assert len(last.lines) == 2          # one diamond, one metal — and no footer
+
+
+# ── guessing new materials ───────────────────────────────────────────────
+import pytest
+
+from stock.enums import ChargeBasis, Uom
+from stock.importers import guess
+from stock.importers.ivy import ParsedLine
+
+pytestmark = pytest.mark.django_db
+
+
+def _line(band, code, name=""):
+    return ParsedLine(band=band, code=code, name=name or code)
+
+
+def test_a_diamond_code_becomes_a_diamond_in_carats():
+    fields, problem = guess.material_fields(_line("diamond", "DRFGH SI-I"))
+    assert problem is None
+    assert fields["category_id"] == "DIAMOND"
+    assert fields["default_uom"] == Uom.CT
+
+
+def test_a_foil_polki_code_becomes_polki_not_diamond():
+    fields, problem = guess.material_fields(_line("diamond", "FPL", "Foil Polki"))
+    assert problem is None
+    assert fields["category_id"] == "POLKI"
+
+
+def test_a_gold_code_resolves_its_metal_and_purity(rates):
+    fields, problem = guess.material_fields(_line("metal", "G18K", "Gold18K"))
+    assert problem is None
+    assert fields["category_id"] == "METAL"
+    assert fields["metal_id"] == "GOLD"
+    assert fields["purity_factor"] == pytest.approx(0.75, abs=0.0001)
+    assert fields["default_uom"] == Uom.GM
+
+
+def test_a_silver_code_resolves_to_silver(rates):
+    fields, problem = guess.material_fields(_line("metal", "S925", "Silver925"))
+    assert problem is None
+    assert fields["metal_id"] == "SILVER"
+
+
+def test_a_purity_that_does_not_exist_is_a_blocker_not_a_guess(rates):
+    """G12K: MetalPurity has no 12K row, and inventing one would be a lie."""
+    fields, problem = guess.material_fields(_line("metal", "G12K", "Gold12K"))
+    assert problem is not None
+    assert "12K" in problem
+
+
+def test_an_unreadable_metal_code_is_a_blocker(rates):
+    """CJ 'Customer Jewelry999' has no G/S prefix to read a metal from."""
+    _, problem = guess.material_fields(_line("metal", "CJ", "Customer Jewelry999"))
+    assert problem is not None
+
+
+def test_a_stone_becomes_a_setting_stone():
+    fields, problem = guess.material_fields(_line("stone", "SP01C", "Semi Precious"))
+    assert problem is None
+    assert fields["category_id"] == "SETTING"
+
+
+def test_an_other_band_line_mints_a_code_from_its_name():
+    fields, problem = guess.material_fields(_line("other", "Lakh", "Lakh"))
+    assert problem is None
+    assert fields["item_code"] == "OTH-LAKH"
+    assert fields["category_id"] == "OTHER"
+
+
+def test_a_charge_becomes_labour():
+    fields, problem = guess.material_fields(_line("charge", "EC", "Extra Charges"))
+    assert problem is None
+    assert fields["category_id"] == "LABOUR"
+
+
+def test_metal_lines_are_by_qty_never_by_net_metal_weight():
+    """BY_NET_METAL_WT would snap every metal line to the piece total."""
+    basis, uom = guess.bom_basis_and_uom(_line("metal", "G18K"), "METAL")
+    assert basis == ChargeBasis.BY_QTY
+    assert uom == Uom.GM
+
+
+def test_charge_lines_are_flat_so_the_rate_is_the_amount():
+    basis, uom = guess.bom_basis_and_uom(_line("charge", "EC"), "LABOUR")
+    assert basis == ChargeBasis.FLAT
