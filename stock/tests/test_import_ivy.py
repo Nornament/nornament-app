@@ -95,3 +95,10 @@ def test_a_workbook_with_the_wrong_headers_is_rejected():
 
 def test_a_correct_workbook_has_no_header_problems():
     assert ivy.header_problems(build_workbook()) == []
+
+
+def test_the_footer_row_does_not_leak_into_the_last_block():
+    """The last block runs to EOF, so the export footer sits inside its range."""
+    last = ivy.parse(build_workbook())[-1]
+    assert last.jewel_code == "24P00095"
+    assert len(last.lines) == 2          # one diamond, one metal — and no footer

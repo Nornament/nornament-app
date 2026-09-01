@@ -16,7 +16,6 @@ from openpyxl.utils import column_index_from_string as col
 SHEET = "Sheet1"
 HEADER_ROW = 3
 FIRST_DATA_ROW = 4
-STYLE_COL = col("C")
 
 #: Column letters we check in row 3 before trusting anything else in the file.
 EXPECTED_HEADERS = {
