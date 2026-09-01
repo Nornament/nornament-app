@@ -366,8 +366,31 @@ def delivery_amount(order):
 
 
 def purchase_for_order(order):
-    """The purchase this order already produced, if it produced one."""
-    return Sale.objects.filter(crm_order=order).first()
+    """The purchase this order already produced, if it produced one.
+
+    ``crm_order`` is the legacy ``sourceOrderId`` as a column, but the legacy
+    CRM only stamped that on purchases its own ``updateOrder`` created. A
+    purchase recorded any other way — typed in by hand, or made before that
+    rule existed — arrives unlinked and reads as an order that was never
+    billed, so delivering it again would bill the customer twice for one piece.
+
+    One unambiguous match on customer and amount is treated as that purchase.
+    Two matches are not: a customer with two pieces at the same price gives no
+    way to tell which one this order produced, and claiming the wrong one is
+    worse than reporting the order as unbilled.
+    """
+    linked = Sale.objects.filter(crm_order=order).first()
+    if linked is not None or order.customer_id is None:
+        return linked
+    amount = delivery_amount(order)
+    if amount is None:
+        return None
+    unlinked = list(
+        Sale.objects.filter(
+            customer_id=order.customer_id, source=Sale.CRM, crm_order__isnull=True, sold_price=amount
+        )[:2]
+    )
+    return unlinked[0] if len(unlinked) == 1 else None
 
 
 def record_order_delivery(order, amount=None, sold_on=None, by=""):
@@ -405,9 +428,17 @@ def record_order_delivery(order, amount=None, sold_on=None, by=""):
     if existing:
         # Re-delivering, or correcting the bill: move the one row rather than
         # opening a second — the legacy sourceOrderId guard, as a column.
+        # A purchase matched by amount rather than by link is claimed here, so
+        # the next delivery finds it by the link and never has to guess again.
+        fields = []
+        if existing.crm_order_id != order.pk:
+            existing.crm_order = order
+            fields.append("crm_order")
         if existing.sold_price != amount:
             existing.sold_price = amount
-            existing.save(update_fields=["sold_price"])
+            fields.append("sold_price")
+        if fields:
+            existing.save(update_fields=fields)
         return existing
 
     return record_purchase(

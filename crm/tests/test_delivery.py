@@ -10,6 +10,7 @@ Both are things the client found missing between the legacy CRM and this one:
   column and no stage on the rail, so it disappeared from the board entirely
   rather than saying it was somewhere unexpected.
 """
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -239,3 +240,43 @@ def test_a_login_that_may_not_see_sale_prices_is_not_offered_the_bill(client, gr
     response = client.get(reverse("crm:order_detail", args=[order.pk]))
     assert "billing_amount" not in response.content.decode()
     assert response.context["delivery_sale"] is None
+
+
+# ── a legacy purchase that arrived without a sourceOrderId ───────────────
+# The legacy CRM only stamped sourceOrderId on purchases its own updateOrder
+# created. Everything else — typed in by hand, or recorded before that rule
+# existed — loads unlinked, and an unlinked purchase used to read as an order
+# that was never billed. Delivering it then billed the customer a second time
+# for one piece, which is the whole point of the guard.
+def test_an_unlinked_legacy_purchase_is_claimed_rather_than_billed_twice(order, customer):
+    legacy = services.record_purchase(customer, sold_on=date(2026, 6, 1), sold_price=Decimal("450000"), description="Polki choker")
+    assert legacy.crm_order_id is None
+
+    sale = services.record_order_delivery(order)
+
+    assert sale.pk == legacy.pk, "should have claimed the existing purchase, not opened a second"
+    assert Sale.objects.filter(customer=customer).count() == 1
+    legacy.refresh_from_db()
+    assert legacy.crm_order == order, "claiming it should persist the link"
+
+
+def test_two_purchases_at_the_same_price_are_too_ambiguous_to_claim(order, customer):
+    services.record_purchase(customer, sold_on=date(2026, 6, 1), sold_price=Decimal("450000"), description="one")
+    services.record_purchase(customer, sold_on=date(2026, 6, 2), sold_price=Decimal("450000"), description="two")
+
+    # Guessing which of the two this order produced would attach the order to
+    # someone else's piece, so it records a new one and leaves them alone.
+    sale = services.record_order_delivery(order)
+    assert sale.crm_order == order
+    assert Sale.objects.filter(customer=customer).count() == 3
+
+
+def test_another_customers_purchase_at_the_same_price_is_never_claimed(order, customer):
+    other = Customer.objects.create(customer_code="NOR-002", name="Ravi Menon", mobile="9000000000")
+    theirs = services.record_purchase(other, sold_on=date(2026, 6, 1), sold_price=Decimal("450000"), description="theirs")
+
+    services.record_order_delivery(order)
+
+    theirs.refresh_from_db()
+    assert theirs.crm_order_id is None
+    assert Sale.objects.filter(customer=other).count() == 1
