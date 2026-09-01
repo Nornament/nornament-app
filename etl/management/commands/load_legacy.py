@@ -338,12 +338,27 @@ class Command(BaseCommand):
                         problem="customer_id points at no customer",
                         detail={"customer_id": row.get("customer_id")},
                     )
-                entity = model.objects.create(customer=customer, **builder(row))
+                # A status the new app does not know is loaded as it stands and
+                # reported: renaming it would move the record to a stage nobody
+                # put it at, and a board that hides it is how a stage "goes
+                # missing" between the two apps.
+                status_problems = []
+                fields = builder(row, status_problems)
+                for problem in status_problems:
+                    EtlException.objects.create(
+                        entity=label,
+                        legacy_id=problem["legacy_id"],
+                        problem=problem["problem"],
+                        detail=problem["detail"],
+                    )
+                entity = model.objects.create(customer=customer, **fields)
                 crm_media += self.load_crm_media(self.MEDIA_SCOPES[label], entity.pk, blob_of(row))
                 for event in status_events_from_blob(blob_of(row), model.__name__.lower(), entity.pk):
                     StatusEvent.objects.create(**event)
                 loaded += 1
             counts[label] = loaded
+
+        counts["stock.Sale linked to an order"] = self.link_purchases_to_orders()
 
         if legacy.table_exists("public.settings"):
             CrmSetting.objects.all().delete()
@@ -465,12 +480,30 @@ class Command(BaseCommand):
         This is where the two disagreeing revenue numbers become one. A CRM
         purchase has no cost, so ``cost_at_sale`` stays null and margin
         reporting filters on ``source='STOCK'`` explicitly.
+
+        A purchase that cannot be shaped — no readable amount, no readable
+        date — becomes an ``EtlException`` and not a shrug. These are the rows
+        that made a customer's lifetime value come up short in the new app
+        while the load reported success.
+
+        ``sourceOrderId`` is remembered here and resolved to a real foreign key
+        in :meth:`link_purchases_to_orders`, once the orders exist.
         """
         loaded = 0
+        self.purchase_order_links = {}
         for row in legacy.rows("SELECT * FROM public.customers"):
             customer = by_legacy_id.get(row["id"])
-            for purchase in purchases_from_blob(blob_of(row)):
-                Sale.objects.create(
+            usable, rejected = purchases_from_blob(blob_of(row), row)
+            for reject in rejected:
+                EtlException.objects.create(
+                    entity="crm.Purchase",
+                    legacy_id=f"crm:{row['id']}:{reject['legacy_id']}",
+                    problem=reject["problem"],
+                    detail={"customer": customer.customer_code if customer else row["id"], **reject["purchase"]},
+                )
+            for purchase in usable:
+                source_order = purchase.pop("source_order_legacy_id", None)
+                sale = Sale.objects.create(
                     customer=customer,
                     customer_name=customer.name,
                     customer_phone=customer.phone,
@@ -479,8 +512,33 @@ class Command(BaseCommand):
                     legacy_id=f"crm:{row['id']}:{purchase['legacy_id']}",
                     **{key: value for key, value in purchase.items() if key != "legacy_id"},
                 )
+                if source_order:
+                    self.purchase_order_links[sale.pk] = source_order
                 loaded += 1
         return loaded
+
+    def link_purchases_to_orders(self):
+        """``purchases[].sourceOrderId`` becomes ``sale.crm_order``.
+
+        Runs after the orders are loaded, because it needs them. Without it the
+        new app cannot tell that a delivered order already produced a purchase,
+        and re-delivering that order would bill the customer twice.
+        """
+        linked = 0
+        order_ids = dict(Order.objects.exclude(legacy_id=None).values_list("legacy_id", "pk"))
+        for sale_pk, legacy_order_id in getattr(self, "purchase_order_links", {}).items():
+            order_pk = order_ids.get(legacy_order_id)
+            if order_pk is None:
+                EtlException.objects.create(
+                    entity="crm.Purchase",
+                    legacy_id=str(sale_pk),
+                    problem="purchase sourceOrderId points at no order",
+                    detail={"sourceOrderId": legacy_order_id},
+                )
+                continue
+            Sale.objects.filter(pk=sale_pk).update(crm_order_id=order_pk)
+            linked += 1
+        return linked
 
 
 def _json_value(raw):

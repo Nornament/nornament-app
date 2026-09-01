@@ -426,16 +426,30 @@ class ClientMaterialForm(PipelineForm):
 
 
 class StatusUpdateForm(forms.Form):
-    """The "＋ Update" modal on every pipeline detail screen."""
+    """The "＋ Update" modal on every pipeline detail screen.
+
+    On an order it carries one extra field: the bill. Delivering an order is
+    the moment the money is known, and it is the moment the legacy CRM wrote
+    the customer's purchase — so this is where it gets typed.
+    """
 
     status = forms.ChoiceField(label="New Status")
     by = forms.ChoiceField(required=False, label="By")
+    billing_amount = forms.DecimalField(
+        required=False,
+        max_digits=14,
+        decimal_places=2,
+        label="Bill Amount (₹)",
+        help_text="Filled in when the order is delivered — it becomes the customer's purchase.",
+    )
     note = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 3, "placeholder": "What happened?"}), label="Note")
 
-    def __init__(self, statuses, *args, **kwargs):
+    def __init__(self, statuses, *args, bills=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["status"].choices = _choices(statuses)
         self.fields["by"].choices = _salesperson_choices()
+        if not bills:
+            del self.fields["billing_amount"]
 
 
 class PurchaseForm(forms.ModelForm):

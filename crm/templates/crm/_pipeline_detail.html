@@ -16,6 +16,11 @@
 <div class="pipeline-wrap">
   {% if lost %}
   <div style="color:#dc2626;font-weight:700;display:flex;align-items:center;gap:6px"><span>❌</span> {{ code }} — {{ row.status }}</div>
+  {% elif unknown_status %}
+  <div style="color:#956400;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span>⚠</span>
+    <span>{{ code }} is at “{{ row.status|default:"(no stage)" }}”, which is not one of the {{ spec.title|lower }} stages.</span></div>
+  <div class="sm mu" style="margin-top:4px">It came across from the legacy CRM with this value. Pick the right stage
+    below and it will join the board.</div>
   {% else %}
   <div class="pipeline">
     {% for stage in stages %}
@@ -58,7 +63,10 @@
     <div class="card">
       <div class="ih"><div class="it">＋ Update Status</div></div>
       <form method="post" action="{% url 'crm:pipeline_status' kind row.pk %}">{% csrf_token %}
-        <div class="fr2">{% for field in status_form %}{% if field.name != 'note' %}{% include "crm/_field.html" %}{% endif %}{% endfor %}</div>
+        <div class="fr2">{% for field in status_form %}{% if field.name != 'note' and field.name != 'billing_amount' %}{% include "crm/_field.html" %}{% endif %}{% endfor %}</div>
+        {% for field in status_form %}{% if field.name == 'billing_amount' %}{% include "crm/_field.html" %}{% endif %}{% endfor %}
+        {% if delivery_sale %}<div class="sm mu mb8">✅ Already in {{ row.customer.name }}'s purchase history at
+          {{ delivery_sale.sold_price|inr }} — changing the bill above moves that row, it does not add another.</div>{% endif %}
         {% for field in status_form %}{% if field.name == 'note' %}{% include "crm/_field.html" %}{% endif %}{% endfor %}
         <button class="btn btn-p">Add Update</button>
       </form>

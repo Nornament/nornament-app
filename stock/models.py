@@ -709,6 +709,14 @@ class Sale(AppModel):
         db_persist=True,
     )
     source = models.CharField(max_length=8, choices=SOURCES, default=STOCK)
+    # The order this purchase was billed from, when it came out of the CRM
+    # pipeline rather than off the shop floor. The legacy app kept the same
+    # link as ``purchases[].sourceOrderId`` and used it to make delivering an
+    # order twice add one purchase, not two; this column is what lets the new
+    # app make the same guarantee.
+    crm_order = models.ForeignKey(
+        "crm.Order", null=True, blank=True, on_delete=models.SET_NULL, related_name="sales"
+    )
     # what the CRM knew about the sale and stock never did
     product_category = models.CharField(
         max_length=8, blank=True, null=True, help_text="cat1/cat2/cat3 — the FoN commission category."

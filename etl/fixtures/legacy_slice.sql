@@ -145,11 +145,18 @@ CREATE TABLE public.settings (key TEXT PRIMARY KEY, value JSONB DEFAULT '{}');
 
 INSERT INTO public.customers (id, customer_code, data) VALUES
 ('c_anita','NC0001', '{"name":"Anita Shah","phone":{"mobile":"9820000000","preferred":"mobile"},"email":"anita@example.com","birthDate":"1985-03-04","referenceFrom":{"type":"Existing Customer","referrerCode":"NC0002"},"fonData":{"isFoN":true,"level":1,"parentId":null},"outreach":{"done":true,"lastDate":"2026-07-01","notes":"Called"},"metalPreference":["Gold"],"occasions":[{"type":"Wedding","date":"2026-12-01"}],"relatedPeople":[{"name":"Rahul","relation":"Husband"}],"gifting":[{"date":"2026-05-01","occasion":"Anniversary","description":"Silver frame","amount":4500}],"purchases":[{"id":"p1","date":"2026-08-04","amount":125000,"category":"cat1","invoiceNo":"INV-9"},{"id":"p2","date":"2026-08-20","amount":40000,"category":"cat3"}],"customerType":"VIP","temperature":"Hot","somethingNew":"keep me"}'),
-('c_bhavna','NC0002','{"name":"Bhavna Rao","phone":{"mobile":"9810000000"},"fonData":{"isFoN":true,"level":2,"parentId":"c_anita"},"purchases":[{"id":"p3","date":"2026-08-10","amount":200000,"category":"cat1"}]}');
+('c_bhavna','NC0002','{"name":"Bhavna Rao","phone":{"mobile":"9810000000"},"fonData":{"isFoN":true,"level":2,"parentId":"c_anita"},"purchases":[{"id":"p3","date":"2026-08-10","amount":200000,"category":"cat1"}]}'),
+-- The shapes the real Supabase data has and a hand-written fixture never does:
+-- a date the invoice OCR wrote (04/08/2026), a category the CSV bulk upload
+-- stored as its label, a purchase with no date at all, and a purchase carrying
+-- the sourceOrderId the legacy app stamped on it when an order was delivered.
+('c_dirty','NC0003','{"name":"Kavita Nair","phone":{"mobile":"9800000000"},"purchases":[{"id":"p4","date":"04/08/2026","amount":"1,25,000","category":"Cat 1 \u2013 Diamond/Polki","invoiceNo":"INV-11"},{"id":"p5","date":"","amount":15000},{"id":"p6","date":"2026-08-15","amount":450000,"sourceOrderId":"o_1","remarks":"Auto from NO0001"}]}');
 
 INSERT INTO public.orders (id, order_code, customer_id, data) VALUES
 ('o_1','NO0001','c_anita','{"orderDate":"2026-08-05","itemDescription":"Polki choker","totalAmount":"450000","advancePaid":100000,"status":"Designing","statusLog":[{"date":"2026-08-05","status":"Order Confirmed","by":"Priya"}],"unknownThing":42}'),
-('o_2','NO0002','c_ghost','{"orderDate":"2026-08-06","itemDescription":"Orphan order","status":"Designing"}');
+('o_2','NO0002','c_ghost','{"orderDate":"2026-08-06","itemDescription":"Orphan order","status":"Designing"}'),
+-- a stage that is the right one but not the right string
+('o_3','NO0003','c_dirty','{"orderDate":"2026-08-07","itemDescription":"Jadau set","status":"  order   confirmed "}');
 
 INSERT INTO public.enquiries (id, enquiry_code, customer_id, data) VALUES
 ('e_1','NE0001','c_anita','{"enquiryDate":"2026-08-01","itemOfInterest":"Diamond studs","estimatedBudget":"200000","status":"Quote Sent","followUpDate":"2026-08-30","temperature":"Hot"}');

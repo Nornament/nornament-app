@@ -114,19 +114,16 @@ class Command(BaseCommand):
         """The purchases[] arrays against the CRM-sourced sale rows.
 
         This is the one table with no like-for-like counterpart: the arrays
-        became rows. Count and sum them out of the JSONB so the unnesting is
-        checked rather than assumed.
+        became rows. Count and sum them out of the JSONB **in SQL**, not
+        through ``purchases_from_blob``. Checking the loader with the loader's
+        own shaper is not a check: a purchase the shaper refused was refused
+        identically on both sides and the totals agreed while the customer's
+        history was short. This unnests the array in Postgres, so a dropped
+        purchase shows up here as the mismatch it is.
         """
         from stock.models import Sale
 
-        expected_rows = expected_sum = 0
-        for row in legacy.rows("SELECT data FROM public.customers"):
-            from etl.crm_shapes import purchases_from_blob
-
-            for purchase in purchases_from_blob(_blob(row)):
-                expected_rows += 1
-                expected_sum += purchase["sold_price"]
-
+        expected_rows, expected_sum = legacy_purchase_totals()
         actual = Sale.objects.filter(source=Sale.CRM)
         actual_rows = actual.count()
         actual_sum = sum((sale.sold_price for sale in actual), Decimal("0"))
@@ -135,9 +132,62 @@ class Command(BaseCommand):
                 f"CRM purchases: legacy arrays={expected_rows} rows / {expected_sum}; "
                 f"new sale rows={actual_rows} / {actual_sum}"
             )
+            self.report_dropped_purchases()
             sys.exit(1)
         self.stdout.write(f"ok  crm purchases -> sale       {actual_rows:>8} rows, {actual_sum}")
+        self.check_crm_statuses()
         self.check_crm_media()
+
+    def report_dropped_purchases(self):
+        """Name the purchases the load could not place, so the gap is legible."""
+        from crm.models import EtlException
+
+        rows = EtlException.objects.filter(entity="crm.Purchase")[:20]
+        for row in rows:
+            self.stderr.write(f"  {row.legacy_id}: {row.problem} — {row.detail}")
+        remaining = EtlException.objects.filter(entity="crm.Purchase").count() - len(rows)
+        if remaining > 0:
+            self.stderr.write(f"  … and {remaining} more (crm.EtlException, entity='crm.Purchase')")
+
+    def check_crm_statuses(self):
+        """Every pipeline record is at the stage the legacy CRM had it at.
+
+        Row counts alone let a whole pipeline shift stage and still pass: this
+        compares the per-status counts, which is the number the client is
+        actually looking at when they open the board.
+        """
+        mismatches = []
+        for table, model_table in CRM_STATUS_TABLES.items():
+            if not legacy.table_exists(table):
+                continue
+            legacy_counts = {}
+            for row in legacy.rows(
+                f"SELECT coalesce(data->>'status', '') AS status, count(*) AS n FROM {table} GROUP BY 1"
+            ):
+                legacy_counts[_canonical(row["status"])] = row["n"]
+
+            from django.db import connection as new
+
+            new_counts = {}
+            with new.cursor() as cursor:
+                cursor.execute(f"SELECT status, count(*) FROM {model_table} GROUP BY 1")
+                for status, count in cursor.fetchall():
+                    new_counts[_canonical(status)] = count
+
+            drifted = 0
+            for status in sorted(set(legacy_counts) | set(new_counts)):
+                left, right = legacy_counts.get(status, 0), new_counts.get(status, 0)
+                if left != right:
+                    mismatches.append((table, status or "(no stage)", left, right))
+                    drifted += 1
+            marker = "ok " if not drifted else "BAD"
+            self.stdout.write(f"{marker} {table + ' stages':<28} {len(legacy_counts):>8} distinct")
+
+        if mismatches:
+            for table, status, left, right in mismatches:
+                self.stderr.write(self.style.ERROR(f"{table} stage {status!r}: legacy={left} new={right}"))
+            self.stderr.write(f"{len(mismatches)} stage mismatch(es) — the boards will not agree")
+            sys.exit(1)
 
     def check_crm_media(self):
         """The base64 images in the CRM blobs against the media rows they became.
@@ -181,6 +231,43 @@ class Command(BaseCommand):
             cursor.execute(f"SELECT {', '.join(selects)} FROM {table}{clause}")
             columns = [c[0] for c in cursor.description]
             return dict(zip(columns, cursor.fetchone()))
+
+
+#: legacy table -> the table its pipeline records landed in. Stage counts are
+#: compared per table, because a record at the wrong stage is what a user sees
+#: first and what row counts alone will never catch.
+CRM_STATUS_TABLES = {
+    "public.enquiries": "crm_enquiry",
+    "public.orders": "crm_order",
+    "public.repairs": "crm_repair",
+    "public.client_materials": "crm_clientmaterial",
+}
+
+
+def _canonical(status):
+    """Compare stages the way the loader stores them: trimmed, case-folded."""
+    return " ".join(str(status or "").split()).casefold()
+
+
+def legacy_purchase_totals():
+    """``count`` and ``sum`` over every ``purchases[]`` entry, straight from SQL.
+
+    Deliberately independent of ``purchases_from_blob``: it is the thing being
+    checked. An entry whose amount is not a number counts as a row worth zero,
+    so a purchase that exists in the legacy app can never be invisible here.
+    """
+    row = legacy.scalar_row(
+        """
+        SELECT count(*) AS n,
+               coalesce(sum(
+                   CASE WHEN cleaned ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN cleaned::numeric ELSE 0 END
+               ), 0) AS total
+        FROM public.customers c,
+             LATERAL jsonb_array_elements(coalesce(c.data->'purchases', '[]'::jsonb)) AS p,
+             LATERAL (SELECT regexp_replace(coalesce(p->>'amount', ''), '[^0-9.\\-]', '', 'g')) AS s(cleaned)
+        """
+    )
+    return int(row[0] or 0), Decimal(str(row[1] or 0))
 
 
 def _blob(row):

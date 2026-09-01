@@ -53,6 +53,11 @@ from .models import (
 
 PAGE_SIZE = 50
 
+#: what the board calls the column for statuses it does not recognise. A record
+#: with one is not lost, it is just not on a stage — and it has to be visible
+#: for anybody to fix it.
+UNMAPPED_COLUMN = "⚠ Unmapped stage"
+
 #: everything the four pipeline modules differ by, in one place. The legacy app
 #: had four near-identical modules; this is that duplication collapsed.
 PIPELINES = {
@@ -953,17 +958,26 @@ def _pipeline_list(request, kind, template, extra=None):
     spec = _pipeline(kind)
     rows, status, query = _pipeline_rows(request, spec)
     counts = dict(spec["model"].objects.values_list("status").annotate(n=Count("pk")))
+    known = spec["model"].STATUSES
+    # A status the app does not know is the one thing a board must not hide:
+    # a card that matches no column silently vanishes, which is exactly how a
+    # record "loses its stage". It gets a column of its own instead.
+    unmapped = [row for row in rows if row.status not in known]
+    columns = [(name, [row for row in rows if row.status == name]) for name in known]
+    if unmapped:
+        columns.append((UNMAPPED_COLUMN, unmapped))
     context = {
         "nav": kind,
         "kind": kind,
         "spec": spec,
         "rows": rows,
-        "statuses": spec["model"].STATUSES,
+        "statuses": known,
         "status_counts": counts,
+        "unmapped_statuses": sorted({row.status for row in unmapped}),
         "selected_status": status,
         "q": query,
         "view_mode": "kanban" if request.GET.get("view") == "kanban" else "list",
-        "columns": [(name, [row for row in rows if row.status == name]) for name in spec["model"].STATUSES],
+        "columns": columns,
         "thumbs": _thumbs(spec["media_scope"], rows),
     }
     context.update(extra or {})
@@ -1028,6 +1042,7 @@ def client_material_list(request):
 def _pipeline_detail(request, kind, pk):
     spec = _pipeline(kind)
     row = get_object_or_404(spec["model"].objects.select_related("customer"), pk=pk)
+    bills = kind == "order" and allowed(request.user, "sold_price")
     stages = [(name, icon) for name, icon in spec["stages"]]
     try:
         active = [name for name, _ in stages].index(row.status)
@@ -1047,9 +1062,21 @@ def _pipeline_detail(request, kind, pk):
                 for i, (name, icon) in enumerate(stages)
             ],
             "lost": row.status in spec["terminal"],
+            # neither a stage nor a terminal state: the rail would render blank
+            # and both move buttons would be dead, with nothing saying why
+            "unknown_status": active == -1 and row.status not in spec["terminal"],
             "log": services.status_log(kind, row.pk),
             "media": _crm_media(spec["media_scope"], [row.pk]).get(str(row.pk), []),
-            "status_form": crm_forms.StatusUpdateForm(spec["model"].STATUSES, initial={"status": row.status}),
+            # The bill is a sale figure, so it is offered on the same terms as
+            # the rest of the money on this screen: a login that may not see
+            # `sold_price` may still deliver the order, it just does not get to
+            # type or read the amount here.
+            "status_form": crm_forms.StatusUpdateForm(
+                spec["model"].STATUSES,
+                bills=kind == "order" and bills,
+                initial={"status": row.status, "billing_amount": services.delivery_amount(row) if bills else None},
+            ),
+            "delivery_sale": services.purchase_for_order(row) if bills else None,
         },
     )
 
@@ -1096,6 +1123,14 @@ def pipeline_form(request, kind, pk=None):
                     by=saved.salesperson,
                 )
             messages.success(request, f"{getattr(saved, spec['code'])} saved.")
+            if kind == "order" and saved.status == "Delivered":
+                # the amount that was missing at delivery, typed in later: the
+                # purchase is recorded now rather than waiting for a re-delivery
+                sale = services.record_order_delivery(saved)
+                if sale and allowed(request.user, "sold_price"):
+                    messages.success(request, f"{sale.sold_price} recorded against {saved.customer.name}.")
+                elif sale:
+                    messages.success(request, f"The bill was recorded against {saved.customer.name}.")
             return redirect(spec["detail_url"], pk=saved.pk)
     else:
         initial = {}
@@ -1130,10 +1165,51 @@ def pipeline_status(request, kind, pk):
     status = request.POST.get("status")
     if status not in spec["model"].STATUSES:
         messages.error(request, f"{status!r} is not a {kind} status.")
-    else:
-        services.log_status(row, kind, status, note=request.POST.get("note", ""), by=request.POST.get("by", ""))
-        messages.success(request, f"{getattr(row, spec['code'])} is now {status}.")
+        return _redirect_back(request, reverse(spec["detail_url"], args=[pk]))
+
+    services.log_status(row, kind, status, note=request.POST.get("note", ""), by=request.POST.get("by", ""))
+    messages.success(request, f"{getattr(row, spec['code'])} is now {status}.")
+    if kind == "order" and status == "Delivered":
+        _bill_the_delivery(request, row)
     return _redirect_back(request, reverse(spec["detail_url"], args=[pk]))
+
+
+def _bill_the_delivery(request, order):
+    """A delivered order becomes a line in the customer's purchase history.
+
+    The bill typed into the status form wins; failing that the order's own
+    billing or total amount stands in, which is what the legacy CRM used. When
+    there is no figure anywhere the user is told, because a delivery that
+    quietly adds nothing to the customer's value is the bug being fixed.
+    """
+    amount = _decimal_or_none(request.POST.get("billing_amount"))
+    if order.customer_id is None:
+        messages.warning(request, f"{order.order_code} has no customer, so nothing was added to a purchase history.")
+        return
+    sale = services.record_order_delivery(order, amount=amount, by=request.POST.get("by", ""))
+    if sale is None:
+        messages.warning(
+            request,
+            f"{order.order_code} is delivered but has no bill amount, so nothing was added to "
+            f"{order.customer.name}'s purchase history. Add the amount and it will be recorded.",
+        )
+        return
+    # The figure itself is a sale price: naming it in a flash message would put
+    # it in front of a login that the screen behind carefully does not show it to.
+    if allowed(request.user, "sold_price"):
+        messages.success(request, f"{sale.sold_price} added to {order.customer.name}'s purchase history.")
+    else:
+        messages.success(request, f"The bill on {order.order_code} was added to {order.customer.name}'s purchase history.")
+
+
+def _decimal_or_none(value):
+    text = str(value or "").replace(",", "").replace("₹", "").strip()
+    if not text:
+        return None
+    try:
+        return Decimal(text)
+    except InvalidOperation:
+        return None
 
 
 @login_required

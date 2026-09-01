@@ -41,6 +41,13 @@ def scalar(sql, params=None):
         return result[0] if result else None
 
 
+def scalar_row(sql, params=None):
+    """One row, as a tuple — for a query that returns several aggregates."""
+    with connection().cursor() as cursor:
+        cursor.execute(sql, params or [])
+        return cursor.fetchone() or ()
+
+
 def table_exists(qualified_name):
     schema, _, table = qualified_name.partition(".")
     return bool(

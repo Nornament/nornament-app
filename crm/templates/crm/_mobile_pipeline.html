@@ -9,6 +9,10 @@ client state.{% endcomment %}
   <a class="stage-chip{% if selected_status == status %} on{% endif %}" href="?status={{ status|urlencode }}">
     {{ status }}<span class="ct">{{ status_counts|lookup:status|default:0 }}</span></a>
   {% endfor %}
+  {% for status in unmapped_statuses %}
+  <a class="stage-chip{% if selected_status == status %} on{% endif %}" style="color:#956400" href="?status={{ status|urlencode }}">
+    ⚠ {{ status|default:"(no stage)" }}<span class="ct">{{ status_counts|lookup:status|default:0 }}</span></a>
+  {% endfor %}
 </div>
 
 {% for row in rows %}

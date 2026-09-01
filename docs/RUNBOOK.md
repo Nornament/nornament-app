@@ -148,9 +148,22 @@ pytest                                                 # the whole suite
 ```
 
 `parity_check` compares row counts, the sum of every money column and the
-min/max of every timestamp, table by table, plus the one thing that has no
-like-for-like counterpart: the `purchases[]` arrays against the CRM-sourced
-`sale` rows.
+min/max of every timestamp, table by table, plus the two things that have no
+like-for-like counterpart:
+
+* **`purchases[]` against the CRM-sourced `sale` rows.** Counted and summed
+  straight out of the JSONB in SQL, deliberately *not* through
+  `purchases_from_blob` — checking the loader with the loader's own shaper is
+  not a check. A purchase the shaper refused was refused identically on both
+  sides, the totals agreed, and the customer's history was short anyway.
+* **Per-stage counts for all four pipelines.** Row counts alone let a whole
+  pipeline shift stage and still pass; this compares `data->>'status'` against
+  `status` per value, which is the number somebody is looking at when they
+  open the board. Whitespace and case are folded, because the loader folds
+  them.
+
+Both exit nonzero, and the purchase check prints the `crm.EtlException` rows
+that explain the gap.
 
 `golden_export --shim` replaces `app.has_cap()` with a function returning true
 **in the legacy database only**, so the `api` views emit real costs and margins
@@ -228,6 +241,36 @@ leak is real, the screen is building its row somewhere other than
 table, the column and both values. A money sum that differs by a few rupees is
 a rounding change; a row count that differs is a load that silently dropped
 something. Neither is a cutover.
+
+**A stage mismatch (`the boards will not agree`).** A pipeline record is at a
+different stage here than in the legacy CRM. The line names the table, the
+stage and both counts. Check `crm.EtlException` for that entity: a status the
+app has no column for is loaded verbatim and reported, and shows on the board
+under **⚠ Unmapped stage** rather than vanishing — pick the right stage there
+and it joins the board.
+
+**A delivered order shows no money against the customer.** Moving an order to
+`Delivered` now asks for the bill amount and writes it to the customer's
+purchase history — one purchase per order, however many times it is delivered.
+For orders that were already delivered before that existed:
+
+```sh
+python manage.py backfill_delivered_purchases            # report only
+python manage.py backfill_delivered_purchases --commit
+```
+
+It names every delivered order with no purchase and, with `--commit`, records
+one at the order's billing (or total) amount. An order with no amount anywhere
+is listed and skipped, never billed at zero. Run it *after* a `load_legacy`,
+not before — and note it creates `sale` rows the legacy dump has no
+counterpart for, so `parity_check` should run before it, not after.
+
+**A customer's purchase history is short.** Look at
+`crm.EtlException` where `entity='crm.Purchase'`. A purchase with no readable
+amount, or no readable date and a customer row with no `created_at` to fall
+back on, is reported there rather than skipped. Dates are read day-first
+(`04/08/2026` is 4 August) across every format the legacy app produced — ISO
+from the date pickers, `d/m/y` from the invoice scanner and CSV bulk uploads.
 
 **The golden suite fails.** A figure in `stock/services.py` no longer matches
 the SQL it replaced. The message gives the jewel code, the field and the size

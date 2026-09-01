@@ -12,6 +12,11 @@ thing. Kanban is a desktop view anyway — the stage bar is what replaced it.
     <a class="chip{% if selected_status == status %} act{% endif %}"
        href="?status={{ status|urlencode }}{% if view_mode == 'kanban' %}&amp;view=kanban{% endif %}">{{ status }}</a>
     {% endfor %}
+    {% for status in unmapped_statuses %}
+    <a class="chip{% if selected_status == status %} act{% endif %}" style="border-color:#956400;color:#956400"
+       title="Not one of this pipeline's stages — it came across from the legacy CRM"
+       href="?status={{ status|urlencode }}{% if view_mode == 'kanban' %}&amp;view=kanban{% endif %}">⚠ {{ status|default:"(no stage)" }}</a>
+    {% endfor %}
   </div>
   <div class="fl g8">
     <a class="btn btn-s btn-sm{% if view_mode == 'list' %} act{% endif %}"

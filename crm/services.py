@@ -344,6 +344,83 @@ def record_purchase(customer, **fields):
     )
 
 
+def delivery_category(order):
+    """The FoN band a delivered order bills into — the legacy rule, unchanged.
+
+    ``updateOrder`` read the metal: gold is cat2, anything else named is cat1,
+    and an order with no metal on it billed as cat2.
+    """
+    metal = (order.metal_type or "").strip().lower()
+    if not metal:
+        return "cat2"
+    return "cat2" if "gold" in metal else "cat1"
+
+
+def delivery_amount(order):
+    """What a delivered order bills at, absent someone typing a figure.
+
+    The bill comes first and the order value second: ``billing_amount`` is what
+    the invoice actually said, ``total_amount`` is what it was expected to say.
+    """
+    return order.billing_amount or order.total_amount or None
+
+
+def purchase_for_order(order):
+    """The purchase this order already produced, if it produced one."""
+    return Sale.objects.filter(crm_order=order).first()
+
+
+def record_order_delivery(order, amount=None, sold_on=None, by=""):
+    """Delivering an order puts its bill in the customer's purchase history.
+
+    The legacy CRM did this inside ``updateOrder``: the moment an order became
+    ``Delivered`` it appended a ``purchases[]`` entry for the customer, keyed
+    by ``sourceOrderId`` so a second delivery did not add a second purchase.
+    The new app dropped that step, which is why a delivered order showed no
+    money against the customer.
+
+    ``amount`` is the bill somebody typed at the delivery; it is written back
+    to the order as ``billing_amount`` so the two figures cannot disagree.
+    Returns the ``Sale``, or ``None`` when there is nothing to bill yet —
+    a delivery with no amount anywhere is reported to the user, not invented.
+    """
+    if order.customer_id is None:
+        return None
+    amount = amount if amount is not None else delivery_amount(order)
+    if amount is None:
+        return None
+
+    changed = []
+    if order.billing_amount != amount:
+        order.billing_amount = amount
+        changed.append("billing_amount")
+    if order.billing_date is None:
+        order.billing_date = sold_on or timezone.localdate()
+        changed.append("billing_date")
+    if changed:
+        order.updated_at = timezone.now()
+        order.save(update_fields=[*changed, "updated_at"])
+
+    existing = purchase_for_order(order)
+    if existing:
+        # Re-delivering, or correcting the bill: move the one row rather than
+        # opening a second — the legacy sourceOrderId guard, as a column.
+        if existing.sold_price != amount:
+            existing.sold_price = amount
+            existing.save(update_fields=["sold_price"])
+        return existing
+
+    return record_purchase(
+        order.customer,
+        crm_order=order,
+        sold_on=sold_on or order.billing_date or timezone.localdate(),
+        sold_price=amount,
+        product_category=delivery_category(order),
+        description=order.item_description or order.order_code,
+        remarks=f"Auto from {order.order_code}" + (f" · {by}" if by else ""),
+    )
+
+
 # ── the lead engine, ported from the legacy CRM ──────────────────────────
 def _days_since(when):
     if not when:
