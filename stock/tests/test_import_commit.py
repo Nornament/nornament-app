@@ -484,3 +484,45 @@ def test_mapping_a_material_onto_nothing_is_refused_not_silently_dropped(parsed,
     decisions["materials"]["SP01C"]["action"] = "map"      # SP01C does not exist
     blocked = analyse_mod.unresolved(plan, decisions)
     assert any(r.key == "SP01C" for r in blocked)
+
+
+# ── the piece diff only reports real differences ─────────────────────────
+def test_the_same_amount_written_differently_is_not_a_difference():
+    """The DB says Decimal('9683.00'); the sheet says 9683. Same money."""
+    assert analyse_mod._same(Decimal("9683.00"), Decimal("9683"))
+    assert analyse_mod._same(Decimal("9683.00"), 9683)
+    assert not analyse_mod._same(Decimal("9683.00"), Decimal("9684"))
+    assert analyse_mod._same(None, "")
+    assert analyse_mod._same(" 18K ", "18K")
+    assert not analyse_mod._same("18K", "14K")
+
+
+def test_a_figure_reads_the_way_a_person_writes_it():
+    assert analyse_mod._fmt(Decimal("9683.00")) == "9683"
+    assert analyse_mod._fmt(Decimal("10000.00")) == "10000"      # not 1E+4
+    assert analyse_mod._fmt(Decimal("29514.56")) == "29514.56"
+
+
+def test_an_identical_piece_shows_no_diff_at_all(parsed, piece, materials):
+    """Nothing to decide means nothing on screen to read past."""
+    existing = Piece.objects.first()
+    sheet = next(p for p in parsed if p.jewel_code == "24P00095")
+    existing.jewel_code = sheet.jewel_code
+    existing.metal_purity = sheet.metal_purity
+    existing.sub_category = sheet.sub_category
+    # same money, written with the trailing zeros a DecimalField gives back
+    existing.src_cost_price = Decimal(str(sheet.src_cost_price)) + Decimal("0.00")
+    existing.src_sale_price = Decimal(str(sheet.src_sale_price)) + Decimal("0.00")
+    existing.save()
+
+    row = next(r for r in analyse(parsed).pieces if r.key == "24P00095")
+    assert row.detail == "", f"reported a phantom change: {row.detail}"
+
+
+def test_a_piece_that_really_changed_still_says_so(parsed, piece, materials):
+    existing = Piece.objects.first()
+    existing.jewel_code = "24P00095"
+    existing.src_cost_price = Decimal("11111.00")
+    existing.save()
+    row = next(r for r in analyse(parsed).pieces if r.key == "24P00095")
+    assert "cost 11111 →" in row.detail

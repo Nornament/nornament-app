@@ -722,3 +722,4 @@ a.btn,a.chip,a.code,a.fchip{text-decoration:none}
   .imp-table td:nth-child(2),.imp-table th:nth-child(2){display:none}
   .imp-label{display:none}
 }
+.imp-tag.quiet{background:transparent;color:var(--muted);border:1px dashed var(--rule)}

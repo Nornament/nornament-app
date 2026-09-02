@@ -6,7 +6,7 @@ diff pure is what makes the review screen safe to reload.
 """
 import re
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from stock.importers import guess
 from stock.models import Category, Collection, Material, Piece, Style, Vendor
@@ -162,8 +162,33 @@ def _style_rows(pieces):
     return rows
 
 
+def _fmt(value):
+    """A figure as a person would write it: 9683.00 and 9683 both read 9683."""
+    if isinstance(value, Decimal):
+        value = value.to_integral_value() if value == value.to_integral_value() else value.normalize()
+        return f"{value:f}"
+    return str(value)
+
+
+def _same(was, now):
+    """Whether two values differ in substance rather than in notation.
+
+    The database hands back ``Decimal('9683.00')`` where the sheet says
+    ``9683``. Comparing those as strings reports a change that does not exist,
+    and a screen full of non-differences is a screen nobody reads.
+    """
+    if was is None or now is None:
+        return (was or "") == (now or "")
+    if isinstance(was, Decimal) or isinstance(now, Decimal):
+        try:
+            return Decimal(str(was)) == Decimal(str(now))
+        except (InvalidOperation, ValueError):
+            pass
+    return str(was).strip() == str(now).strip()
+
+
 def _piece_diff(existing, parsed):
-    """The fields an update would change, as one readable line."""
+    """Only the fields an update would genuinely change."""
     changes = []
     for label, was, now in (
         ("purity", existing.metal_purity, parsed.metal_purity),
@@ -171,8 +196,8 @@ def _piece_diff(existing, parsed):
         ("cost", existing.src_cost_price, parsed.src_cost_price),
         ("sale", existing.src_sale_price, parsed.src_sale_price),
     ):
-        if now and str(was or "") != str(now):
-            changes.append(f"{label} {was or '—'} → {now}")
+        if now and not _same(was, now):
+            changes.append(f"{label} {_fmt(was) if was else '—'} → {_fmt(now)}")
     return "; ".join(changes)
 
 

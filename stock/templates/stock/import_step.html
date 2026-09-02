@@ -61,11 +61,16 @@
           {% for row in rows %}
           <tr>
             <td class="code">{{ row.key }}</td>
-            <td class="imp-trunc" title="{{ row.detail }}">{{ row.detail|default:"—" }}</td>
+            <td class="imp-trunc" title="{{ row.detail }}">
+              {% if row.target and not row.detail %}<span class="dim">identical to what is here</span>
+              {% else %}{{ row.detail|default:"—" }}{% endif %}
+            </td>
             <td>
-              {% if row.target %}
+              {% if row.target and row.detail %}
                 <label class="imp-check"><input type="checkbox" name="update:{{ row.key }}"
                   {% if row.action == 'update' %}checked{% endif %}> update</label>
+              {% elif row.target %}
+                <span class="imp-tag quiet">no change</span>
               {% else %}
                 <span class="imp-tag new">new</span>
               {% endif %}
