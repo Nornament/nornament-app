@@ -1189,6 +1189,38 @@ def _batch_workbook(batch):
     return io.BytesIO(storage.get_bytes(batch.media.storage_key))
 
 
+def _store_workbook(upload, user):
+    """Put the uploaded workbook in the bucket, and row it in the media table.
+
+    Deliberately not ``attach_uploads``: that enforces ``SERVEABLE_TYPES``,
+    the allowlist of things safe to hand back from our own origin, and a
+    spreadsheet is rightly not on it. Widening that list to admit xlsx would
+    weaken an XSS control for every asset the app serves, to solve a problem
+    this upload does not have — nothing ever serves this file, the importer
+    only reads it back to re-parse it.
+    """
+    from mediahub import storage
+
+    data = upload.read()
+    mime = upload.content_type or storage.guess_mime(upload.name)
+    key = storage.build_key("import", "workbook", upload.name)
+    storage.put_bytes(key, data, mime)
+    return MediaAsset.objects.create(
+        media_ref=media_services.next_media_ref(),
+        kind=MediaKind.DOCUMENT,
+        storage_key=key,
+        file_name=upload.name,
+        mime_type=mime,
+        bytes=len(data),
+        file_size_kb=int(len(data) / 1024) or None,
+        sha256=storage.sha256_of(data),
+        confirmed_at=timezone.now(),
+        uploaded_by=user,
+        scope="import",
+        scope_id="workbook",
+    )
+
+
 def _decisions_from_post(post, plan):
     """Turn the review form back into the decisions dict, plan as the default."""
     decisions = analyse_import.default_decisions(plan)
@@ -1222,14 +1254,13 @@ def import_upload(request):
         return redirect("stock:data")
 
     upload.seek(0)
-    saved, refused = media_services.attach_uploads(
-        [upload], "import", "workbook", request.user, kind=MediaKind.DOCUMENT
-    )
-    if not saved:
-        messages.error(request, f"Could not store the file. {'; '.join(refused)}")
+    try:
+        asset = _store_workbook(upload, request.user)
+    except Exception as error:
+        messages.error(request, f"Could not store the file. {error}")
         return redirect("stock:data")
 
-    batch = ImportBatch.objects.create(media=saved[0], created_by=request.user)
+    batch = ImportBatch.objects.create(media=asset, created_by=request.user)
     return redirect("stock:import_review", batch_id=batch.batch_id)
 
 

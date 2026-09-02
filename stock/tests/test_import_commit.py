@@ -329,21 +329,14 @@ def test_the_whole_flow_works_through_the_browser(client, admin_user_, materials
     the four views, not that boto3 works.
     """
     settings.ALLOWED_HOSTS = ["testserver"]
-    from mediahub import services as media_services
     from mediahub import storage
-    from mediahub.models import MediaAsset
 
     book = build_workbook().getvalue()
 
-    def fake_attach(files, scope, entity_id, user, kind=None):
-        asset = MediaAsset.objects.create(
-            file_name=getattr(files[0], "name", "x.xlsx"),
-            scope=scope, scope_id=str(entity_id), storage_key="k",
-        )
-        return [asset], []
-
-    monkeypatch.setattr(media_services, "attach_uploads", fake_attach)
-    monkeypatch.setattr("stock.views.media_services.attach_uploads", fake_attach)
+    # stub only the network call. Everything above it — including whether an
+    # xlsx is allowed through at all — is what this test exists to exercise.
+    put = {}
+    monkeypatch.setattr(storage, "put_bytes", lambda key, data, mime: put.update(key=key, mime=mime))
     monkeypatch.setattr(storage, "get_bytes", lambda key: book)
 
     client.force_login(admin_user_)
@@ -351,6 +344,9 @@ def test_the_whole_flow_works_through_the_browser(client, admin_user_, materials
     response = client.post(reverse("stock:import_upload"), {"workbook": upload})
     batch = ImportBatch.objects.get()
     assert response.status_code == 302
+    # the spreadsheet MIME must not be refused on the way in
+    assert put["mime"].endswith("spreadsheetml.sheet")
+    assert batch.media.storage_key == put["key"]
     assert response["Location"].endswith(f"/{batch.batch_id}/")
 
     # the review screen renders and pre-fills its decisions
