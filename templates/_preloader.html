@@ -1,47 +1,104 @@
 {% load static %}{% comment %}
 The splash between navigations. Included by both shells.
 
-Its CSS is inline on purpose: an external stylesheet has not necessarily
-arrived when the first paint happens, and a preloader that itself flashes
-unstyled is worse than none. Same reason the palette is literal here rather
-than reading the app's custom properties.
+Two different waits, and it has to cover both:
 
-It is a translucent scrim rather than a solid cover, so the page stays legible
-underneath instead of the screen going black.
+  - rendering the new document, which is what a load-time splash covers, and
+  - the server round trip, which it cannot — while a form is posting, the
+    browser is still showing the OLD page and the new document does not exist
+    yet. That is the longer wait of the two (uploading a workbook, running a
+    report), so the splash is also raised on submit and on link clicks, before
+    navigation begins.
 
-It fades in only after a beat, so a fast page never flashes it, and a CSS
-animation retires it after eight seconds whatever JavaScript does — a splash
-screen that can outlive its own script is a site nobody can use.
+It shows immediately and stays for at least MIN_MS. Most screens here render
+in well under a tenth of a second, so anything that waits before appearing
+simply never appears, and anything that leaves the instant the page is ready
+reads as a flicker rather than a splash. Holding it for a beat is what makes
+it look deliberate. That beat is real added latency on a fast page — a
+deliberate trade, and MIN_MS is the dial.
+
+Its CSS is inline because an external stylesheet has not necessarily arrived
+at first paint, and a splash that itself flashes unstyled is worse than none.
+A CSS animation retires it after eight seconds if the script never runs at
+all: a splash that can outlive its own JavaScript is a site nobody can use.
 {% endcomment %}
 <style>
 #preload{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;
   background:rgba(249,249,247,.55);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);
-  opacity:0;animation:pl-in .25s ease .18s forwards,pl-fail 0s linear 8s forwards}
+  opacity:1;transition:opacity .28s ease;animation:pl-fail 0s linear 8s forwards}
 :root[data-theme="dark"] #preload{background:rgba(13,13,13,.55)}
-#preload img{width:132px;max-width:42vw;height:auto;animation:pl-pulse 1.5s ease-in-out infinite}
+#preload img{width:132px;max-width:42vw;height:auto;animation:pl-pulse 1.4s ease-in-out infinite}
 :root[data-theme="dark"] #preload img{filter:invert(1)}
-#preload.gone{opacity:0!important;pointer-events:none;animation:none;transition:opacity .22s ease}
-@keyframes pl-in{to{opacity:1}}
-@keyframes pl-pulse{0%,100%{opacity:.45;transform:scale(.985)}50%{opacity:1;transform:scale(1)}}
+#preload.gone{opacity:0;pointer-events:none}
+@keyframes pl-pulse{0%,100%{opacity:.5;transform:scale(.985)}50%{opacity:1;transform:scale(1)}}
 /* the failsafe: if the script never runs, stop covering the page anyway */
 @keyframes pl-fail{to{opacity:0;visibility:hidden;pointer-events:none}}
-@media(prefers-reduced-motion:reduce){
-  #preload{animation:pl-in .01s linear forwards,pl-fail 0s linear 8s forwards}
-  #preload img{animation:none;opacity:1}
-}
+@media(prefers-reduced-motion:reduce){#preload img{animation:none;opacity:1}}
 </style>
 <div id="preload" role="status" aria-live="polite" aria-label="Loading">
   <img src="{% static 'img/logo.png' %}" alt="">
 </div>
 <script>
 (function(){
+  var MIN_MS = 600;                 // how long the splash is guaranteed to show
   var el = document.getElementById('preload');
   if (!el) return;
-  function done(){ el.classList.add('gone'); setTimeout(function(){ el.remove(); }, 260); }
-  if (document.readyState === 'complete') done();
-  else window.addEventListener('load', done);
+  el.style.animation = 'none';      // the script is alive; it owns the splash now
+  var shownAt = 0;
+
+  var abandon;
+  function show(){
+    if (!el.classList.contains('gone')) return;   // already up
+    shownAt = Date.now();
+    el.classList.remove('gone');
+    // a navigation that never happens — a handler that cancelled it, a
+    // download that never started — must not strand the splash on screen
+    clearTimeout(abandon);
+    abandon = setTimeout(function(){ el.classList.add('gone'); }, 10000);
+  }
+  function hide(){
+    clearTimeout(abandon);
+    var held = Date.now() - shownAt;
+    setTimeout(function(){ el.classList.add('gone'); }, Math.max(0, MIN_MS - held));
+  }
+
+  // the initial document load
+  shownAt = Date.now() - performance.now();
+  if (document.readyState === 'complete') hide();
+  else window.addEventListener('load', hide);
+
   // Back/forward restores from bfcache without firing load, which would
   // otherwise leave the splash sitting on top of a perfectly good page.
-  window.addEventListener('pageshow', function(e){ if (e.persisted) done(); });
+  window.addEventListener('pageshow', function(e){ if (e.persisted) el.classList.add('gone'); });
+
+  // ── the server round trip ──────────────────────────────────────────────
+  function managedByHtmx(node){
+    return !!(node.closest('[hx-get],[hx-post],[hx-put],[hx-delete],[hx-patch],[data-hx-get],[data-hx-post]'));
+  }
+
+  document.addEventListener('submit', function(e){
+    var form = e.target;
+    if (e.defaultPrevented || form.hasAttribute('data-no-splash') || managedByHtmx(form)) return;
+    if (form.target && form.target !== '_self') return;
+    show();
+  }, true);
+
+  document.addEventListener('click', function(e){
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var a = e.target.closest && e.target.closest('a[href]');
+    if (!a || a.hasAttribute('download') || a.hasAttribute('data-no-splash')) return;
+    if (a.target && a.target !== '_self') return;
+    if (managedByHtmx(a)) return;
+    var url;
+    try { url = new URL(a.href, location.href); } catch (err) { return; }
+    if (url.origin !== location.origin) return;            // leaving the site
+    if (url.href.split('#')[0] === location.href.split('#')[0]) return;   // same page anchor
+    if (!/^https?:$/.test(url.protocol)) return;           // mailto:, tel:, javascript:
+    show();
+  }, true);
+
+  // a navigation that never happened — a validation failure, a cancelled
+  // download — must not leave the splash up forever
+  window.addEventListener('pagehide', function(){ el.classList.add('gone'); });
 })();
 </script>

@@ -106,8 +106,8 @@
         is the file you edit and put back.</p></header>
     <div class="content">
       <div class="row" style="margin-bottom:14px">
-        <a class="btn" href="{% url 'stock:material_export' %}?q={{ q|urlencode }}&amp;cat={{ cat|urlencode }}">⇩ Export {% if q or cat %}these{% else %}all{% endif %} ({{ material_total }})</a>
-        <a class="btn" href="{% url 'stock:material_export' %}?sample=1">⇩ Sample CSV</a>
+        <a class="btn" href="{% url 'stock:material_export' %}?q={{ q|urlencode }}&amp;cat={{ cat|urlencode }}" download>⇩ Export {% if q or cat %}these{% else %}all{% endif %} ({{ material_total }})</a>
+        <a class="btn" href="{% url 'stock:material_export' %}?sample=1" download>⇩ Sample CSV</a>
       </div>
       <div class="field"><label class="f" for="csv">CSV to upload</label>
         <input id="csv" type="file" name="csv" accept=".csv,text/csv" required></div>
@@ -199,8 +199,8 @@
         is the file you edit and put back. It is this chart only — a rate belongs to a version.</p></header>
     <div class="content">
       <div class="row" style="margin-bottom:14px">
-        <a class="btn" href="{% url 'stock:rate_chart_export' %}?chart={{ chart.pk }}">⇩ Export {{ chart.code }} v{{ chart.version_no }} ({{ lines|length }})</a>
-        <a class="btn" href="{% url 'stock:rate_chart_export' %}?chart={{ chart.pk }}&amp;sample=1">⇩ Sample CSV</a>
+        <a class="btn" href="{% url 'stock:rate_chart_export' %}?chart={{ chart.pk }}" download>⇩ Export {{ chart.code }} v{{ chart.version_no }} ({{ lines|length }})</a>
+        <a class="btn" href="{% url 'stock:rate_chart_export' %}?chart={{ chart.pk }}&amp;sample=1" download>⇩ Sample CSV</a>
       </div>
       {% if chart.is_locked %}
       <div class="note" style="margin:0"><b>{{ chart }} is locked</b>, so it takes no upload. Fork it and

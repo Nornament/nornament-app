@@ -7,8 +7,8 @@
   <p class="hint">Text columns are written as text, so <b>ER00123</b> stays a jewel code and never turns
     into a date.</p>
   <div class="row">
-    <a class="btn primary" href="{% url 'stock:piece_export' %}">⇩ Pieces (.csv)</a>
-    <a class="btn" href="{% url 'crm:customer_export' %}">⇩ Customers (.csv)</a>
+    <a class="btn primary" href="{% url 'stock:piece_export' %}" download>⇩ Pieces (.csv)</a>
+    <a class="btn" href="{% url 'crm:customer_export' %}" download>⇩ Customers (.csv)</a>
   </div>
   <table style="margin-top:14px"><thead><tr><th>Sheet</th><th>One row per</th><th class="num">Rows</th><th>Notes</th></tr></thead><tbody>
     <tr><td><b>Pieces</b></td><td>jewel code</td><td class="num">{{ counts.pieces }}</td>

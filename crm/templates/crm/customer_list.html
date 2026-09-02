@@ -6,7 +6,7 @@
 {% block actions %}
 <a class="btn btn-s btn-sm" href="{% url 'crm:bulk_import' 'customers' %}">📤 Mass Upload</a>
 {% if caps.adjust_stock %}<a class="btn btn-s btn-sm" href="{% url 'crm:bulk_import' 'purchases' %}">💳 Bulk Purchases</a>{% endif %}
-<a class="btn btn-s btn-sm" href="{% url 'crm:customer_export' %}">⬇️ Export</a>
+<a class="btn btn-s btn-sm" href="{% url 'crm:customer_export' %}" download>⬇️ Export</a>
 <a class="btn btn-p" href="{% url 'crm:customer_new' %}">+ Add Customer</a>
 {% endblock %}
 
