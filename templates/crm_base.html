@@ -28,6 +28,7 @@ a larger app and has to be escapable.
   <script src="{% static 'js/crm-upload.js' %}" defer></script>
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+{% include "_preloader.html" %}
 <div class="app">
 
   <div class="sb">

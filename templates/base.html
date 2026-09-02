@@ -21,6 +21,7 @@ did not look alike.
   <script src="{% static 'js/crm-upload.js' %}" defer></script>
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+{% include "_preloader.html" %}
 {% if user.is_authenticated %}
 <div class="app">
   <aside class="side">

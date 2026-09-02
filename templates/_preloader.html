@@ -1,0 +1,47 @@
+{% load static %}{% comment %}
+The splash between navigations. Included by both shells.
+
+Its CSS is inline on purpose: an external stylesheet has not necessarily
+arrived when the first paint happens, and a preloader that itself flashes
+unstyled is worse than none. Same reason the palette is literal here rather
+than reading the app's custom properties.
+
+It is a translucent scrim rather than a solid cover, so the page stays legible
+underneath instead of the screen going black.
+
+It fades in only after a beat, so a fast page never flashes it, and a CSS
+animation retires it after eight seconds whatever JavaScript does — a splash
+screen that can outlive its own script is a site nobody can use.
+{% endcomment %}
+<style>
+#preload{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;
+  background:rgba(249,249,247,.55);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);
+  opacity:0;animation:pl-in .25s ease .18s forwards,pl-fail 0s linear 8s forwards}
+:root[data-theme="dark"] #preload{background:rgba(13,13,13,.55)}
+#preload img{width:132px;max-width:42vw;height:auto;animation:pl-pulse 1.5s ease-in-out infinite}
+:root[data-theme="dark"] #preload img{filter:invert(1)}
+#preload.gone{opacity:0!important;pointer-events:none;animation:none;transition:opacity .22s ease}
+@keyframes pl-in{to{opacity:1}}
+@keyframes pl-pulse{0%,100%{opacity:.45;transform:scale(.985)}50%{opacity:1;transform:scale(1)}}
+/* the failsafe: if the script never runs, stop covering the page anyway */
+@keyframes pl-fail{to{opacity:0;visibility:hidden;pointer-events:none}}
+@media(prefers-reduced-motion:reduce){
+  #preload{animation:pl-in .01s linear forwards,pl-fail 0s linear 8s forwards}
+  #preload img{animation:none;opacity:1}
+}
+</style>
+<div id="preload" role="status" aria-live="polite" aria-label="Loading">
+  <img src="{% static 'img/logo.png' %}" alt="">
+</div>
+<script>
+(function(){
+  var el = document.getElementById('preload');
+  if (!el) return;
+  function done(){ el.classList.add('gone'); setTimeout(function(){ el.remove(); }, 260); }
+  if (document.readyState === 'complete') done();
+  else window.addEventListener('load', done);
+  // Back/forward restores from bfcache without firing load, which would
+  // otherwise leave the splash sitting on top of a perfectly good page.
+  window.addEventListener('pageshow', function(e){ if (e.persisted) done(); });
+})();
+</script>
