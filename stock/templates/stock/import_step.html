@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · Import · Nornament{% endblock %}
+{% block heading %}Import #{{ batch.batch_id }}{% endblock %}
+{% block content %}
+
+<datalist id="material-codes">
+  {% for material in materials %}<option value="{{ material.item_code }}">{{ material.item_name }}</option>{% endfor %}
+</datalist>
+
+<form method="post" action="{% url 'stock:import_step' batch.batch_id step %}" class="imp">
+  {% csrf_token %}
+
+  <ol class="imp-rail">
+    {% for name, label, _ in steps %}
+    <li class="{% if name == step %}now{% elif forloop.counter0 < index %}done{% endif %}">
+      <button type="submit" name="go_to" value="{{ name }}" class="imp-railbtn">
+        <span class="imp-num">{% if forloop.counter0 < index %}✓{% else %}{{ forloop.counter }}{% endif %}</span>
+        <span class="imp-label">{{ label }}</span>
+      </button>
+    </li>
+    {% endfor %}
+  </ol>
+
+  <div class="card imp-card">
+    <h3>{{ title }}{% if rows %} <span class="dim imp-count">{{ rows|length }}</span>{% endif %}</h3>
+    <p class="hint">{{ blurb }}</p>
+
+    {% if step == 'confirm' %}
+      {% if outstanding %}
+      <div class="note bad"><b>{{ outstanding|length }} unanswered.</b>
+        Go back to Materials and either point each at a code you already have, or skip it.</div>
+      {% endif %}
+      <table class="imp-table imp-sum">
+        <thead><tr><th>Set</th><th class="num">Rows</th><th class="num">New</th>
+          <th class="num">Matched</th><th class="num">Skipped</th></tr></thead>
+        <tbody>
+          {% for label, c in summary %}
+          <tr><td>{{ label }}</td><td class="num">{{ c.total }}</td><td class="num">{{ c.create }}</td>
+            <td class="num">{{ c.map }}</td><td class="num">{{ c.skip }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <h3 style="margin-top:20px">Receive into</h3>
+      <p class="hint">The sheet carries no location. Leave this blank and new pieces stay
+        <b>Not received</b> with no location, which is what the stock ledger expects until
+        someone puts them on a shelf.</p>
+      <select name="location" form="commit-form" class="imp-loc">
+        <option value="">— not received —</option>
+        {% for location in locations %}<option value="{{ location.pk }}">{{ location.name }}</option>{% endfor %}
+      </select>
+
+    {% elif step == 'pieces' %}
+      <input type="search" class="imp-filter" placeholder="Filter {{ rows|length }} pieces…"
+             oninput="impFilter(this)" autocomplete="off">
+      <div class="imp-scroll">
+      <table class="imp-table imp-pieces">
+        <colgroup><col class="w-code"><col class="w-mid"><col class="w-act"></colgroup>
+        <thead><tr><th>Jewel code</th><th>What it is</th><th>What happens</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td class="code">{{ row.key }}</td>
+            <td class="imp-trunc" title="{{ row.detail }}">{{ row.detail|default:"—" }}</td>
+            <td>
+              {% if row.target %}
+                <label class="imp-check"><input type="checkbox" name="update:{{ row.key }}"
+                  {% if row.action == 'update' %}checked{% endif %}> update</label>
+              {% else %}
+                <span class="imp-tag new">new</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+
+    {% else %}
+      {% if rows|length > 25 %}
+      <input type="search" class="imp-filter" placeholder="Filter {{ rows|length }} rows…"
+             oninput="impFilter(this)" autocomplete="off">
+      {% endif %}
+      <div class="imp-scroll">
+      <table class="imp-table">
+        <colgroup><col class="w-code"><col class="w-name"><col class="w-act"><col class="w-note"></colgroup>
+        <thead><tr><th>From the sheet</th><th>Name</th><th>What happens</th><th>Notes</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+          <tr class="{% if row.problem %}imp-blocked{% endif %}">
+            <td class="code">{{ row.key }}</td>
+            <td class="imp-trunc" title="{{ row.label }}">{{ row.label }}</td>
+            <td class="imp-act">
+              <select name="{{ step }}:{{ row.key }}" class="imp-sel">
+                <option value="create" {% if row.action == 'create' %}selected{% endif %}>create new</option>
+                <option value="map" {% if row.action == 'map' %}selected{% endif %}>use existing</option>
+                <option value="skip" {% if row.action == 'skip' %}selected{% endif %}>skip</option>
+              </select>
+              {% if step == 'materials' %}
+              <input list="material-codes" name="{{ step }}:{{ row.key }}:map_to" class="imp-code"
+                     value="{{ row.map_to|default:'' }}"
+                     placeholder="{% if row.target %}{{ row.target.item_code }}{% else %}code{% endif %}">
+              {% endif %}
+            </td>
+            <td class="imp-note">
+              {% if row.problem %}<span class="imp-tag bad">needs you</span> {{ row.problem }}
+              {% else %}<span class="dim">{{ row.detail }}</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="imp-nav">
+    {% if not is_first %}<button class="btn" type="submit" name="back" value="1">← Back</button>{% endif %}
+    {% if not is_last %}
+      <button class="btn primary" type="submit">Next: {{ next_step|title }} →</button>
+    {% endif %}
+    <a class="btn" href="{% url 'stock:data' %}">Cancel</a>
+  </div>
+</form>
+
+{% if step == 'confirm' %}
+<form method="post" action="{% url 'stock:import_commit' batch.batch_id %}" id="commit-form" class="imp-nav">
+  {% csrf_token %}
+  <button class="btn primary" type="submit" {% if outstanding %}disabled{% endif %}>
+    Import {{ counts.pieces.create }} pieces
+  </button>
+</form>
+{% endif %}
+
+<script>
+function impFilter(box){
+  var q = box.value.toLowerCase();
+  box.closest('.card').querySelectorAll('tbody tr').forEach(function(tr){
+    tr.hidden = q && !tr.textContent.toLowerCase().includes(q);
+  });
+}
+</script>
+{% endblock %}

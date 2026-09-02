@@ -349,13 +349,28 @@ def test_the_whole_flow_works_through_the_browser(client, admin_user_, materials
     assert batch.media.storage_key == put["key"]
     assert response["Location"].endswith(f"/{batch.batch_id}/")
 
-    # the review screen renders and pre-fills its decisions
+    # the review entry point seeds the decisions and sends you to step one
     review = client.get(reverse("stock:import_review", args=[batch.batch_id]))
-    assert review.status_code == 200
-    assert b"24P00088" in review.content
+    assert review.status_code == 302
+    assert review["Location"].endswith("/step/materials/")
     batch.refresh_from_db()
     assert batch.status == ImportBatch.Status.REVIEWING
     assert batch.decisions["pieces"]["24P00088"]["action"] == "create"
+
+    # walk the steps; each one renders and hands on to the next
+    step = "materials"
+    seen = []
+    while step != "confirm":
+        page = client.get(reverse("stock:import_step", args=[batch.batch_id, step]))
+        assert page.status_code == 200, f"{step} did not render"
+        seen.append(step)
+        nxt = client.post(reverse("stock:import_step", args=[batch.batch_id, step]))
+        assert nxt.status_code == 302
+        step = nxt["Location"].rstrip("/").rsplit("/", 1)[-1]
+        assert len(seen) < 10, "the wizard is looping"
+    assert "materials" in seen and "pieces" in seen
+    confirm = client.get(reverse("stock:import_step", args=[batch.batch_id, "confirm"]))
+    assert b"Receive into" in confirm.content
 
     # committing writes the catalogue and hands over to the image loop
     committed = client.post(reverse("stock:import_commit", args=[batch.batch_id]), {"location": ""})
@@ -439,16 +454,23 @@ def test_the_commit_screen_refuses_and_keeps_the_form_when_unanswered(
         created_by=admin_user_,
     )
     client.force_login(admin_user_)
+    client.get(reverse("stock:import_review", args=[batch.batch_id]))
+
+    # committing with the blocker unanswered is refused, and sends you back
     refused = client.post(reverse("stock:import_commit", args=[batch.batch_id]), {"location": ""})
-    assert refused.status_code == 200
-    assert b"still need resolving" in refused.content
-    assert b"existing item code" in refused.content     # the form is still there
+    assert refused.status_code == 302
+    assert refused["Location"].endswith("/step/materials/")
     assert Piece.objects.count() == 0
 
-    answered = client.post(
-        reverse("stock:import_commit", args=[batch.batch_id]),
-        {"location": "", "materials:G12K:map_to": "G"},
+    # answering on the Materials step is remembered across the wizard
+    client.post(
+        reverse("stock:import_step", args=[batch.batch_id, "materials"]),
+        {"materials:G12K:map_to": "G"},
     )
+    batch.refresh_from_db()
+    assert batch.decisions["materials"]["G12K"]["map_to"] == "G"
+
+    answered = client.post(reverse("stock:import_commit", args=[batch.batch_id]), {"location": ""})
     batch.refresh_from_db()
     assert answered.status_code == 200
     assert batch.result["pieces_created"] == 1

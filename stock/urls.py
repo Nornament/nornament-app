@@ -48,6 +48,7 @@ urlpatterns = [
     path("data/", views.data, name="data"),
     path("data/import/", views.import_upload, name="import_upload"),
     path("data/import/<int:batch_id>/", views.import_review, name="import_review"),
+    path("data/import/<int:batch_id>/step/<str:step>/", views.import_step, name="import_step"),
     path("data/import/<int:batch_id>/commit/", views.import_commit, name="import_commit"),
     path("data/import/<int:batch_id>/images/", views.import_images, name="import_images"),
     path("audit/", views.audit, name="audit"),

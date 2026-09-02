@@ -195,6 +195,7 @@ def test_the_locked_tabs_refuse_a_sales_login(client, sales_user, priced_and_sol
     # the importer hangs off the data tab and writes reference data, so it is
     # refused the same way. Three of the four are POST-only.
     assert client.get(reverse("stock:import_review", args=[1])).status_code == 403
+    assert client.get(reverse("stock:import_step", args=[1, "materials"])).status_code == 403
     for name, args in (
         ("stock:import_upload", []),
         ("stock:import_commit", [1]),
@@ -299,6 +300,7 @@ def test_every_stock_and_crm_screen_is_in_the_sales_walk():
         "stock:melt_list", "stock:data", "stock:audit", "stock:settings", "stock:reports",
         "stock:material_export", "stock:rate_chart_export",
         "stock:import_upload", "stock:import_review", "stock:import_commit", "stock:import_images",
+        "stock:import_step",
         # gated on edit_bom, and asserted to 403 below
         "stock:piece_new", "stock:piece_edit", "stock:piece_bom_edit",
         "stock:style_new", "stock:style_edit",

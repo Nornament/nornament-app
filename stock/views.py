@@ -1221,20 +1221,46 @@ def _store_workbook(upload, user):
     )
 
 
-def _decisions_from_post(post, plan):
-    """Turn the review form back into the decisions dict, plan as the default."""
-    decisions = analyse_import.default_decisions(plan)
-    for section, rows in decisions.items():
-        for key, choice in rows.items():
-            field = f"{section}:{key}"
-            target = post.get(f"{field}:map_to", "").strip()
-            if target:
-                choice["map_to"] = target
-                choice["action"] = "map"
-            elif field in post:
-                choice["action"] = post.get(field)
-            elif section == "pieces" and choice["action"] == "skip":
+#: the review, one set at a time. A set with nothing in it is skipped.
+IMPORT_STEPS = [
+    ("materials", "Materials", "Every stone, metal and charge the sheet names. "
+     "Anything the importer could not place is listed first and must be answered."),
+    ("categories", "Categories", "What the sheet calls a thing, against what this catalogue calls it."),
+    ("collections", "Collections", "Same again, for collections."),
+    ("vendors", "Vendors", "Who made the pieces."),
+    ("pieces", "Pieces", "New jewel codes come in. A code already here is left alone "
+     "unless you tick it — ticking writes a new BOM version and keeps the old one."),
+    ("confirm", "Confirm", "What is about to happen, and where the pieces land."),
+]
+
+
+def _steps_for(plan):
+    """The steps worth showing: every set with rows in it, plus Confirm."""
+    return [
+        (name, title, blurb) for name, title, blurb in IMPORT_STEPS
+        if name == "confirm" or plan.sections.get(name)
+    ]
+
+
+def _merge_step(post, decisions, section):
+    """Fold one step's answers into the decisions already gathered.
+
+    Each step only ever writes its own section, so moving back and forth
+    cannot quietly undo an answer given on another screen.
+    """
+    for key, choice in (decisions.get(section) or {}).items():
+        field = f"{section}:{key}"
+        target = (post.get(f"{field}:map_to") or "").strip()
+        if target:
+            choice["map_to"] = target
+            choice["action"] = "map"
+            continue
+        choice.pop("map_to", None)
+        if section == "pieces":
+            if choice.get("action") in ("skip", "update"):
                 choice["action"] = "update" if post.get(f"update:{key}") else "skip"
+        elif field in post:
+            choice["action"] = post.get(field)
     return decisions
 
 
@@ -1267,21 +1293,73 @@ def import_upload(request):
 @login_required
 @tab_required("data")
 def import_review(request, batch_id):
-    """Everything the import would do, with the guesses pre-filled."""
+    """Seed the decisions once, then hand over to the first step."""
     batch = get_object_or_404(ImportBatch, pk=batch_id)
-    pieces = ivy.parse(_batch_workbook(batch))
-    plan = analyse_import.analyse(pieces)
     if not batch.decisions:
+        plan = analyse_import.analyse(ivy.parse(_batch_workbook(batch)))
         batch.decisions = analyse_import.default_decisions(plan)
         batch.status = ImportBatch.Status.REVIEWING
         batch.save(update_fields=["decisions", "status"])
-    return render(request, "stock/import_review.html", {
+    return redirect("stock:import_step", batch_id=batch.batch_id, step="materials")
+
+
+@login_required
+@tab_required("data")
+def import_step(request, batch_id, step):
+    """One set of the review. GET shows it, POST files the answers and moves on."""
+    batch = get_object_or_404(ImportBatch, pk=batch_id)
+    plan = analyse_import.analyse(ivy.parse(_batch_workbook(batch)))
+    if not batch.decisions:
+        batch.decisions = analyse_import.default_decisions(plan)
+
+    steps = _steps_for(plan)
+    names = [name for name, _, _ in steps]
+    if step not in names:
+        step = names[0]
+    index = names.index(step)
+
+    if request.method == "POST":
+        if step != "confirm":
+            batch.decisions = _merge_step(request.POST, batch.decisions, step)
+        batch.save(update_fields=["decisions"])
+        wanted = request.POST.get("go_to")
+        if wanted in names:
+            return redirect("stock:import_step", batch_id=batch.batch_id, step=wanted)
+        step_to = names[max(index - 1, 0)] if request.POST.get("back") else names[min(index + 1, len(names) - 1)]
+        return redirect("stock:import_step", batch_id=batch.batch_id, step=step_to)
+
+    outstanding = analyse_import.unresolved(plan, batch.decisions)
+    rows = plan.sections.get(step) or []
+    # replay what was already answered onto the rows, so a step you come back
+    # to shows your answer rather than the importer's first guess
+    saved = batch.decisions.get(step) or {}
+    for row in rows:
+        choice = saved.get(row.key) or {}
+        row.action = choice.get("action", row.action)
+        row.map_to = choice.get("map_to", "")
+
+    summary = [
+        (label, plan.counts[name]) for name, label, _ in steps
+        if name != "confirm" and name in plan.counts
+    ]
+    return render(request, "stock/import_step.html", {
         "nav": "data",
         "batch": batch,
-        "sections": plan.sections,
+        "plan": plan,
+        "steps": steps,
+        "step": step,
+        "title": steps[index][1],
+        "blurb": steps[index][2],
+        "index": index,
+        "is_first": index == 0,
+        "is_last": step == "confirm",
+        "prev_step": names[index - 1] if index else None,
+        "next_step": names[index + 1] if index + 1 < len(names) else None,
+        "rows": rows,
+        "decisions": batch.decisions.get(step) or {},
         "counts": plan.counts,
-        "blockers": plan.blockers,
-        "decisions": batch.decisions,
+        "outstanding": outstanding,
+        "summary": summary,
         "materials": Material.objects.order_by("item_code"),
         "locations": Location.objects.filter(is_active=True),
     })
@@ -1291,34 +1369,23 @@ def import_review(request, batch_id):
 @tab_required("data")
 @require_POST
 def import_commit(request, batch_id):
-    """Apply the reviewed decisions, then hand over to the image loop."""
+    """Apply what the reviewer decided across the steps, then do the images."""
     batch = get_object_or_404(ImportBatch, pk=batch_id)
     pieces = ivy.parse(_batch_workbook(batch))
     plan = analyse_import.analyse(pieces)
-    decisions = _decisions_from_post(request.POST, plan)
+    decisions = batch.decisions or analyse_import.default_decisions(plan)
 
     still = analyse_import.unresolved(plan, decisions)
     if still:
-        # re-render rather than redirect, so the reviewer keeps their answers
-        messages.error(request, f"{len(still)} decisions still need resolving.")
-        batch.decisions = decisions
-        batch.save(update_fields=["decisions"])
-        return render(request, "stock/import_review.html", {
-            "nav": "data",
-            "batch": batch,
-            "sections": plan.sections,
-            "counts": plan.counts,
-            "blockers": still,
-            "decisions": decisions,
-            "materials": Material.objects.order_by("item_code"),
-            "locations": Location.objects.filter(is_active=True),
-        })
+        messages.error(
+            request,
+            f"{len(still)} decisions still need answering — they are marked on the Materials step.",
+        )
+        return redirect("stock:import_step", batch_id=batch.batch_id, step="materials")
 
     location = Location.objects.filter(pk=request.POST.get("location") or 0).first()
-
-    batch.decisions = decisions
     batch.status = ImportBatch.Status.COMMITTING
-    batch.save(update_fields=["decisions", "status"])
+    batch.save(update_fields=["status"])
     try:
         result = commit_import.commit(pieces, decisions, request.user, location=location)
     except Exception as error:  # the transaction has already rolled back
@@ -1326,7 +1393,7 @@ def import_commit(request, batch_id):
         batch.result = {"error": str(error)}
         batch.save(update_fields=["status", "result"])
         messages.error(request, f"Import failed, nothing was written. {error}")
-        return redirect("stock:import_review", batch_id=batch.batch_id)
+        return redirect("stock:import_step", batch_id=batch.batch_id, step="confirm")
 
     batch.result = result
     batch.images_total = sum(1 for p in pieces if p.image)

@@ -661,3 +661,64 @@ a.btn,a.chip,a.code,a.fchip{text-decoration:none}
   cursor:pointer;background:var(--surface-2);transition:border-color .15s,background .15s}
 .drop-zone:hover{border-color:var(--brand);background:var(--brand-soft)}
 .drop-zone input{display:none}
+
+/* ── the import wizard ────────────────────────────────────────────────────
+   One set per screen. Column widths are fixed and long text truncates with
+   its full value on the title attribute: 228 material rows reflowing as you
+   scroll is what made the old single-page review unreadable. */
+.imp-rail{list-style:none;display:flex;gap:0;margin:0 0 16px;padding:0;
+  border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.imp-rail::-webkit-scrollbar{display:none}
+.imp-railbtn{display:flex;align-items:center;gap:7px;padding:9px 15px 11px;background:none;
+  border:none;border-bottom:2px solid transparent;font:inherit;font-size:12.5px;
+  color:var(--muted);cursor:pointer;white-space:nowrap;transition:color .12s}
+.imp-railbtn:hover{color:var(--ink)}
+.imp-num{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;
+  border-radius:50%;background:var(--surface-2);border:1px solid var(--rule);
+  font-size:10.5px;font-weight:600;flex-shrink:0}
+.imp-rail li.now .imp-railbtn{color:var(--brand);border-bottom-color:var(--brand);font-weight:600}
+.imp-rail li.now .imp-num{background:var(--brand);border-color:var(--brand);color:#fff}
+:root[data-theme="dark"] .imp-rail li.now .imp-num{color:#1a1a19}
+.imp-rail li.done .imp-num{background:transparent;border-color:var(--brand);color:var(--brand)}
+
+.imp-card{padding-bottom:6px}
+.imp-count{font-weight:400;font-size:12.5px}
+.imp-filter{width:100%;max-width:320px;margin:0 0 12px}
+.imp-scroll{max-height:min(58vh,620px);overflow-y:auto;border:1px solid var(--line);border-radius:8px}
+.imp-scroll thead th{position:sticky;top:0;z-index:1;background:var(--surface-2)}
+
+/* fixed layout: the columns must not move as rows scroll past */
+.imp-table{table-layout:fixed;width:100%}
+.imp-table td{vertical-align:top;padding:7px 10px}
+.imp-table col.w-code{width:15%}
+.imp-table col.w-name{width:26%}
+.imp-table col.w-act{width:23%}
+.imp-table col.w-note{width:36%}
+.imp-pieces col.w-code{width:20%}
+.imp-pieces col.w-mid{width:58%}
+.imp-pieces col.w-act{width:22%}
+
+/* one line, ellipsis, full text on hover — never a word broken mid-way */
+.imp-trunc{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.imp-note{font-size:12.5px;line-height:1.45;overflow-wrap:anywhere}
+.imp-act{white-space:nowrap}
+.imp-sel{width:112px;padding:3px 6px;font-size:12.5px}
+.imp-code{width:88px;padding:3px 6px;font-size:12.5px;margin-left:5px;font-family:var(--mono)}
+.imp-loc{max-width:280px}
+.imp-check{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap}
+.imp-blocked{background:color-mix(in srgb,var(--critical) 7%,transparent)}
+
+.imp-tag{display:inline-block;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;vertical-align:1px}
+.imp-tag.bad{background:var(--critical);color:#fff}
+.imp-tag.new{background:var(--surface-2);color:var(--muted);border:1px solid var(--rule)}
+
+.imp-nav{display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap}
+.imp-sum td,.imp-sum th{padding:7px 10px}
+
+@media(max-width:640px){
+  .imp-table col.w-code{width:26%}.imp-table col.w-name{width:0}
+  .imp-table col.w-act{width:34%}.imp-table col.w-note{width:40%}
+  .imp-table td:nth-child(2),.imp-table th:nth-child(2){display:none}
+  .imp-label{display:none}
+}

@@ -22,6 +22,7 @@ class Resolution:
     fields: dict = field(default_factory=dict)
     problem: str = None             # non-None blocks the commit
     detail: str = ""                # human-readable extra, e.g. a diff
+    map_to: str = ""                # an existing code the reviewer chose instead
 
 
 @dataclass
