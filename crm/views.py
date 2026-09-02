@@ -963,7 +963,10 @@ def delete_outreach(request, pk):
 
 # ── the four pipeline modules ────────────────────────────────────────────
 def _pipeline_rows(request, spec):
-    rows = spec["model"].objects.select_related("customer").all()
+    # ``.order('created_at')`` with no re-sort is how the legacy CRM loaded every
+    # pipeline, so its list and board read oldest-first; the model's ordering
+    # is for everywhere else.
+    rows = spec["model"].objects.select_related("customer").order_by("created_at", "pk")
     status = request.GET.get("status")
     if status:
         rows = rows.filter(status=status)
@@ -972,7 +975,7 @@ def _pipeline_rows(request, spec):
         rows = rows.filter(
             Q(customer__name__icontains=query) | Q(notes__icontains=query) | Q(**{f"{spec['code']}__icontains": query})
         )
-    return list(rows[:300]), status or "", query
+    return list(rows), status or "", query
 
 
 def _pipeline_list(request, kind, template, extra=None):

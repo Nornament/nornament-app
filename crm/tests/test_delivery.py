@@ -194,6 +194,27 @@ def test_a_terminal_status_is_not_reported_as_unknown(client, admin_user_, custo
     assert response.context["lost"] is True
 
 
+# ── the board reads like the legacy one ──────────────────────────────────
+def test_the_board_lists_cards_oldest_first(client, admin_user_, customer):
+    """The legacy CRM loaded every pipeline ``.order('created_at')`` and never
+    re-sorted, so a column read top-down in the order records were made — not
+    by order date, which is what the model's default ordering would give."""
+    first = Order.objects.create(order_code="ORD-011", customer=customer, status="Ready", order_date=date(2026, 6, 1))
+    second = Order.objects.create(order_code="ORD-012", customer=customer, status="Ready", order_date=date(2026, 6, 20))
+    client.force_login(admin_user_)
+    response = client.get(reverse("crm:order_list"), {"view": "kanban"})
+    ready = dict(response.context["columns"])["Ready"]
+    assert [row.pk for row in ready] == [first.pk, second.pk]
+
+
+def test_an_order_card_shows_its_expected_delivery(client, admin_user_, customer):
+    """``getSubtitle: o => fmtD(o.expectedDelivery)`` — the legacy card's second line."""
+    Order.objects.create(order_code="ORD-013", customer=customer, status="Ready", expected_delivery=date(2026, 6, 18))
+    client.force_login(admin_user_)
+    body = client.get(reverse("crm:order_list"), {"view": "kanban"}).content.decode()
+    assert "18 Jun 2026" in body
+
+
 # ── the backfill ─────────────────────────────────────────────────────────
 def test_the_backfill_reports_before_it_writes(customer):
     """It creates revenue rows, so it never does so without being asked."""

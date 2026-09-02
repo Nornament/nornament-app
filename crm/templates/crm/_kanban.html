@@ -17,7 +17,7 @@ mobile MobileStages view did and works the same with no drag library.{% endcomme
           {% endwith %}
           <div style="padding:8px 10px">
             <div style="font-weight:700;font-size:13px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{% firstof row|pipeline_title row|pipeline_code %}</div>
-            <div style="font-size:11px;color:var(--mu);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row|pipeline_code }}</div>
+            <div style="font-size:11px;color:var(--mu);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row|pipeline_subtitle }}</div>
             {% if row.customer %}<div class="fl ia" style="gap:5px">
               <div class="av" style="width:18px;height:18px;font-size:7px">{{ row.customer.name|initials }}</div>
               <span style="font-size:11px;color:var(--mu)">{{ row.customer.name }}</span></div>{% endif %}
