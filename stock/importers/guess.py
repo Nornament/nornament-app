@@ -101,6 +101,23 @@ def bom_basis_and_uom(line, material_category):
         return ChargeBasis.FLAT, Uom.PCS
     if material_category == "METAL":
         return ChargeBasis.BY_QTY, Uom.GM
-    if material_category in ("DIAMOND", "POLKI"):
-        return ChargeBasis.BY_QTY, Uom.CT
-    return ChargeBasis.BY_QTY, BAND_UOM.get(line.band, Uom.CT)
+    uom = Uom.CT if material_category in ("DIAMOND", "POLKI") else BAND_UOM.get(line.band, Uom.CT)
+    return _priced_basis(line), uom
+
+
+def _priced_basis(line):
+    """Whether this line is charged per piece or per carat, per IVY's own sum.
+
+    The export mixes the two even inside one band: a 168-piece cubic zirconia
+    line prices at 168 x 120, while a diamond line beside it prices on weight.
+    Nothing in the row declares which, so the amount column arbitrates —
+    whichever base reproduces the amount IVY already computed is the base IVY
+    used. Ties and unusable rows stay on weight, the commoner case.
+    """
+    amount = line.cost_amount if line.cost_amount is not None else line.sale_amount
+    rate = line.cost_rate if line.cost_amount is not None else line.sale_rate
+    if not amount or not rate or not line.pcs or line.qty is None:
+        return ChargeBasis.BY_QTY
+    by_piece = abs(line.pcs * rate - amount)
+    by_weight = abs(line.qty * rate - amount)
+    return ChargeBasis.BY_PIECE if by_piece < by_weight else ChargeBasis.BY_QTY

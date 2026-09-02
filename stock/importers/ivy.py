@@ -99,6 +99,8 @@ class ParsedPiece:
     src_cost_price: Decimal = None
     src_sale_price: Decimal = None
     src_net_wt_gm: Decimal = None
+    making_cost: Decimal = None
+    making_sale: Decimal = None
     lines: list = field(default_factory=list)
     image: bytes = None
 
@@ -229,6 +231,11 @@ def parse(fileobj):
             src_cost_price=_num(sheet, start, "BE"),
             src_sale_price=_num(sheet, start, "BF"),
             src_net_wt_gm=_num(sheet, start, "AN"),
+            # BG/BH are the piece's making charge. They sit with the totals
+            # rather than in a band, so they are read here and become a labour
+            # line at commit — without them every piece imports under-costed.
+            making_cost=_num(sheet, start, "BG"),
+            making_sale=_num(sheet, start, "BH"),
             image=images.get(start),
         )
         # each band down the whole block, on its own — see the module docstring

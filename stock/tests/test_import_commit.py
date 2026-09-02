@@ -150,7 +150,24 @@ def test_every_material_line_lands_on_the_bom(parsed, materials, import_referenc
     commit(parsed, default_decisions(plan), admin_user_)
     piece = Piece.objects.get(jewel_code="24P00111")
     lines = BomLine.objects.filter(piece=piece, version_no=piece.current_bom_version)
-    assert lines.count() == 6          # 3 diamond + 1 metal + 2 stone
+    assert lines.count() == 7          # 3 diamond + 1 metal + 2 stone + making
+
+
+def test_the_making_charge_becomes_a_labour_line(parsed, materials, import_reference, admin_user_):
+    """BG/BH sit with the totals, not in a band, and are easy to lose.
+
+    Without this line every piece reconciles short by exactly its making, so
+    the assertion is really about the reconciliation staying honest.
+    """
+    plan = analyse(parsed)
+    commit(parsed, default_decisions(plan), admin_user_)
+    piece = Piece.objects.get(jewel_code="24P00111")
+    making = BomLine.objects.get(
+        piece=piece, version_no=piece.current_bom_version, material__category="LABOUR"
+    )
+    assert making.basis == "FLAT"          # base is 1, so the rate is the amount
+    assert making.cost_rate == Decimal("8558.0000")
+    assert making.cost_amount == Decimal("8558.00")
 
 
 def test_metal_lines_keep_their_own_weight(parsed, materials, import_reference, admin_user_):

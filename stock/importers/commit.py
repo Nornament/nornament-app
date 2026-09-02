@@ -13,7 +13,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from stock import services
-from stock.enums import BomChangeReason
+from stock.enums import BomChangeReason, ChargeBasis, Uom
 from stock.importers import guess
 from stock.models import Category, Collection, Material, Piece, Style, Vendor
 
@@ -67,8 +67,26 @@ def _resolve_materials(decisions):
     return resolved
 
 
+#: the piece-level making charge lands on this material
+MAKING_CODE = "MAKING"
+
+
+def _making_material():
+    """The material the sheet's BG/BH making charge is booked against."""
+    material, _ = Material.objects.get_or_create(
+        item_code=MAKING_CODE,
+        defaults={"item_name": "Making Charge", "category_id": "LABOUR", "default_uom": Uom.PCS},
+    )
+    return material
+
+
 def _bom_lines(parsed, materials):
-    """The sheet's lines in the shape ``services.set_bom`` wants."""
+    """The sheet's lines in the shape ``services.set_bom`` wants.
+
+    The making charge is not in any band — it sits with the totals in BG/BH —
+    but it is a real cost, and the largest one after metal on most pieces.
+    Left out, every imported piece reconciles short by exactly its making.
+    """
     lines = []
     for line in parsed.lines:
         material = materials.get(line.code)
@@ -88,6 +106,18 @@ def _bom_lines(parsed, materials):
             # FLAT means base 1, so the sheet's amount is the rate
             "cost_rate": line.cost_amount if basis == "FLAT" else line.cost_rate,
             "sale_rate": line.sale_amount if basis == "FLAT" else line.sale_rate,
+            "off_chart": True,
+        })
+    if parsed.making_cost or parsed.making_sale:
+        lines.append({
+            "material": _making_material(),
+            "size_band": "",
+            "pcs": None,
+            "qty_value": None,
+            "qty_uom": Uom.PCS,
+            "basis": ChargeBasis.FLAT,
+            "cost_rate": parsed.making_cost,
+            "sale_rate": parsed.making_sale,
             "off_chart": True,
         })
     return lines
