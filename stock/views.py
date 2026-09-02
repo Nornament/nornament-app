@@ -36,7 +36,7 @@ from mediahub import services as media_services
 from mediahub.models import MediaAsset
 
 from . import services
-from .enums import BomChangeReason, COUNTABLE_STATES, MovementType, StockState, TERMINAL_STATES, Uom
+from .enums import BomChangeReason, COUNTABLE_STATES, MediaKind, MovementType, StockState, TERMINAL_STATES, Uom
 from .forms import (
     BomLineFormSet,
     CategoryForm,
@@ -51,6 +51,9 @@ from .forms import (
     ScenarioForm,
     StyleForm,
 )
+from .importers import analyse as analyse_import
+from .importers import commit as commit_import
+from .importers import ivy
 from .masking import allowed, piece_row
 from .models import (
     ActivityLog,
@@ -71,6 +74,7 @@ from .models import (
     RepairJob,
     Sale,
     Scenario,
+    ImportBatch,
     StockCount,
     StockMovement,
     Style,
@@ -1175,6 +1179,126 @@ def data(request):
             },
         },
     )
+
+
+# ── importing a workbook ─────────────────────────────────────────────────
+def _batch_workbook(batch):
+    """The stored workbook as a file object, straight from the bucket."""
+    from mediahub import storage
+
+    return io.BytesIO(storage.get_bytes(batch.media.storage_key))
+
+
+def _decisions_from_post(post, plan):
+    """Turn the review form back into the decisions dict, plan as the default."""
+    decisions = analyse_import.default_decisions(plan)
+    for section, rows in decisions.items():
+        for key, choice in rows.items():
+            field = f"{section}:{key}"
+            if field in post:
+                choice["action"] = post.get(field)
+            elif section == "pieces" and choice["action"] == "skip":
+                choice["action"] = "update" if post.get(f"update:{key}") else "skip"
+    return decisions
+
+
+@login_required
+@tab_required("data")
+@require_POST
+def import_upload(request):
+    """Take the workbook, check it is the right one, and open a batch."""
+    upload = request.FILES.get("workbook")
+    if upload is None:
+        messages.error(request, "Choose a workbook first.")
+        return redirect("stock:data")
+
+    problems = ivy.header_problems(upload)
+    if problems:
+        messages.error(request, f"That is not an IVY stock export. {problems[0]}")
+        return redirect("stock:data")
+
+    upload.seek(0)
+    saved, refused = media_services.attach_uploads(
+        [upload], "import", "workbook", request.user, kind=MediaKind.DOCUMENT
+    )
+    if not saved:
+        messages.error(request, f"Could not store the file. {'; '.join(refused)}")
+        return redirect("stock:data")
+
+    batch = ImportBatch.objects.create(media=saved[0], created_by=request.user)
+    return redirect("stock:import_review", batch_id=batch.batch_id)
+
+
+@login_required
+@tab_required("data")
+def import_review(request, batch_id):
+    """Everything the import would do, with the guesses pre-filled."""
+    batch = get_object_or_404(ImportBatch, pk=batch_id)
+    pieces = ivy.parse(_batch_workbook(batch))
+    plan = analyse_import.analyse(pieces)
+    if not batch.decisions:
+        batch.decisions = analyse_import.default_decisions(plan)
+        batch.status = ImportBatch.Status.REVIEWING
+        batch.save(update_fields=["decisions", "status"])
+    return render(request, "stock/import_review.html", {
+        "nav": "data",
+        "batch": batch,
+        "sections": plan.sections,
+        "counts": plan.counts,
+        "blockers": plan.blockers,
+        "locations": Location.objects.filter(is_active=True),
+    })
+
+
+@login_required
+@tab_required("data")
+@require_POST
+def import_commit(request, batch_id):
+    """Apply the reviewed decisions, then hand over to the image loop."""
+    batch = get_object_or_404(ImportBatch, pk=batch_id)
+    pieces = ivy.parse(_batch_workbook(batch))
+    plan = analyse_import.analyse(pieces)
+    if plan.blockers:
+        messages.error(request, f"{len(plan.blockers)} decisions still need resolving.")
+        return redirect("stock:import_review", batch_id=batch.batch_id)
+
+    decisions = _decisions_from_post(request.POST, plan)
+    location = Location.objects.filter(pk=request.POST.get("location") or 0).first()
+
+    batch.decisions = decisions
+    batch.status = ImportBatch.Status.COMMITTING
+    batch.save(update_fields=["decisions", "status"])
+    try:
+        result = commit_import.commit(pieces, decisions, request.user, location=location)
+    except Exception as error:  # the transaction has already rolled back
+        batch.status = ImportBatch.Status.FAILED
+        batch.result = {"error": str(error)}
+        batch.save(update_fields=["status", "result"])
+        messages.error(request, f"Import failed, nothing was written. {error}")
+        return redirect("stock:import_review", batch_id=batch.batch_id)
+
+    batch.result = result
+    batch.images_total = sum(1 for p in pieces if p.image)
+    batch.status = ImportBatch.Status.IMAGES if batch.images_total else ImportBatch.Status.DONE
+    batch.finished_at = None if batch.images_total else timezone.now()
+    batch.save(update_fields=["result", "images_total", "status", "finished_at"])
+    return render(request, "stock/_import_progress.html", {"batch": batch})
+
+
+@login_required
+@tab_required("data")
+@require_POST
+def import_images(request, batch_id):
+    """One chunk of image uploads, then the bar that asks for the next."""
+    batch = get_object_or_404(ImportBatch, pk=batch_id)
+    if batch.images_done < batch.images_total:
+        commit_import.attach_images(batch, ivy.parse(_batch_workbook(batch)), limit=10)
+        batch.refresh_from_db()
+    if batch.images_done >= batch.images_total and batch.status != ImportBatch.Status.DONE:
+        batch.status = ImportBatch.Status.DONE
+        batch.finished_at = timezone.now()
+        batch.save(update_fields=["status", "finished_at"])
+    return render(request, "stock/_import_progress.html", {"batch": batch})
 
 
 #: the legacy Settings tab bar, in its order

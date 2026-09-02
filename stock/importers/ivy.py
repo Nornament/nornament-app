@@ -145,9 +145,18 @@ def header_problems(fileobj):
     """Every header in row 3 that is not what this importer expects.
 
     Checked before anything else, so the wrong workbook is refused with the
-    offending column rather than imported as nonsense.
+    offending column rather than imported as nonsense. Anything that is not a
+    readable workbook, or is one without the export's sheet, is a problem too
+    — this is the gate for files a person picked by mistake, so it has to
+    answer rather than raise.
     """
-    sheet = load_workbook(fileobj, data_only=True, read_only=True)[SHEET]
+    try:
+        book = load_workbook(fileobj, data_only=True, read_only=True)
+    except Exception as error:
+        return [f"That file could not be read as a spreadsheet ({error})."]
+    if SHEET not in book.sheetnames:
+        return [f"No {SHEET!r} sheet — found {', '.join(book.sheetnames) or 'nothing'}."]
+    sheet = book[SHEET]
     problems = []
     for letter, expected in EXPECTED_HEADERS.items():
         found = _text(sheet, HEADER_ROW, letter)

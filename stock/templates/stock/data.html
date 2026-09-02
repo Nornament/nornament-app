@@ -39,5 +39,14 @@
   <div class="note">Run <span class="code">manage.py parity_check</span> after every load. It compares
     row counts, the sum of every money column and the min/max of every timestamp, table by table, and
     exits non-zero on any mismatch. See <span class="code">docs/RUNBOOK.md</span>.</div>
+
+  <h3 style="margin-top:18px">IVY stock export</h3>
+  <p class="hint">Upload the workbook and you get a review screen first: every material, category
+    and piece it would touch, with the guesses filled in. Nothing is written until you approve it.</p>
+  <form method="post" action="{% url 'stock:import_upload' %}" enctype="multipart/form-data" class="row">
+    {% csrf_token %}
+    <input type="file" name="workbook" accept=".xlsx" required>
+    <button class="btn primary" type="submit">Read the workbook</button>
+  </form>
 </div>
 {% endblock %}

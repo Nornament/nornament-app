@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Review import · Nornament{% endblock %}
+{% block heading %}Review import #{{ batch.batch_id }}{% endblock %}
+{% block content %}
+{% if blockers %}
+<div class="card">
+  <h3>{{ blockers|length }} decisions need you</h3>
+  <p class="hint">Nothing is written until each of these is resolved. They are the cases the
+    importer refuses to guess at, because a wrong answer would misprice every piece using it.</p>
+  <table><thead><tr><th>Code</th><th>From the sheet</th><th>Why it stopped</th></tr></thead><tbody>
+    {% for row in blockers %}
+    <tr><td><b>{{ row.key }}</b></td><td>{{ row.label }}</td><td class="dim">{{ row.problem }}</td></tr>
+    {% endfor %}
+  </tbody></table>
+</div>
+{% endif %}
+
+<form method="post" action="{% url 'stock:import_commit' batch.batch_id %}">
+  {% csrf_token %}
+  {% for section, rows in sections.items %}
+  <details class="card" {% if section == 'pieces' %}open{% endif %}>
+    <summary><b>{{ section|title }}</b> — {{ rows|length }} rows</summary>
+    <table><thead><tr><th>From the sheet</th><th>What happens</th><th></th></tr></thead><tbody>
+      {% for row in rows %}
+      <tr>
+        <td><b>{{ row.key }}</b>{% if row.label != row.key %}<br><span class="dim">{{ row.label }}</span>{% endif %}</td>
+        <td>
+          {% if section == 'pieces' and row.target %}
+            <label><input type="checkbox" name="update:{{ row.key }}"> update</label>
+          {% elif section == 'pieces' or section == 'styles' %}
+            <span class="dim">{{ row.action }}</span>
+          {% else %}
+            <select name="{{ section }}:{{ row.key }}">
+              <option value="create" {% if row.action == 'create' %}selected{% endif %}>create</option>
+              <option value="map" {% if row.action == 'map' %}selected{% endif %}>map to existing</option>
+              <option value="skip" {% if row.action == 'skip' %}selected{% endif %}>skip</option>
+            </select>
+          {% endif %}
+        </td>
+        <td class="dim">{% if row.problem %}{{ row.problem }}{% else %}{{ row.detail }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody></table>
+  </details>
+  {% endfor %}
+
+  <div class="card">
+    <h3>Receive into</h3>
+    <p class="hint">The sheet carries no location. Leave this blank and new pieces stay
+      <b>Not received</b> with no location, which is what the stock ledger expects until
+      someone actually puts them on a shelf.</p>
+    <select name="location">
+      <option value="">— not received —</option>
+      {% for location in locations %}
+      <option value="{{ location.pk }}">{{ location.name }}</option>
+      {% endfor %}
+    </select>
+    <div class="row" style="margin-top:14px">
+      <button class="btn primary" type="submit" {% if blockers %}disabled{% endif %}>Import</button>
+      <a class="btn" href="{% url 'stock:data' %}">Cancel</a>
+    </div>
+  </div>
+</form>
+{% endblock %}

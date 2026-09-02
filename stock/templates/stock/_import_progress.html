@@ -1,0 +1,30 @@
+<div class="card" id="import-progress">
+  {% if batch.status == 'DONE' %}
+    <h3>Import finished</h3>
+    <p>{{ batch.result.pieces_created }} pieces created,
+       {{ batch.result.pieces_updated }} updated,
+       {{ batch.result.pieces_skipped }} left alone,
+       {{ batch.result.lines_written }} material lines,
+       {{ batch.images_done }} images.</p>
+    {% if batch.result.variances %}
+    <div class="note"><b>{{ batch.result.variances|length }} pieces cost differently here
+      than in IVY.</b> Our figure comes from the rates on the BOM; theirs is kept beside it
+      on the piece, so the two can always be compared.</div>
+    {% endif %}
+    {% if batch.result.images_refused %}
+    <div class="note"><b>{{ batch.result.images_refused|length }} images were refused.</b>
+      {{ batch.result.images_refused|join:", " }}</div>
+    {% endif %}
+    <a class="btn primary" href="{% url 'stock:piece_list' %}">See the pieces</a>
+  {% else %}
+    <h3>Attaching images</h3>
+    <p class="hint">The catalogue is already saved. Images upload a few at a time, so
+      closing this tab loses nothing — reopening the import picks up where it stopped.</p>
+    <progress value="{{ batch.images_done }}" max="{{ batch.images_total }}"></progress>
+    <p class="dim">{{ batch.images_done }} of {{ batch.images_total }} ({{ batch.images_pct }}%)</p>
+    <div hx-post="{% url 'stock:import_images' batch.batch_id %}"
+         hx-target="#import-progress"
+         hx-swap="outerHTML"
+         hx-trigger="load delay:100ms"></div>
+  {% endif %}
+</div>

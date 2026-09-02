@@ -242,3 +242,64 @@ def test_images_are_attached_in_chunks_and_are_resumable(
     assert batch.images_done == 1
     # running again does nothing, rather than attaching a second copy
     assert attach_images(batch, parsed, limit=10) == 0
+
+
+# ── the screens ──────────────────────────────────────────────────────────
+from django.urls import reverse
+
+
+def _xlsx_upload(name="stock.xlsx", products=None):
+    """The fixture workbook as something a form POST would carry."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    from stock.tests.fixtures_ivy import build_workbook
+
+    return SimpleUploadedFile(
+        name,
+        build_workbook(products=products).getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+def test_a_workbook_with_wrong_headers_is_refused_at_upload(client, admin_user_):
+    import io
+
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from openpyxl import Workbook
+
+    book = Workbook()
+    book.active["A1"] = "not an IVY export"
+    stream = io.BytesIO()
+    book.save(stream)
+
+    client.force_login(admin_user_)
+    response = client.post(
+        reverse("stock:import_upload"),
+        {"workbook": SimpleUploadedFile("wrong.xlsx", stream.getvalue())},
+        follow=True,
+    )
+    assert ImportBatch.objects.count() == 0
+    assert b"not an IVY stock export" in response.content
+
+
+def test_a_non_admin_cannot_reach_the_importer(client, sales_user):
+    """Only the data tab opens this, and only ADMIN has it."""
+    client.force_login(sales_user)
+    assert client.post(reverse("stock:import_upload"), {}).status_code == 403
+
+
+def test_the_progress_partial_stops_asking_once_it_is_done(client, admin_user_):
+    from mediahub.models import MediaAsset
+
+    batch = ImportBatch.objects.create(
+        media=MediaAsset.objects.create(file_name="x.xlsx", scope="import", scope_id="workbook"),
+        status=ImportBatch.Status.DONE,
+        images_done=3,
+        images_total=3,
+        result={"pieces_created": 3, "pieces_updated": 0, "pieces_skipped": 0, "lines_written": 9},
+        created_by=admin_user_,
+    )
+    client.force_login(admin_user_)
+    response = client.post(reverse("stock:import_images", args=[batch.batch_id]))
+    assert b"hx-trigger" not in response.content
+    assert b"Import finished" in response.content
