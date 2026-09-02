@@ -320,3 +320,54 @@ def test_the_progress_partial_stops_asking_once_it_is_done(client, admin_user_):
     response = client.post(reverse("stock:import_images", args=[batch.batch_id]))
     assert b"hx-trigger" not in response.content
     assert b"Import finished" in response.content
+
+
+def test_the_whole_flow_works_through_the_browser(client, admin_user_, materials, import_reference, monkeypatch, settings):
+    """Upload, review, commit, then the image loop — over real HTTP.
+
+    Storage is stubbed at the boundary: the point here is the wiring between
+    the four views, not that boto3 works.
+    """
+    settings.ALLOWED_HOSTS = ["testserver"]
+    from mediahub import services as media_services
+    from mediahub import storage
+    from mediahub.models import MediaAsset
+
+    book = build_workbook().getvalue()
+
+    def fake_attach(files, scope, entity_id, user, kind=None):
+        asset = MediaAsset.objects.create(
+            file_name=getattr(files[0], "name", "x.xlsx"),
+            scope=scope, scope_id=str(entity_id), storage_key="k",
+        )
+        return [asset], []
+
+    monkeypatch.setattr(media_services, "attach_uploads", fake_attach)
+    monkeypatch.setattr("stock.views.media_services.attach_uploads", fake_attach)
+    monkeypatch.setattr(storage, "get_bytes", lambda key: book)
+
+    client.force_login(admin_user_)
+    upload = _xlsx_upload()
+    response = client.post(reverse("stock:import_upload"), {"workbook": upload})
+    batch = ImportBatch.objects.get()
+    assert response.status_code == 302
+    assert response["Location"].endswith(f"/{batch.batch_id}/")
+
+    # the review screen renders and pre-fills its decisions
+    review = client.get(reverse("stock:import_review", args=[batch.batch_id]))
+    assert review.status_code == 200
+    assert b"24P00088" in review.content
+    batch.refresh_from_db()
+    assert batch.status == ImportBatch.Status.REVIEWING
+    assert batch.decisions["pieces"]["24P00088"]["action"] == "create"
+
+    # committing writes the catalogue and hands over to the image loop
+    committed = client.post(reverse("stock:import_commit", args=[batch.batch_id]), {"location": ""})
+    assert committed.status_code == 200
+    batch.refresh_from_db()
+    assert batch.result["pieces_created"] == 3
+    assert Piece.objects.filter(jewel_code="24P00088").exists()
+    # the fixture carries no images, so it finishes in one go
+    assert batch.status == ImportBatch.Status.DONE
+    assert b"Import finished" in committed.content
+    assert b"hx-trigger" not in committed.content

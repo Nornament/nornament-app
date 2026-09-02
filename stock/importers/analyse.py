@@ -6,6 +6,7 @@ diff pure is what makes the review screen safe to reload.
 """
 import re
 from dataclasses import dataclass, field
+from decimal import Decimal
 
 from stock.importers import guess
 from stock.models import Category, Collection, Material, Piece, Style, Vendor
@@ -202,6 +203,20 @@ def analyse(pieces):
     )
 
 
+def _jsonable(value):
+    """Decimals do not survive a JSONField, and purity_factor is one.
+
+    ``ImportBatch.decisions`` is stored as JSON, so anything the guesser put
+    in a field dict has to be plain first. Django takes the string back as a
+    Decimal on the way into the model, so nothing is lost.
+    """
+    if isinstance(value, dict):
+        return {key: _jsonable(item) for key, item in value.items()}
+    if isinstance(value, Decimal):
+        return str(value)
+    return value
+
+
 def default_decisions(plan):
     """The plan's own proposals, in the shape the review form posts back."""
     return {
@@ -209,7 +224,7 @@ def default_decisions(plan):
             row.key: {
                 "action": row.action,
                 "target": getattr(row.target, "pk", None),
-                "fields": row.fields,
+                "fields": _jsonable(row.fields),
             }
             for row in rows
         }
