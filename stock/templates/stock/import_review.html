@@ -2,21 +2,36 @@
 {% block title %}Review import · Nornament{% endblock %}
 {% block heading %}Review import #{{ batch.batch_id }}{% endblock %}
 {% block content %}
+<datalist id="material-codes">
+  {% for material in materials %}<option value="{{ material.item_code }}">{{ material.item_name }}</option>{% endfor %}
+</datalist>
+
+<form method="post" action="{% url 'stock:import_commit' batch.batch_id %}">
+  {% csrf_token %}
+
 {% if blockers %}
 <div class="card">
   <h3>{{ blockers|length }} decisions need you</h3>
-  <p class="hint">Nothing is written until each of these is resolved. They are the cases the
-    importer refuses to guess at, because a wrong answer would misprice every piece using it.</p>
-  <table><thead><tr><th>Code</th><th>From the sheet</th><th>Why it stopped</th></tr></thead><tbody>
+  <p class="hint">These are the cases the importer refuses to guess at, because a wrong answer
+    would misprice every piece using it. Point each one at a material you already have, or skip
+    it — skipping drops that material's lines from the pieces that use it.</p>
+  <table><thead><tr><th>Code</th><th>From the sheet</th><th>Why it stopped</th>
+    <th>Use instead</th></tr></thead><tbody>
     {% for row in blockers %}
-    <tr><td><b>{{ row.key }}</b></td><td>{{ row.label }}</td><td class="dim">{{ row.problem }}</td></tr>
+    <tr>
+      <td><b>{{ row.key }}</b></td>
+      <td>{{ row.label }}</td>
+      <td class="dim">{{ row.problem }}</td>
+      <td>
+        <input list="material-codes" name="materials:{{ row.key }}:map_to"
+               placeholder="existing item code" size="16">
+        <label><input type="checkbox" name="materials:{{ row.key }}" value="skip"> skip</label>
+      </td>
+    </tr>
     {% endfor %}
   </tbody></table>
 </div>
 {% endif %}
-
-<form method="post" action="{% url 'stock:import_commit' batch.batch_id %}">
-  {% csrf_token %}
   {% for section, rows in sections.items %}
   <details class="card" {% if section == 'pieces' %}open{% endif %}>
     <summary><b>{{ section|title }}</b> — {{ rows|length }} rows</summary>
@@ -25,7 +40,9 @@
       <tr>
         <td><b>{{ row.key }}</b>{% if row.label != row.key %}<br><span class="dim">{{ row.label }}</span>{% endif %}</td>
         <td>
-          {% if section == 'pieces' and row.target %}
+          {% if row.problem %}
+            <span class="dim">answered above</span>
+          {% elif section == 'pieces' and row.target %}
             <label><input type="checkbox" name="update:{{ row.key }}"> update</label>
           {% elif section == 'pieces' or section == 'styles' %}
             <span class="dim">{{ row.action }}</span>

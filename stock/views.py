@@ -1195,7 +1195,11 @@ def _decisions_from_post(post, plan):
     for section, rows in decisions.items():
         for key, choice in rows.items():
             field = f"{section}:{key}"
-            if field in post:
+            target = post.get(f"{field}:map_to", "").strip()
+            if target:
+                choice["map_to"] = target
+                choice["action"] = "map"
+            elif field in post:
                 choice["action"] = post.get(field)
             elif section == "pieces" and choice["action"] == "skip":
                 choice["action"] = "update" if post.get(f"update:{key}") else "skip"
@@ -1246,6 +1250,8 @@ def import_review(request, batch_id):
         "sections": plan.sections,
         "counts": plan.counts,
         "blockers": plan.blockers,
+        "decisions": batch.decisions,
+        "materials": Material.objects.order_by("item_code"),
         "locations": Location.objects.filter(is_active=True),
     })
 
@@ -1258,11 +1264,25 @@ def import_commit(request, batch_id):
     batch = get_object_or_404(ImportBatch, pk=batch_id)
     pieces = ivy.parse(_batch_workbook(batch))
     plan = analyse_import.analyse(pieces)
-    if plan.blockers:
-        messages.error(request, f"{len(plan.blockers)} decisions still need resolving.")
-        return redirect("stock:import_review", batch_id=batch.batch_id)
-
     decisions = _decisions_from_post(request.POST, plan)
+
+    still = analyse_import.unresolved(plan, decisions)
+    if still:
+        # re-render rather than redirect, so the reviewer keeps their answers
+        messages.error(request, f"{len(still)} decisions still need resolving.")
+        batch.decisions = decisions
+        batch.save(update_fields=["decisions"])
+        return render(request, "stock/import_review.html", {
+            "nav": "data",
+            "batch": batch,
+            "sections": plan.sections,
+            "counts": plan.counts,
+            "blockers": still,
+            "decisions": decisions,
+            "materials": Material.objects.order_by("item_code"),
+            "locations": Location.objects.filter(is_active=True),
+        })
+
     location = Location.objects.filter(pk=request.POST.get("location") or 0).first()
 
     batch.decisions = decisions

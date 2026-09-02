@@ -371,3 +371,89 @@ def test_the_whole_flow_works_through_the_browser(client, admin_user_, materials
     assert batch.status == ImportBatch.Status.DONE
     assert b"Import finished" in committed.content
     assert b"hx-trigger" not in committed.content
+
+
+# ── resolving a blocker ──────────────────────────────────────────────────
+@pytest.fixture
+def blocked_book():
+    """A workbook whose only metal is G12K — a purity that does not exist."""
+    from stock.tests.fixtures_ivy import THREE_PRODUCTS
+    from stock.tests.fixtures_ivy import build_workbook as build
+
+    header, block = THREE_PRODUCTS[0]
+    return build(products=[(dict(header), [{**block[0], 37: "G12K", 38: "Gold12K"}])])
+
+
+def test_a_blocker_nobody_answered_is_still_unresolved(blocked_book, materials):
+    plan = analyse(ivy.parse(blocked_book))
+    assert analyse_mod.unresolved(plan, default_decisions(plan))
+
+
+def test_mapping_a_blocker_onto_a_real_material_resolves_it(blocked_book, materials):
+    """The reviewer says 'use G, the gold I already have' — that is an answer."""
+    plan = analyse(ivy.parse(blocked_book))
+    decisions = default_decisions(plan)
+    decisions["materials"]["G12K"].update({"action": "map", "map_to": "G"})
+    assert analyse_mod.unresolved(plan, decisions) == []
+
+
+def test_skipping_a_blocker_resolves_it_and_drops_its_lines(
+    blocked_book, materials, import_reference, admin_user_
+):
+    parsed = ivy.parse(blocked_book)
+    plan = analyse(parsed)
+    decisions = default_decisions(plan)
+    decisions["materials"]["G12K"]["action"] = "skip"
+    assert analyse_mod.unresolved(plan, decisions) == []
+
+    commit(parsed, decisions, admin_user_)
+    piece = Piece.objects.get(jewel_code="24P00088")
+    assert not BomLine.objects.filter(
+        piece=piece, material__item_code="G12K"
+    ).exists(), "a skipped material must not be written"
+    assert not Material.objects.filter(item_code="G12K").exists()
+
+
+def test_a_mapped_blocker_books_its_lines_against_the_material_chosen(
+    blocked_book, materials, import_reference, admin_user_
+):
+    parsed = ivy.parse(blocked_book)
+    plan = analyse(parsed)
+    decisions = default_decisions(plan)
+    decisions["materials"]["G12K"].update({"action": "map", "map_to": "G"})
+    commit(parsed, decisions, admin_user_)
+    piece = Piece.objects.get(jewel_code="24P00088")
+    metal = BomLine.objects.get(piece=piece, material__category="METAL")
+    assert metal.material.item_code == "G"
+    assert not Material.objects.filter(item_code="G12K").exists()
+
+
+def test_the_commit_screen_refuses_and_keeps_the_form_when_unanswered(
+    client, admin_user_, materials, import_reference, monkeypatch, settings, blocked_book
+):
+    """A refusal must not throw away what the reviewer already typed."""
+    settings.ALLOWED_HOSTS = ["testserver"]
+    from mediahub import storage
+    from mediahub.models import MediaAsset
+
+    book = blocked_book.getvalue()
+    monkeypatch.setattr(storage, "get_bytes", lambda key: book)
+    batch = ImportBatch.objects.create(
+        media=MediaAsset.objects.create(file_name="x.xlsx", scope="import", scope_id="w", storage_key="k"),
+        created_by=admin_user_,
+    )
+    client.force_login(admin_user_)
+    refused = client.post(reverse("stock:import_commit", args=[batch.batch_id]), {"location": ""})
+    assert refused.status_code == 200
+    assert b"still need resolving" in refused.content
+    assert b"existing item code" in refused.content     # the form is still there
+    assert Piece.objects.count() == 0
+
+    answered = client.post(
+        reverse("stock:import_commit", args=[batch.batch_id]),
+        {"location": "", "materials:G12K:map_to": "G"},
+    )
+    batch.refresh_from_db()
+    assert answered.status_code == 200
+    assert batch.result["pieces_created"] == 1
+    assert Piece.objects.filter(jewel_code="24P00088").exists()

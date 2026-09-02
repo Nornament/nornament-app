@@ -203,6 +203,29 @@ def analyse(pieces):
     )
 
 
+def unresolved(plan, decisions):
+    """Blocked rows the reviewer's decisions have not answered.
+
+    ``plan.blockers`` is what the *sheet alone* could not settle. This is what
+    is still unsettled after a human has been through it, which is the thing
+    the commit gate has to ask: a blocker mapped onto an existing material, or
+    deliberately skipped, is resolved even though the guesser still cannot
+    place it on its own.
+    """
+    still = []
+    for section, rows in plan.sections.items():
+        for row in rows:
+            if not row.problem:
+                continue
+            choice = (decisions.get(section) or {}).get(row.key) or {}
+            if choice.get("action") == "skip":
+                continue
+            if choice.get("action") == "map" and choice.get("map_to"):
+                continue
+            still.append(row)
+    return still
+
+
 def _jsonable(value):
     """Decimals do not survive a JSONField, and purity_factor is one.
 

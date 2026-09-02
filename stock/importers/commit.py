@@ -49,8 +49,15 @@ def _resolve_materials(decisions):
     for key, choice in (decisions.get("materials") or {}).items():
         fields = dict(choice.get("fields") or {})
         code = fields.get("item_code", key)
+        if choice.get("action") == "skip":
+            # None here, and _bom_lines drops every line using it
+            resolved[key] = None
+            continue
         if choice.get("action") == "map":
-            resolved[key] = Material.objects.filter(item_code=code).first()
+            # a reviewer may have re-pointed this code at a different material
+            resolved[key] = Material.objects.filter(
+                item_code=choice.get("map_to") or code
+            ).first()
             continue
         existing = Material.objects.filter(item_code=code).first()
         if existing:
