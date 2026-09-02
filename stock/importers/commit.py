@@ -44,9 +44,17 @@ def _resolve_named(decisions, section, model, cache):
 
 
 def _resolve_materials(decisions):
-    """code as written in the sheet -> the Material it means."""
+    """code as written in the sheet -> the Material it means.
+
+    Creations run before mappings, because a reviewer is allowed to point a
+    code at a material this same import is about to create — on a fresh
+    catalogue that is the only sensible answer available.
+    """
     resolved = {}
-    for key, choice in (decisions.get("materials") or {}).items():
+    entries = list((decisions.get("materials") or {}).items())
+    mappings = [(k, c) for k, c in entries if c.get("action") == "map"]
+
+    for key, choice in entries:
         fields = dict(choice.get("fields") or {})
         code = fields.get("item_code", key)
         if choice.get("action") == "skip":
@@ -54,11 +62,7 @@ def _resolve_materials(decisions):
             resolved[key] = None
             continue
         if choice.get("action") == "map":
-            # a reviewer may have re-pointed this code at a different material
-            resolved[key] = Material.objects.filter(
-                item_code=choice.get("map_to") or code
-            ).first()
-            continue
+            continue                      # second pass, below
         existing = Material.objects.filter(item_code=code).first()
         if existing:
             resolved[key] = existing
@@ -71,6 +75,10 @@ def _resolve_materials(decisions):
                 f"{code} is a metal with no metal resolved. Set its metal and purity first."
             )
         resolved[key] = Material.objects.create(**fields)
+
+    for key, choice in mappings:
+        code = choice.get("map_to") or (choice.get("fields") or {}).get("item_code", key)
+        resolved[key] = Material.objects.filter(item_code=code).first()
     return resolved
 
 

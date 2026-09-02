@@ -52,6 +52,10 @@
               <option value="map" {% if row.action == 'map' %}selected{% endif %}>map to existing</option>
               <option value="skip" {% if row.action == 'skip' %}selected{% endif %}>skip</option>
             </select>
+            {% if section == 'materials' %}
+            <input list="material-codes" name="{{ section }}:{{ row.key }}:map_to"
+                   placeholder="{% if row.target %}{{ row.target.item_code }}{% else %}use another code{% endif %}" size="14">
+            {% endif %}
           {% endif %}
         </td>
         <td class="dim">{% if row.problem %}{{ row.problem }}{% else %}{{ row.detail }}{% endif %}</td>

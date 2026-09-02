@@ -212,17 +212,30 @@ def unresolved(plan, decisions):
     deliberately skipped, is resolved even though the guesser still cannot
     place it on its own.
     """
+    available = set(Material.objects.values_list("item_code", flat=True))
+    # a code this same import is about to create is a legitimate target: on a
+    # fresh catalogue every sensible answer would otherwise be refused
+    for row in plan.materials:
+        choice = (decisions.get("materials") or {}).get(row.key) or {}
+        if choice.get("action", row.action) == "create" and not row.problem:
+            available.add((row.fields or {}).get("item_code", row.key))
+
     still = []
     for section, rows in plan.sections.items():
         for row in rows:
-            if not row.problem:
-                continue
             choice = (decisions.get(section) or {}).get(row.key) or {}
-            if choice.get("action") == "skip":
+            action = choice.get("action", row.action)
+            if action == "skip":
                 continue
-            if choice.get("action") == "map" and choice.get("map_to"):
+            if section == "materials" and action == "map":
+                # a material mapped onto nothing would have its lines dropped
+                # without a word, which is worse than refusing to start
+                code = choice.get("map_to") or (row.fields or {}).get("item_code", row.key)
+                if code not in available:
+                    still.append(row)
                 continue
-            still.append(row)
+            if row.problem:
+                still.append(row)
     return still
 
 

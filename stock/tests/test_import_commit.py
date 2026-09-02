@@ -457,3 +457,12 @@ def test_the_commit_screen_refuses_and_keeps_the_form_when_unanswered(
     assert answered.status_code == 200
     assert batch.result["pieces_created"] == 1
     assert Piece.objects.filter(jewel_code="24P00088").exists()
+
+
+def test_mapping_a_material_onto_nothing_is_refused_not_silently_dropped(parsed, materials):
+    """'map' with no usable code would drop that material's lines unannounced."""
+    plan = analyse(parsed)
+    decisions = default_decisions(plan)
+    decisions["materials"]["SP01C"]["action"] = "map"      # SP01C does not exist
+    blocked = analyse_mod.unresolved(plan, decisions)
+    assert any(r.key == "SP01C" for r in blocked)
