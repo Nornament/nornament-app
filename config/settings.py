@@ -90,6 +90,7 @@ TEMPLATES = [
                 "accounts.context_processors.capabilities",
                 "crm.context_processors.nav_counts",
                 "stock.context_processors.ticker",
+                "stock.context_processors.asset_version",
             ],
         },
     },
