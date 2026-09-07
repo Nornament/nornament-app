@@ -5,7 +5,7 @@
 {% comment %}Same filter bar as the piece list, four rows longer: two chips in a
 row are an or, two rows are an and. Everything below — the summary, the material
 mix, the piece table and the workbook — is the same filtered set.{% endcomment %}
-<form class="filterbar" method="get" action="{% url 'stock:reports' %}">
+<form class="filterbar scrolls" method="get" action="{% url 'stock:reports' %}">
   {% for key, values in picked.items %}{% for value in values %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}{% endfor %}
   <input type="hidden" name="by" value="{{ by }}">
   <div class="frow">
