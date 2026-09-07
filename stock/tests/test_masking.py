@@ -189,7 +189,7 @@ def test_the_locked_tabs_refuse_a_sales_login(client, sales_user, priced_and_sol
     _login(client, sales_user)
     for name in (
         "stock:melt_list", "stock:data", "stock:audit", "stock:settings", "stock:reports",
-        "stock:material_export", "stock:rate_chart_export",
+        "stock:reports_export", "stock:material_export", "stock:rate_chart_export",
     ):
         assert client.get(reverse(name)).status_code == 403, f"{name} let a SALES login in"
     # the importer hangs off the data tab and writes reference data, so it is
@@ -298,7 +298,7 @@ def test_every_stock_and_crm_screen_is_in_the_sales_walk():
         "stock:count_detail", "stock:count_list", "stock:piece_rows",
         # asserted to 403 for SALES in test_the_locked_tabs_refuse_a_sales_login
         "stock:melt_list", "stock:data", "stock:audit", "stock:settings", "stock:reports",
-        "stock:material_export", "stock:rate_chart_export",
+        "stock:reports_export", "stock:material_export", "stock:rate_chart_export",
         "stock:import_upload", "stock:import_review", "stock:import_commit", "stock:import_images",
         "stock:import_step",
         # gated on edit_bom, and asserted to 403 below

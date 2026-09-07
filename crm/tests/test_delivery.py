@@ -194,6 +194,27 @@ def test_a_terminal_status_is_not_reported_as_unknown(client, admin_user_, custo
     assert response.context["lost"] is True
 
 
+# ── the board reads like the legacy one ──────────────────────────────────
+def test_the_board_lists_cards_oldest_first(client, admin_user_, customer):
+    """The legacy CRM loaded every pipeline ``.order('created_at')`` and never
+    re-sorted, so a column read top-down in the order records were made — not
+    by order date, which is what the model's default ordering would give."""
+    first = Order.objects.create(order_code="ORD-011", customer=customer, status="Ready", order_date=date(2026, 6, 1))
+    second = Order.objects.create(order_code="ORD-012", customer=customer, status="Ready", order_date=date(2026, 6, 20))
+    client.force_login(admin_user_)
+    response = client.get(reverse("crm:order_list"), {"view": "kanban"})
+    ready = dict(response.context["columns"])["Ready"]
+    assert [row.pk for row in ready] == [first.pk, second.pk]
+
+
+def test_an_order_card_shows_its_expected_delivery(client, admin_user_, customer):
+    """``getSubtitle: o => fmtD(o.expectedDelivery)`` — the legacy card's second line."""
+    Order.objects.create(order_code="ORD-013", customer=customer, status="Ready", expected_delivery=date(2026, 6, 18))
+    client.force_login(admin_user_)
+    body = client.get(reverse("crm:order_list"), {"view": "kanban"}).content.decode()
+    assert "18 Jun 2026" in body
+
+
 # ── the backfill ─────────────────────────────────────────────────────────
 def test_the_backfill_reports_before_it_writes(customer):
     """It creates revenue rows, so it never does so without being asked."""
@@ -288,10 +309,8 @@ def test_another_customers_purchase_at_the_same_price_is_never_claimed(order, cu
 # entry in the customer's purchases[] array — so scope='sale' media does not
 # exist for any migrated row and the Purchases tab showed a placeholder for
 # every one of them. The photos are on the order, which crm_order now names.
-def test_a_purchase_falls_back_to_the_photo_of_its_order(order, customer):
+def test_a_purchase_falls_back_to_the_photo_of_its_order(client, admin_user_, order, customer):
     from mediahub.models import MediaAsset
-
-    from crm import views
 
     MediaAsset.objects.create(
         scope="order",
@@ -303,13 +322,17 @@ def test_a_purchase_falls_back_to_the_photo_of_its_order(order, customer):
     )
     sale = services.record_order_delivery(order, amount=Decimal("450000"))
 
-    thumbs = views._sale_thumbs([sale])
+    # Through the view, not the helper: the wiring is half the bug.
+    client.force_login(admin_user_)
+    response = client.get(reverse("crm:customer_detail", args=[customer.pk]), {"tab": "Purchases"})
 
-    assert thumbs.get(sale.pk), "a purchase with no media of its own should show its order's photo"
+    assert response.context["sale_thumbs"].get(sale.pk), "the purchase should show its order's photo"
 
 
-def test_a_purchase_with_no_order_still_shows_no_photo(customer):
-    from crm import views
+def test_a_purchase_with_no_order_still_shows_no_photo(client, admin_user_, customer):
+    services.record_purchase(customer, sold_on=date(2026, 6, 1), sold_price=Decimal("1000"))
 
-    walk_in = services.record_purchase(customer, sold_on=date(2026, 6, 1), sold_price=Decimal("1000"))
-    assert views._sale_thumbs([walk_in]) == {}
+    client.force_login(admin_user_)
+    response = client.get(reverse("crm:customer_detail", args=[customer.pk]), {"tab": "Purchases"})
+
+    assert response.context["sale_thumbs"] == {}

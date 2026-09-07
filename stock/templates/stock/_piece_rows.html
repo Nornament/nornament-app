@@ -35,8 +35,8 @@ when this user may see it: the row dict is built by stock.masking.piece_row.
 {% if page.has_other_pages %}
 <div class="row" style="margin-top:10px">
   <span class="dim" style="font-size:12.5px">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
-  {% if page.has_previous %}<a class="btn sm" href="?page={{ page.previous_page_number }}">Previous</a>{% endif %}
-  {% if page.has_next %}<a class="btn sm" href="?page={{ page.next_page_number }}">Next</a>{% endif %}
+  {% if page.has_previous %}<a class="btn sm" href="{% querystring page=page.previous_page_number %}">Previous</a>{% endif %}
+  {% if page.has_next %}<a class="btn sm" href="{% querystring page=page.next_page_number %}">Next</a>{% endif %}
 </div>
 {% endif %}
 </div>

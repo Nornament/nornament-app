@@ -8,6 +8,7 @@ HTMX carries the live bits — search, the scan flow, inline rate edits — by
 returning the same partials the full page renders.
 """
 import csv
+import datetime
 import io
 import re
 from decimal import Decimal
@@ -19,7 +20,7 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, F, Q, Sum
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.forms import modelform_factory
@@ -27,6 +28,7 @@ from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
 from django.views.decorators.http import require_POST
+from openpyxl import Workbook
 
 from accounts.capabilities import EDIT_BOM, ROLE_GROUPS, ROLE_TABS, VIEW_COST, VIEW_MARGIN, VIEW_SALE
 from accounts.context_processors import _role_code
@@ -80,6 +82,7 @@ from .models import (
     StockCount,
     StockMovement,
     Style,
+    Vendor,
 )
 
 PAGE_SIZE = 50
@@ -145,8 +148,10 @@ PRICE_BANDS = [
     ("5 lakh +", 500_000, None),
 ]
 
-#: The dimensions the filter bar carries, in the legacy's own order.
-FILTER_KEYS = ("category", "location", "state", "price")
+#: The dimensions the filter bar carries: the legacy's four first, then the
+#: four the reports screen adds. One filter function serves every screen, so a
+#: key added here works on the list, the CSV and the report at once.
+FILTER_KEYS = ("category", "location", "state", "price", "collection", "karat", "vendor", "material")
 
 
 def _filtered(request):
@@ -175,6 +180,19 @@ def _filtered(request):
         pieces = pieces.filter(stock_state__in=picked["state"])
     if request.GET.get("unpriced"):
         pieces = pieces.exclude(bom_versions__is_current=True, bom_versions__total_cost_price__gt=0)
+    if picked["collection"]:
+        pieces = pieces.filter(style__collection__code__in=picked["collection"])
+    if picked["karat"]:
+        pieces = pieces.filter(metal_purity__in=picked["karat"])
+    if picked["vendor"]:
+        pieces = pieces.filter(vendor__code__in=picked["vendor"])
+    if picked["material"]:
+        # the current BOM only: a material that was on version 1 and taken off
+        # version 2 is not in the piece any more
+        pieces = pieces.filter(
+            bom_lines__version_no=F("current_bom_version"),
+            bom_lines__material__category__code__in=picked["material"],
+        ).distinct()
     if picked["price"] and allowed(request.user, "sale_price"):
         pieces = _in_price_bands(pieces, picked["price"])
     elif picked["price"]:
@@ -1180,31 +1198,217 @@ def melt_list(request):
     )
 
 
+#: what the summary can be grouped by → its heading and the ``piece_row`` key
+#: it reads. A key the role may not see (vendor) drops out of the offer.
+REPORT_GROUPS = {
+    "location": ("Location", "location"),
+    "category": ("Category", "category"),
+    "collection": ("Collection", "collection"),
+    "karat": ("Karat", "karat"),
+    "state": ("Status", "stock_state_display"),
+    "vendor": ("Vendor", "vendor_name"),
+}
+
+#: a report is read on a screen, not streamed — past this it is an export job
+REPORT_LIMIT = 5000
+
+
+def _report(request):
+    """Everything the report screen and its workbook show, built once.
+
+    One builder for both is the only thing that keeps a downloaded file honest
+    about the screen it was downloaded from. Every number goes through
+    ``piece_row``, so a role without ``view_cost`` has no cost column here,
+    on the screen, or in the file.
+    """
+    pieces, query, picked = _filtered(request)
+    if not picked["state"]:
+        # the legacy report's "live": a sold or melted piece is not stock. A
+        # state chip is an explicit ask for those, so it wins.
+        pieces = [piece for piece in pieces if piece.stock_state not in TERMINAL_STATES]
+    pieces = list(pieces)[:REPORT_LIMIT]
+    rows = [piece_row(request.user, piece) for piece in pieces]
+    # "unpriced" is a count, not a value, so it is read off the BOM rather than
+    # off the masked row — otherwise a SALES login would see everything as
+    # unpriced. One query for the page instead of one per piece.
+    costed = {
+        piece_id
+        for piece_id, cost in BomVersion.objects.filter(
+            piece__in=pieces, is_current=True
+        ).values_list("piece_id", "total_cost_price")
+        if cost
+    }
+
+    by = request.GET.get("by") or "location"
+    if by not in REPORT_GROUPS or (rows and REPORT_GROUPS[by][1] not in rows[0]):
+        by = "location"
+    group_label, group_key = REPORT_GROUPS[by]
+
+    columns = [("pieces", "Pieces"), ("gross_wt", "Gross wt (g)"), ("net_wt", "Net metal (g)")]
+    if allowed(request.user, "cost_price"):
+        columns.append(("cost", "Value at cost (₹)"))
+    if allowed(request.user, "sale_price"):
+        columns.append(("sale", "Sale value (₹)"))
+    columns.append(("unpriced", "Unpriced"))
+
+    groups = {}
+    for piece, row in zip(pieces, rows):
+        entry = groups.setdefault(row.get(group_key) or "—", dict.fromkeys([key for key, _ in columns], Decimal("0")))
+        entry["pieces"] += 1
+        entry["gross_wt"] += row.get("measured_gross_wt_gm") or 0
+        entry["net_wt"] += row.get("net_metal_wt_gm") or 0
+        if "cost" in entry:
+            entry["cost"] += row.get("cost_price") or 0
+        if "sale" in entry:
+            entry["sale"] += row.get("sale_price") or 0
+        entry["unpriced"] += 0 if piece.pk in costed else 1
+    summary = [
+        {"name": name, "cells": [entry[key] for key, _ in columns]}
+        for name, entry in sorted(groups.items(), key=lambda item: str(item[0]))
+    ]
+    totals = [sum((entry[key] for entry in groups.values()), Decimal("0")) for key, _ in columns]
+
+    return {
+        "nav": "reports",
+        "q": query,
+        "picked": picked,
+        "filter_qs": _filter_qs(query, picked),
+        "by": by,
+        "group_label": group_label,
+        "group_chips": [
+            {"key": key, "label": label, "active": key == by}
+            for key, (label, row_key) in REPORT_GROUPS.items()
+            if not rows or row_key in rows[0]
+        ],
+        "columns": [{"key": key, "label": label} for key, label in columns],
+        "summary": summary,
+        "totals": totals,
+        "rows": rows,
+        "materials": _material_mix(request.user, pieces),
+        "capped": len(pieces) == REPORT_LIMIT,
+    }
+
+
+def _material_mix(user, pieces):
+    """What the filtered pieces are made of, by material category.
+
+    A piece is counted once per category it uses, so the piece counts add up to
+    more than the stock — the money columns are what tie out.
+    """
+    if not allowed(user, "material_breakup"):
+        return []
+    lines = (
+        BomLine.objects.filter(piece__in=pieces, version_no=F("piece__current_bom_version"))
+        .values("material__category__name")
+        .annotate(
+            pieces=Count("piece", distinct=True),
+            lines=Count("line_id"),
+            cost_amount=Sum("cost_amount"),
+            sale_amount=Sum("sale_amount"),
+        )
+        .order_by("material__category__name")
+    )
+    return [mask(user, {"category": line.pop("material__category__name") or "—", **line}) for line in lines]
+
+
 @login_required
 @tab_required("reports")
 def reports(request):
-    """Stock by location, with the unpriced column the legacy insisted on.
+    """Stock sliced every way the filter bar allows, with the unpriced column
+    the legacy insisted on.
 
     Without that column a partly-imported catalogue looks healthy while being
     badly understated.
     """
-    live = Piece.objects.visible_to(request.user).exclude(stock_state__in=TERMINAL_STATES)
-    rows = {}
-    for piece in live.select_related("location"):
-        key = piece.location.name if piece.location_id else "—"
-        row = rows.setdefault(key, {"location": key, "pieces": 0, "value": Decimal("0"), "unpriced": 0})
-        row["pieces"] += 1
-        version = piece.current_bom()
-        cost = version.total_cost_price if version else None
-        if cost:
-            row["value"] += cost
-        else:
-            row["unpriced"] += 1
-    context = {"nav": "reports", "rows": sorted(rows.values(), key=lambda row: row["location"])}
-    if not allowed(request.user, "cost_price"):
-        for row in context["rows"]:
-            row.pop("value", None)
-    return render(request, "stock/reports.html", context)
+    context = _report(request)
+    page = Paginator(context["rows"], PAGE_SIZE).get_page(request.GET.get("page"))
+    picked, query = context["picked"], context["q"]
+
+    def chips(label, options, key, gate=True):
+        return {"label": label, "chips": _filter_chips(options, key, picked, query) if gate else []}
+
+    return render(
+        request,
+        "stock/reports.html",
+        context
+        | {
+            "page": page,
+            "rows": list(page),
+            "total": len(context["rows"]),
+            # the legacy's own order first, then the dimensions this screen adds
+            "chip_rows": [
+                chips("Category", Category.objects.values_list("code", "name"), "category"),
+                chips("Location", Location.objects.filter(is_active=True).values_list("code", "name"), "location"),
+                chips("Status", StockState.choices, "state"),
+                chips(
+                    "Price", [(index, band[0]) for index, band in enumerate(PRICE_BANDS)], "price",
+                    allowed(request.user, "sale_price"),
+                ),
+                chips("Collection", Collection.objects.exclude(code=None).values_list("code", "name"), "collection"),
+                chips("Karat", MetalPurity.objects.order_by("sort_order").values_list("karat", "karat"), "karat"),
+                chips(
+                    "Vendor", Vendor.objects.filter(is_active=True).values_list("code", "name"), "vendor",
+                    allowed(request.user, "vendor_name"),
+                ),
+                chips(
+                    "Material", MaterialCategory.objects.order_by("sort_order").values_list("code", "name"), "material",
+                    allowed(request.user, "material_breakup"),
+                ),
+            ],
+        },
+    )
+
+
+@login_required
+@tab_required("reports")
+def reports_export(request):
+    """The report as a workbook: summary, material mix, and every piece behind them.
+
+    Excel because that is what a stock take is reconciled in. The rows are the
+    same masked rows the screen renders, and the download is logged like any
+    other export — what was taken, not just that someone took something.
+    """
+    report = _report(request)
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "Summary"
+    sheet.append([report["group_label"]] + [column["label"] for column in report["columns"]])
+    for entry in report["summary"]:
+        sheet.append([entry["name"]] + entry["cells"])
+    sheet.append(["Total"] + report["totals"])
+
+    if report["materials"]:
+        materials = book.create_sheet("Materials")
+        headers = list(report["materials"][0].keys())
+        materials.append(headers)
+        for line in report["materials"]:
+            materials.append([line.get(key) for key in headers])
+
+    detail = book.create_sheet("Pieces")
+    fields = list(report["rows"][0].keys()) if report["rows"] else ["jewel_code"]
+    detail.append(fields)
+    for row in report["rows"]:
+        detail.append([_cell(row.get(field)) for field in fields])
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = 'attachment; filename="stock-report.xlsx"'
+    book.save(response)
+    services.log(
+        request.user, "EXPORT", "jewel_code", "reports_export",
+        f"{len(report['rows'])} rows by {report['by']}", row_count=len(report["rows"]),
+    )
+    return response
+
+
+def _cell(value):
+    """openpyxl writes numbers, dates and strings; anything else goes as text."""
+    if isinstance(value, (int, float, Decimal, bool)) or value is None:
+        return value
+    if isinstance(value, (datetime.date, datetime.datetime)):
+        return value.replace(tzinfo=None) if isinstance(value, datetime.datetime) else value
+    return str(value)
 
 
 @login_required
@@ -1415,6 +1619,7 @@ def import_step(request, batch_id, step):
         choice = saved.get(row.key) or {}
         row.action = choice.get("action", row.action)
         row.map_to = choice.get("map_to", "")
+        row.category = (choice.get("fields") or {}).get("category_id", "")
 
     summary = [
         (label, plan.counts[name]) for name, label, _ in steps

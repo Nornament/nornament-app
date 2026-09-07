@@ -138,6 +138,26 @@ def pipeline_code(row):
 
 
 @register.filter
+def pipeline_subtitle(row):
+    """The legacy card's second line, one ``getSubtitle`` per module.
+
+    An enquiry showed its budget, else its date; an order its expected
+    delivery; a repair its expected return; a client material the date it
+    was received. ``fmtD`` printed dates as ``18 Jun 2026`` or an em dash.
+    """
+    from django.utils.dateformat import format as date_format
+
+    budget = getattr(row, "estimated_budget", None)
+    if budget:
+        return inr(budget)
+    for field in ("expected_delivery", "expected_return", "received_date", "enquiry_date"):
+        value = getattr(row, field, None)
+        if value:
+            return date_format(value, "d M Y")
+    return "—"
+
+
+@register.filter
 def next_status(status, statuses):
     """The stage after this one, or '' at the end — the kanban's › button."""
     statuses = list(statuses)

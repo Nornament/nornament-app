@@ -1,4 +1,5 @@
 """Screen smoke tests: every page renders, and the HTMX partials match them."""
+import io
 from decimal import Decimal
 
 import pytest
@@ -317,3 +318,31 @@ def test_the_rate_chart_csv_round_trips_and_a_metal_row_saves_nothing(client, ad
         settings_url, {"chart": chart.pk, "csv": SimpleUploadedFile("rates.csv", edited.encode())}, follow=True
     )
     assert "is locked" in locked.content.decode()
+
+
+def test_the_stock_report_filters_and_exports_the_same_set(client, admin_user_, received_piece, chart, scenarios):
+    """The screen, the material mix and the workbook are one filtered set.
+
+    A report that filters the table but exports the catalogue is worse than no
+    export at all, so the count on the screen and the rows in the file are
+    asserted against each other.
+    """
+    from openpyxl import load_workbook
+
+    client.force_login(admin_user_)
+    url = reverse("stock:reports")
+    body = client.get(url, {"by": "category"}).content.decode()
+    assert "ER00738" in body and "Earrings" in body
+    assert "Diamond" in body  # the material mix, off the current BOM
+
+    # a filter that cannot match takes the piece out of every table
+    empty = client.get(url, {"material": "NOTHING"}).content.decode()
+    assert "ER00738" not in empty
+
+    book = load_workbook(io.BytesIO(client.get(reverse("stock:reports_export")).content))
+    assert book.sheetnames == ["Summary", "Materials", "Pieces"]
+    assert book["Pieces"].max_row == 2  # one header, one piece
+    assert book["Summary"]["A2"].value  # the group it fell in
+
+    missing = load_workbook(io.BytesIO(client.get(reverse("stock:reports_export"), {"material": "NOTHING"}).content))
+    assert missing["Pieces"].max_row == 1
