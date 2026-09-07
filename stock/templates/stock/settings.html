@@ -85,13 +85,20 @@
   </div>
   <table style="margin-top:12px"><thead><tr><th style="width:120px">Code</th><th>Description</th>
     <th style="width:96px">Size</th><th style="width:150px">Category</th><th style="width:64px">Unit</th>
-    <th class="num" style="width:74px">Lines</th></tr></thead><tbody>
+    <th class="num" style="width:74px">Lines</th>
+    {% if caps.manage_materials %}<th style="width:132px"></th>{% endif %}</tr></thead><tbody>
     {% for row in materials %}
     <tr><td class="code">{{ row.item_code }}</td><td>{{ row.item_name }}
         {% if row.needs_review %}<span class="chip c-warn">needs review</span>{% endif %}</td>
       <td>{{ row.size|default:"—" }}</td><td>{{ row.category }}</td><td>{{ row.default_uom }}</td>
-      <td class="num">{{ row.used_on_lines }}</td></tr>
-    {% empty %}<tr><td colspan="6"><div class="empty">No materials match.</div></td></tr>{% endfor %}
+      <td class="num">{{ row.used_on_lines }}</td>
+      {% if caps.manage_materials %}
+      <td class="imp-act">
+        <a class="btn sm tight" href="{% url 'stock:material_edit' row.item_code %}">Edit</a>
+        <a class="btn sm tight" href="{% url 'stock:material_delete' row.item_code %}">Delete</a>
+      </td>
+      {% endif %}</tr>
+    {% empty %}<tr><td colspan="7"><div class="empty">No materials match.</div></td></tr>{% endfor %}
   </tbody></table>
   <div class="note">The <b>code</b> is what a bill of materials points at, so changing it moves every
     line that uses it. Description and size are free text. The table stops at 400 rows — the pill
