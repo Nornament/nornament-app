@@ -692,8 +692,8 @@ a.btn,a.chip,a.code,a.fchip{text-decoration:none}
 .imp-table td{vertical-align:top;padding:7px 10px}
 .imp-table col.w-code{width:15%}
 .imp-table col.w-name{width:26%}
-.imp-table col.w-act{width:23%}
-.imp-table col.w-note{width:36%}
+.imp-table col.w-act{width:31%}
+.imp-table col.w-note{width:28%}
 .imp-pieces col.w-code{width:20%}
 .imp-pieces col.w-mid{width:58%}
 .imp-pieces col.w-act{width:22%}
@@ -701,9 +701,10 @@ a.btn,a.chip,a.code,a.fchip{text-decoration:none}
 /* one line, ellipsis, full text on hover — never a word broken mid-way */
 .imp-trunc{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .imp-note{font-size:12.5px;line-height:1.45;overflow-wrap:anywhere}
-.imp-act{white-space:nowrap}
+.imp-act{white-space:nowrap;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 .imp-sel{width:112px;padding:3px 6px;font-size:12.5px}
-.imp-code{width:88px;padding:3px 6px;font-size:12.5px;margin-left:5px;font-family:var(--mono)}
+.imp-code{width:76px;padding:3px 6px;font-size:12.5px;font-family:var(--mono)}
+.imp-cat{width:104px;padding:3px 6px;font-size:12px}
 .imp-loc{max-width:280px}
 .imp-check{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap}
 .imp-blocked{background:color-mix(in srgb,var(--critical) 7%,transparent)}

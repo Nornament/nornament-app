@@ -28,6 +28,8 @@ urlpatterns = [
     path("styles/<str:style_code>/edit/", views.style_form, name="style_edit"),
     # ── reference ────────────────────────────────────────────────────────
     path("materials/", views.material_list, name="material_list"),
+    path("materials/<path:item_code>/edit/", views.material_edit, name="material_edit"),
+    path("materials/<path:item_code>/delete/", views.material_delete, name="material_delete"),
     path("rates/", views.rate_list, name="rate_list"),
     path("rates/set/", views.set_rate_view, name="set_rate"),
     # ── counts ───────────────────────────────────────────────────────────

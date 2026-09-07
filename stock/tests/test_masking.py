@@ -304,6 +304,9 @@ def test_every_stock_and_crm_screen_is_in_the_sales_walk():
         # gated on edit_bom, and asserted to 403 below
         "stock:piece_new", "stock:piece_edit", "stock:piece_bom_edit",
         "stock:style_new", "stock:style_edit",
+        # gated on manage_materials, and asserted to 403 for a login without it
+        # in test_material_admin.test_a_login_without_manage_materials_is_refused
+        "stock:material_edit", "stock:material_delete",
     }
     named = set()
     for resolver in get_resolver().url_patterns:

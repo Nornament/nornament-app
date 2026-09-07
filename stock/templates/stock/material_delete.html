@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Delete {{ material.item_code }} · Nornament{% endblock %}
+{% block heading %}Delete {{ material.item_code }}{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h3>{{ material.item_code }} <span class="dim" style="font-weight:400">{{ material.item_name }}</span></h3>
+  <p class="hint">{{ material.category.name }} · {{ material.default_uom }}{% if material.metal_id %} · {{ material.metal_id }}{% endif %}</p>
+
+  {% if usage.total %}
+    <div class="note bad">
+      <b>This material is in use {{ usage.total }} time{{ usage.total|pluralize }}.</b>
+      Deleting it outright would leave those rows pointing at nothing, so the database
+      refuses. Move them to another material and this one can go.
+    </div>
+    <table class="imp-table imp-sum" style="max-width:460px">
+      <tbody>
+        {% for label, count in uses %}
+        <tr><td>{{ label }}</td><td class="num">{{ count }}</td></tr>
+        {% endfor %}
+        {% if usage.pieces %}
+        <tr><td class="dim">across pieces</td><td class="num dim">{{ usage.pieces }}</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="note ok"><b>Nothing points at this material.</b> It can be deleted cleanly.</div>
+  {% endif %}
+</div>
+
+<form method="post" class="card">
+  {% csrf_token %}
+  {% if usage.total %}
+    <h3>Move its references</h3>
+    <p class="hint">Every line above is re-pointed at the material you choose, then this one is
+      deleted. Where the target already prices the same band, the duplicate is dropped rather
+      than written twice; loose stock in the same place is added together.</p>
+    <div class="row">
+      <input list="reassign-codes" name="reassign_to" class="imp-code" style="width:200px"
+             placeholder="item code to use instead" required>
+      <button class="btn danger" type="submit">Reassign and delete</button>
+      <a class="btn" href="{% url 'stock:material_list' %}">Cancel</a>
+    </div>
+    <datalist id="reassign-codes">
+      {% for candidate in candidates %}
+      <option value="{{ candidate.item_code }}">{{ candidate.item_name }} · same category</option>
+      {% endfor %}
+      {% for candidate in all_materials %}
+      <option value="{{ candidate.item_code }}">{{ candidate.item_name }} · {{ candidate.category.name }}</option>
+      {% endfor %}
+    </datalist>
+    <p class="hint" style="margin-top:10px">Materials in <b>{{ material.category.name }}</b> are
+      offered first, because a swap inside a category keeps the pricing rules the same.</p>
+  {% else %}
+    <div class="row">
+      <button class="btn danger" type="submit">Delete {{ material.item_code }}</button>
+      <a class="btn" href="{% url 'stock:material_list' %}">Cancel</a>
+    </div>
+  {% endif %}
+</form>
+{% endblock %}

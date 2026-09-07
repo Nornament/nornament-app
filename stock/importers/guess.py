@@ -71,6 +71,24 @@ def _metal_fields(line):
     return metal_id, purity, None
 
 
+#: the unit a category is always measured in. ``_check_line_uom`` in services
+#: enforces the first two, so an override that ignored them would be refused
+#: at commit with a message about a line number rather than about the choice.
+CATEGORY_UOM = {
+    "METAL": Uom.GM,
+    "DIAMOND": Uom.CT,
+    "POLKI": Uom.CT,
+    "SETTING": Uom.CT,
+    "PURAI": Uom.CT,
+    "LABOUR": Uom.PCS,
+}
+
+
+def uom_for_category(category, fallback=Uom.CT):
+    """The unit that goes with a category the reviewer picked by hand."""
+    return CATEGORY_UOM.get(category, fallback)
+
+
 def material_fields(line):
     """``(kwargs for Material, problem)``. A problem blocks the import."""
     category = _category_for(line)

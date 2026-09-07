@@ -3,7 +3,7 @@
   <thead><tr>
     <th style="width:120px">Code</th><th>Description</th><th style="width:96px">Size</th><th style="width:150px">Category</th>
     <th style="width:64px">Unit</th><th style="width:80px">Metal</th>
-    <th class="num" style="width:74px">Used on</th><th style="width:90px"></th>
+    <th class="num" style="width:74px">Used on</th><th style="width:150px"></th>
   </tr></thead><tbody>
   {% for material in materials %}
   <tr>
@@ -14,7 +14,11 @@
     <td class="dim">{{ material.default_uom }}</td>
     <td class="dim">{{ material.metal_id|default:"—" }}</td>
     <td class="num">{{ material.used_on_lines }}</td>
-    <td>{% if material.needs_review %}<span class="chip c-warn">needs review</span>{% endif %}</td>
+    <td class="imp-act">
+      {% if material.needs_review %}<span class="chip c-warn">needs review</span>{% endif %}
+      <a class="btn sm tight" href="{% url 'stock:material_edit' material.item_code %}">Edit</a>
+      <a class="btn sm tight" href="{% url 'stock:material_delete' material.item_code %}">Delete</a>
+    </td>
   </tr>
   {% empty %}<tr><td colspan="8"><div class="empty">No materials match.</div></td></tr>{% endfor %}
   </tbody>

@@ -53,13 +53,15 @@ from .forms import (
 )
 from .importers import analyse as analyse_import
 from .importers import commit as commit_import
+from .importers import guess
 from .importers import ivy
-from .masking import allowed, piece_row
+from .masking import allowed, mask, piece_row
 from .models import (
     ActivityLog,
     Category,
     BomLine,
     BomVersion,
+    Collection,
     JobCard,
     Location,
     Material,
@@ -791,6 +793,74 @@ def material_list(request):
 
 
 @login_required
+@permission_required("accounts.manage_materials", raise_exception=True)
+def material_edit(request, item_code):
+    """Change one material. The form already refuses metal without a metal."""
+    material = get_object_or_404(Material, item_code=item_code)
+    if request.method == "POST":
+        form = MaterialForm(request.POST, instance=material)
+        if form.is_valid():
+            form.save()
+            services.log(request.user, "UPDATE", "material", material.item_code, "edited")
+            messages.success(request, f"{material.item_code} saved.")
+            return redirect("stock:material_list")
+    else:
+        form = MaterialForm(instance=material)
+    return render(request, "stock/material_form.html", {
+        "nav": "settings",
+        "material": material,
+        "form": form,
+        "usage": services.material_usage(material),
+    })
+
+
+@login_required
+@permission_required("accounts.manage_materials", raise_exception=True)
+def material_delete(request, item_code):
+    """The checkpoint: what points at this material, and what to do about it.
+
+    A material in use cannot simply go — every relation is PROTECT, because a
+    BOM line pointing at nothing is a piece nobody can price. So the screen
+    shows the count, and the only ways past it are to move those references to
+    another material or to leave it alone.
+    """
+    material = get_object_or_404(Material, item_code=item_code)
+    usage = services.material_usage(material)
+
+    if request.method == "POST":
+        target = None
+        wanted = (request.POST.get("reassign_to") or "").strip()
+        if wanted:
+            target = Material.objects.filter(item_code=wanted).first()
+            if target is None:
+                messages.error(request, f"No material with the code {wanted!r}.")
+                return redirect("stock:material_delete", item_code=item_code)
+        try:
+            moved = services.delete_material(request.user, material, reassign_to=target)
+        except services.ServiceError as error:
+            messages.error(request, str(error))
+            return redirect("stock:material_delete", item_code=item_code)
+        if target:
+            messages.success(
+                request,
+                f"{item_code} deleted; {sum(moved.values())} reference(s) moved to {target.item_code}.",
+            )
+        else:
+            messages.success(request, f"{item_code} deleted.")
+        return redirect("stock:material_list")
+
+    return render(request, "stock/material_delete.html", {
+        "nav": "settings",
+        "material": material,
+        "usage": usage,
+        "uses": [(label, usage[key]) for key, label, _ in services.MATERIAL_USES],
+        "candidates": Material.objects.filter(category=material.category)
+                                      .exclude(pk=material.pk).order_by("item_code"),
+        "all_materials": Material.objects.exclude(pk=material.pk).order_by("item_code"),
+    })
+
+
+@login_required
 def rate_list(request):
     if not (request.user.has_perm(VIEW_SALE) or request.user.has_perm(VIEW_COST)):
         raise PermissionDenied("You cannot see rates.")
@@ -1250,6 +1320,14 @@ def _merge_step(post, decisions, section):
     """
     for key, choice in (decisions.get(section) or {}).items():
         field = f"{section}:{key}"
+        if section == "materials":
+            picked = (post.get(f"{field}:category") or "").strip()
+            if picked:
+                fields = choice.setdefault("fields", {})
+                fields["category_id"] = picked
+                # the unit is not a free choice: services._check_line_uom
+                # refuses metal that is not GM and diamond that is not CT/PCS
+                fields["default_uom"] = guess.uom_for_category(picked, fields.get("default_uom"))
         target = (post.get(f"{field}:map_to") or "").strip()
         if target:
             choice["map_to"] = target
@@ -1361,6 +1439,7 @@ def import_step(request, batch_id, step):
         "outstanding": outstanding,
         "summary": summary,
         "materials": Material.objects.order_by("item_code"),
+        "material_categories": MaterialCategory.objects.order_by("sort_order"),
         "locations": Location.objects.filter(is_active=True),
     })
 

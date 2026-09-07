@@ -526,3 +526,49 @@ def test_a_piece_that_really_changed_still_says_so(parsed, piece, materials):
     existing.save()
     row = next(r for r in analyse(parsed).pieces if r.key == "24P00095")
     assert "cost 11111 →" in row.detail
+
+
+def test_the_reviewer_can_set_a_material_category_by_hand(client, admin_user_, materials,
+                                                          import_reference, monkeypatch, settings):
+    """The band's guess is a starting point, not the last word."""
+    settings.ALLOWED_HOSTS = ["testserver"]
+    from mediahub import storage
+    from mediahub.models import MediaAsset
+
+    book = build_workbook().getvalue()
+    monkeypatch.setattr(storage, "get_bytes", lambda key: book)
+    batch = ImportBatch.objects.create(
+        media=MediaAsset.objects.create(file_name="x.xlsx", scope="import", scope_id="w", storage_key="k"),
+        created_by=admin_user_,
+    )
+    client.force_login(admin_user_)
+    client.get(reverse("stock:import_review", args=[batch.batch_id]))
+
+    # SP01C is guessed SETTING; call it PURAI instead
+    client.post(reverse("stock:import_step", args=[batch.batch_id, "materials"]),
+                {"materials:SP01C:category": "PURAI"})
+    batch.refresh_from_db()
+    assert batch.decisions["materials"]["SP01C"]["fields"]["category_id"] == "PURAI"
+
+    from stock.models import MaterialCategory
+    MaterialCategory.objects.get_or_create(code="PURAI", defaults={"name": "Purai", "sort_order": 9})
+    client.post(reverse("stock:import_commit", args=[batch.batch_id]), {"location": ""})
+    assert Material.objects.get(item_code="SP01C").category_id == "PURAI"
+
+
+def test_choosing_metal_for_something_with_no_metal_is_refused(parsed, materials, import_reference):
+    """material_metal_required would otherwise blow up mid-transaction."""
+    plan = analyse(parsed)
+    decisions = default_decisions(plan)
+    decisions["materials"]["SP01C"]["fields"]["category_id"] = "METAL"
+    blocked = analyse_mod.unresolved(plan, decisions)
+    assert any(r.key == "SP01C" for r in blocked)
+
+
+def test_a_hand_picked_category_drags_its_unit_with_it():
+    """Metal must be GM and diamond CT, or set_bom refuses the line later."""
+    from stock.importers import guess
+    assert guess.uom_for_category("METAL") == "GM"
+    assert guess.uom_for_category("DIAMOND") == "CT"
+    assert guess.uom_for_category("LABOUR") == "PCS"
+    assert guess.uom_for_category("OTHER", "GM") == "GM"      # falls back

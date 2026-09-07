@@ -105,6 +105,14 @@
               <input list="material-codes" name="{{ step }}:{{ row.key }}:map_to" class="imp-code"
                      value="{{ row.map_to|default:'' }}"
                      placeholder="{% if row.target %}{{ row.target.item_code }}{% else %}code{% endif %}">
+              <select name="{{ step }}:{{ row.key }}:category" class="imp-cat"
+                      title="What kind of material this is — it sets how the line prices">
+                {% for cat in material_categories %}
+                <option value="{{ cat.pk }}"
+                  {% if row.category %}{% if cat.pk == row.category %}selected{% endif %}
+                  {% elif cat.pk == row.fields.category_id %}selected{% endif %}>{{ cat.name }}</option>
+                {% endfor %}
+              </select>
               {% endif %}
             </td>
             <td class="imp-note">

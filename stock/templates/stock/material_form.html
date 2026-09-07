@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ material.item_code }} · Nornament{% endblock %}
+{% block heading %}Edit {{ material.item_code }}{% endblock %}
+{% block content %}
+<form method="post" class="card" style="max-width:560px">
+  {% csrf_token %}
+  <h3>{{ material.item_code }}</h3>
+  <p class="hint">Used on {{ usage.total }} row{{ usage.total|pluralize }}
+    across {{ usage.pieces }} piece{{ usage.pieces|pluralize }}. Changing the category changes how
+    every one of them prices.</p>
+  {{ form.as_p }}
+  <div class="row" style="margin-top:8px">
+    <button class="btn primary" type="submit">Save</button>
+    <a class="btn" href="{% url 'stock:material_list' %}">Cancel</a>
+    <a class="btn danger" href="{% url 'stock:material_delete' material.item_code %}">Delete…</a>
+  </div>
+</form>
+{% endblock %}

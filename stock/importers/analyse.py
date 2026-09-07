@@ -23,6 +23,7 @@ class Resolution:
     problem: str = None             # non-None blocks the commit
     detail: str = ""                # human-readable extra, e.g. a diff
     map_to: str = ""                # an existing code the reviewer chose instead
+    category: str = ""              # the category, once a reviewer has picked one
 
 
 @dataclass
@@ -253,6 +254,17 @@ def unresolved(plan, decisions):
             action = choice.get("action", row.action)
             if action == "skip":
                 continue
+            if section == "materials" and action == "create":
+                # picking METAL by hand does not conjure a metal, and the table
+                # refuses a metal material without one (material_metal_required)
+                decided = {**(row.fields or {}), **(choice.get("fields") or {})}
+                if decided.get("category_id") == "METAL" and not decided.get("metal_id"):
+                    row.problem = row.problem or (
+                        f"{row.key!r} is set to Metal but no metal is resolved for it. "
+                        "Use an existing code instead, or skip it."
+                    )
+                    still.append(row)
+                    continue
             if section == "materials" and action == "map":
                 # a material mapped onto nothing would have its lines dropped
                 # without a word, which is worse than refusing to start

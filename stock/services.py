@@ -23,7 +23,7 @@ from django.db import transaction
 from django.db.models import Count, Max, Q
 from django.utils import timezone
 
-from accounts.capabilities import ADJUST_STOCK, EDIT_BOM, MELT
+from accounts.capabilities import ADJUST_STOCK, EDIT_BOM, MANAGE_MATERIALS, MELT
 from .enums import (
     BomChangeReason,
     COUNTABLE_STATES,
@@ -1228,3 +1228,118 @@ def should_make(user):
         for style in Style.objects.filter(is_active=True)
         if (live := style.pieces.filter(stock_state=StockState.IN_STOCK).count()) < style.nos_min_qty
     ]
+
+
+# ── the material register ────────────────────────────────────────────────
+#: every relation that points at a material, and what it is called on screen.
+#: All five are PROTECT, so a material cannot be deleted while any of them
+#: holds a reference — which is the point: a BOM line pointing at nothing is
+#: a piece nobody can price.
+MATERIAL_USES = [
+    ("bom_lines", "Bill of material lines", "BomLine"),
+    ("chart_lines", "Rate chart lines", "RateChartLine"),
+    ("card_lines", "Rate card lines", "RateCardLine"),
+    ("inventory", "Loose stock rows", "MaterialInventory"),
+    ("repair_changes", "Repair material changes", "RepairMaterialChange"),
+]
+
+
+def material_usage(material):
+    """Where a material is referenced, so a delete can be an informed one."""
+    from .models import BomLine, MaterialInventory, RateCardLine, RateChartLine, RepairMaterialChange
+
+    material = material if hasattr(material, "pk") else Material.objects.get(item_code=material)
+    counts = {
+        "bom_lines": BomLine.objects.filter(material=material).count(),
+        "chart_lines": RateChartLine.objects.filter(material=material).count(),
+        "card_lines": RateCardLine.objects.filter(material=material).count(),
+        "inventory": MaterialInventory.objects.filter(material=material).count(),
+        "repair_changes": RepairMaterialChange.objects.filter(material=material).count(),
+    }
+    counts["pieces"] = (
+        BomLine.objects.filter(material=material).values("piece").distinct().count()
+    )
+    counts["total"] = sum(v for k, v in counts.items() if k != "pieces")
+    return counts
+
+
+@transaction.atomic
+def reassign_material(user, source, target):
+    """Point every reference at ``target`` and leave ``source`` unused.
+
+    Three of the five relations are unique on (owner, material, size_band), so
+    a straight repoint can collide with a row the target already has. Where it
+    would, the source row is dropped instead — except loose stock, where the
+    quantities are added together, because two piles of the same thing in the
+    same place are one pile.
+    """
+    from .models import BomLine, MaterialInventory, RateCardLine, RateChartLine, RepairMaterialChange
+
+    require(user, MANAGE_MATERIALS, "You do not have permission to change the material register.")
+    if source.pk == target.pk:
+        raise ServiceError("A material cannot be reassigned to itself.")
+
+    moved = {}
+    # no uniqueness rule on these two: a plain repoint is safe
+    moved["bom_lines"] = BomLine.objects.filter(material=source).update(material=target)
+    moved["repair_changes"] = RepairMaterialChange.objects.filter(material=source).update(material=target)
+
+    for name, model, owner in (
+        ("chart_lines", RateChartLine, "chart_id"),
+        ("card_lines", RateCardLine, "rate_card_id"),
+    ):
+        moved[name] = 0
+        for line in model.objects.filter(material=source):
+            clash = model.objects.filter(
+                material=target, size_band=line.size_band, **{owner: getattr(line, owner)}
+            ).exists()
+            if clash:
+                line.delete()          # the target already prices this band
+            else:
+                line.material = target
+                line.save(update_fields=["material"])
+                moved[name] += 1
+
+    moved["inventory"] = 0
+    for row in MaterialInventory.objects.filter(material=source):
+        held = MaterialInventory.objects.filter(
+            material=target, location_id=row.location_id, size_band=row.size_band
+        ).first()
+        if held and held.qty_uom == row.qty_uom:
+            held.qty_value = (held.qty_value or ZERO) + (row.qty_value or ZERO)
+            held.pcs = (held.pcs or 0) + (row.pcs or 0) or None
+            held.updated_at = timezone.now()
+            held.save(update_fields=["qty_value", "pcs", "updated_at"])
+            row.delete()
+        elif held:
+            # different units in the same place: refuse rather than invent a
+            # conversion nobody asked for
+            raise ServiceError(
+                f"{source.item_code} is held in {row.qty_uom} at {row.location} but "
+                f"{target.item_code} is in {held.qty_uom} there. Settle the units first."
+            )
+        else:
+            row.material = target
+            row.save(update_fields=["material"])
+            moved["inventory"] += 1
+
+    log(user, "UPDATE", "material", source.item_code, f"reassigned to {target.item_code}: {moved}")
+    return moved
+
+
+@transaction.atomic
+def delete_material(user, material, reassign_to=None):
+    """Remove a material, optionally moving what points at it first."""
+    require(user, MANAGE_MATERIALS, "You do not have permission to change the material register.")
+    moved = reassign_material(user, material, reassign_to) if reassign_to else {}
+
+    usage = material_usage(material)
+    if usage["total"]:
+        raise ServiceError(
+            f"{material.item_code} is still used {usage['total']} time(s). "
+            "Reassign those to another material first."
+        )
+    code = material.item_code
+    material.delete()
+    log(user, "DELETE", "material", code, f"deleted{' after reassign' if reassign_to else ''}")
+    return moved
