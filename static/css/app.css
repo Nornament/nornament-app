@@ -258,6 +258,8 @@ label.f{display:block;font-size:12px;color:var(--ink-2);margin:0 0 5px;font-weig
 /* ---------- filter bar ---------- */
 .filterbar{position:sticky;top:53px;z-index:15;background:color-mix(in srgb,var(--page) 92%,transparent);
   backdrop-filter:blur(8px);padding:14px 0 12px;margin:-4px 0 18px;border-bottom:1px solid var(--line)}
+/* nine rows of chips pinned to the top leaves no room for the report itself */
+.filterbar.scrolls{position:static}
 .frow{display:flex;align-items:baseline;gap:10px;margin-bottom:9px;flex-wrap:wrap}
 .frow:last-of-type{margin-bottom:0}
 .flabel{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
