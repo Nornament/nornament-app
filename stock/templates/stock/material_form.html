@@ -2,17 +2,49 @@
 {% block title %}{{ material.item_code }} · Nornament{% endblock %}
 {% block heading %}Edit {{ material.item_code }}{% endblock %}
 {% block content %}
-<form method="post" class="card" style="max-width:560px">
+<form method="post" class="card" style="max-width:620px">
   {% csrf_token %}
-  <h3>{{ material.item_code }}</h3>
-  <p class="hint">Used on {{ usage.total }} row{{ usage.total|pluralize }}
-    across {{ usage.pieces }} piece{{ usage.pieces|pluralize }}. Changing the category changes how
-    every one of them prices.</p>
-  {{ form.as_p }}
-  <div class="row" style="margin-top:8px">
+  <h3>{{ material.item_code }} <span class="dim" style="font-weight:400">{{ material.item_name }}</span></h3>
+  <p class="hint">On {{ usage.total }} row{{ usage.total|pluralize }} across
+    {{ usage.pieces }} piece{{ usage.pieces|pluralize }}. Changing the category changes how every
+    one of them prices.</p>
+
+  {% if form.non_field_errors %}
+  <div class="note bad">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  <div class="mgrid">
+    {% for field in form %}{% if field.name != 'is_active' %}
+    <div class="field {% if field.name == 'item_name' %}wide{% endif %}">
+      <label class="f" for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {% if field.help_text %}<div class="hint" style="margin:4px 0 0">{{ field.help_text }}</div>{% endif %}
+      {% if field.errors %}<div class="hint" style="color:var(--critical);margin:4px 0 0">{{ field.errors|first }}</div>{% endif %}
+    </div>
+    {% endif %}{% endfor %}
+  </div>
+
+  {% with active=form.is_active %}
+  <div class="toggle-row">
+    <label class="switch">
+      <input type="checkbox" name="{{ active.html_name }}" id="{{ active.id_for_label }}"
+             {% if active.value %}checked{% endif %}>
+      <span class="track"><span class="knob"></span></span>
+    </label>
+    <div>
+      <label class="f" for="{{ active.id_for_label }}" style="margin:0">In use</label>
+      <div class="hint" style="margin:2px 0 0">Retire it and it stays on every piece that already
+        carries it — nothing that was priced stops pricing — but it cannot be added anywhere new,
+        by hand or by import. Reversible, unlike delete.</div>
+    </div>
+  </div>
+  {% endwith %}
+
+  <div class="row" style="margin-top:16px">
     <button class="btn primary" type="submit">Save</button>
     <a class="btn" href="{% url 'stock:material_list' %}">Cancel</a>
-    <a class="btn danger" href="{% url 'stock:material_delete' material.item_code %}">Delete…</a>
+    <a class="btn danger" href="{% url 'stock:material_delete' material.item_code %}"
+       style="margin-left:auto">Delete…</a>
   </div>
 </form>
 {% endblock %}

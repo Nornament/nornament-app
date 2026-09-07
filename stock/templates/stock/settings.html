@@ -88,7 +88,8 @@
     <th class="num" style="width:74px">Lines</th>
     {% if caps.manage_materials %}<th style="width:132px"></th>{% endif %}</tr></thead><tbody>
     {% for row in materials %}
-    <tr><td class="code">{{ row.item_code }}</td><td>{{ row.item_name }}
+    <tr><td class="code">{{ row.item_code }}{% if not row.is_active %}
+        <span class="imp-tag quiet" title="Retired: cannot be added anywhere new">retired</span>{% endif %}</td><td>{{ row.item_name }}
         {% if row.needs_review %}<span class="chip c-warn">needs review</span>{% endif %}</td>
       <td>{{ row.size|default:"—" }}</td><td>{{ row.category }}</td><td>{{ row.default_uom }}</td>
       <td class="num">{{ row.used_on_lines }}</td>

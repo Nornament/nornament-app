@@ -807,12 +807,20 @@ def set_bom(user, piece, lines, reason=BomChangeReason.CORRECTION, note=None):
         version = BomVersion.objects.create(
             piece=piece, version_no=piece.current_bom_version, reason=reason, note=note, created_by=user
         )
+    # what this version already used, before the lines are replaced: a retired
+    # material stays editable on a piece that already carries it, and is only
+    # refused where it would be a new assignment
+    already = set(
+        BomLine.objects.filter(piece=piece, version_no=version.version_no)
+        .values_list("material_id", flat=True)
+    )
     BomLine.objects.filter(piece=piece, version_no=version.version_no).delete()
 
     for index, raw in enumerate(lines, start=1):
         material = raw["material"]
         if not isinstance(material, Material):
             material = Material.objects.get(item_code=str(material).strip().upper())
+        _check_line_material(material, already, index)
         uom = raw.get("qty_uom") or material.default_uom
         _check_line_uom(material, uom, index)
         BomLine.objects.create(
@@ -833,6 +841,20 @@ def set_bom(user, piece, lines, reason=BomChangeReason.CORRECTION, note=None):
     recost_piece(piece, version.version_no, user)
     log(user, "UPDATE", "jewel_material_line", piece.jewel_code, f"{len(lines)} lines")
     return version
+
+
+def _check_line_material(material, already_used, line_no):
+    """A retired material cannot be put somewhere new.
+
+    Retiring is the reversible half of removing a material: it stays on every
+    piece that already carries it, so nothing that was priced stops pricing,
+    but it can no longer be assigned anywhere it was not already.
+    """
+    if not material.is_active and material.pk not in already_used:
+        raise ServiceError(
+            f"Line {line_no}: {material.item_code} is retired and cannot be added. "
+            "Use an active material, or make this one active again first."
+        )
 
 
 def _check_line_uom(material, uom, line_no):

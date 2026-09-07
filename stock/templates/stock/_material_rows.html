@@ -7,7 +7,8 @@
   </tr></thead><tbody>
   {% for material in materials %}
   <tr>
-    <td class="code">{{ material.item_code }}</td>
+    <td class="code">{{ material.item_code }}{% if not material.is_active %}
+      <span class="imp-tag quiet" title="Retired: stays on pieces that have it, cannot be added anywhere new">retired</span>{% endif %}</td>
     <td>{{ material.item_name }}{% if material.description %}<div class="dim" style="font-size:11.5px">{{ material.description }}</div>{% endif %}</td>
     <td class="dim mono" style="font-size:12px">{{ material.size|default:"—" }}</td>
     <td>{{ material.category.name }}</td>

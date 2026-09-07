@@ -195,3 +195,59 @@ def test_editing_a_material_saves(client, admin_user_, materials):
     })
     assert r.status_code == 302
     assert Material.objects.get(item_code=code).item_name == "Renamed diamond"
+
+
+# ── retiring: the reversible half of removing a material ─────────────────
+def test_a_retired_material_cannot_be_added_to_a_bom(piece, materials, spare, admin_user_):
+    """The picker hides it; this is the half a direct POST cannot get past."""
+    spare.is_active = False
+    spare.save(update_fields=["is_active"])
+    with pytest.raises(services.ServiceError) as caught:
+        services.set_bom(admin_user_, piece, [
+            {"material": spare, "qty_value": Decimal("1"), "qty_uom": Uom.CT},
+        ])
+    assert "retired" in str(caught.value)
+
+
+def test_a_retired_material_already_on_a_piece_stays_editable(piece, materials, admin_user_):
+    """Retiring is not retroactive — what was priced keeps pricing."""
+    diamond = materials["diamond"]
+    diamond.is_active = False
+    diamond.save(update_fields=["is_active"])
+
+    # the piece already carries it, so re-saving its BOM is allowed
+    services.set_bom(admin_user_, piece, [
+        {"material": diamond, "qty_value": Decimal("2"), "qty_uom": Uom.CT, "cost_rate": Decimal("5")},
+    ])
+    line = BomLine.objects.get(piece=piece, version_no=piece.current_bom_version)
+    assert line.material_id == diamond.pk
+    assert line.qty_value == Decimal("2.0000")
+
+
+def test_an_import_will_not_revive_a_retired_material(materials, spare):
+    """A workbook naming a retired code must stop, not quietly reuse it."""
+    from stock.importers import ivy
+    from stock.importers.analyse import analyse
+    from stock.tests.fixtures_ivy import THREE_PRODUCTS, build_workbook as build
+
+    Material.objects.filter(item_code="DRFGH VS-SI").update(is_active=False)
+    Material.objects.get_or_create(
+        item_code="DRFGH VS-SI",
+        defaults={"item_name": "Diamond", "category_id": "DIAMOND", "default_uom": Uom.CT,
+                  "is_active": False},
+    )
+    Material.objects.filter(item_code="DRFGH VS-SI").update(is_active=False)
+
+    header, block = THREE_PRODUCTS[0]
+    plan = analyse(ivy.parse(build(products=[(dict(header), block)])))
+    row = next(r for r in plan.materials if r.key == "DRFGH VS-SI")
+    assert row.problem and "retired" in row.problem
+
+
+def test_the_settings_tab_marks_a_retired_material(client, admin_user_, materials, settings):
+    settings.ALLOWED_HOSTS = ["testserver"]
+    materials["diamond"].is_active = False
+    materials["diamond"].save(update_fields=["is_active"])
+    client.force_login(admin_user_)
+    r = client.get(reverse("stock:settings") + "?tab=mats")
+    assert b">retired</span>" in r.content

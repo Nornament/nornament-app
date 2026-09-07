@@ -119,13 +119,19 @@ def _material_rows(pieces):
                 continue
             seen[code] = True
             existing = known.get(code)
+            if existing and not existing.is_active:
+                # retired on purpose: the import must not quietly revive it
+                problem = (
+                    f"{code} is retired. Point this at an active material, skip it, "
+                    "or make it active again first."
+                )
             rows.append(Resolution(
                 key=line.code,
                 label=line.name or line.code,
-                action="map" if existing else "create",
+                action="map" if existing and existing.is_active else "create",
                 target=existing,
                 fields=fields,
-                problem=None if existing else problem,
+                problem=problem if (not existing or not existing.is_active) else None,
                 detail=line.band,
             ))
     return sorted(rows, key=lambda r: (r.problem is None, r.detail, r.key))
@@ -239,7 +245,7 @@ def unresolved(plan, decisions):
     deliberately skipped, is resolved even though the guesser still cannot
     place it on its own.
     """
-    available = set(Material.objects.values_list("item_code", flat=True))
+    available = set(Material.objects.filter(is_active=True).values_list("item_code", flat=True))
     # a code this same import is about to create is a legitimate target: on a
     # fresh catalogue every sensible answer would otherwise be refused
     for row in plan.materials:
@@ -270,6 +276,10 @@ def unresolved(plan, decisions):
                 # without a word, which is worse than refusing to start
                 code = choice.get("map_to") or (row.fields or {}).get("item_code", row.key)
                 if code not in available:
+                    still.append(row)
+                elif not Material.objects.filter(item_code=code, is_active=True).exists() \
+                        and Material.objects.filter(item_code=code).exists():
+                    row.problem = f"{code} is retired, so nothing new can be assigned to it."
                     still.append(row)
                 continue
             if row.problem:
