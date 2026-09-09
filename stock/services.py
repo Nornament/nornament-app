@@ -1389,92 +1389,110 @@ def delete_material(user, material, reassign_to=None):
 STOCK_MEDIA = Q(style__isnull=False) | Q(piece__isnull=False) | Q(scope__in=["style", "piece", "import"])
 
 
-def _wipe_plan():
-    """Every table the wipe empties, leaf first, as ``(label, queryset)``.
+#: The stock side in four groups, ordered so each rests only on the ones above
+#: it. Every FK in this app is PROTECT, so this order is not presentation: a
+#: group chosen without the ones it stands on would raise. That is why a
+#: selection has to be a prefix of this list rather than any combination.
+WIPE_GROUPS = ["pieces", "designs", "materials", "reference"]
 
-    The order is the safety, not a formality. Every FK in this app is PROTECT,
-    so a parent removed before its children raises instead of cascading — which
-    means a mistake in this list fails loudly and rolls back, rather than
-    quietly taking rows nobody listed.
+WIPE_GROUP_TITLES = {
+    "pieces": ("Pieces and their history", "Every jewel code, its BOM, movements, sales, repairs, melts, counts and photos."),
+    "designs": ("Design catalogue", "The styles those pieces were made from, their tags and design images."),
+    "materials": ("Materials and rate charts", "The material register, the rate charts priced off it, and material inventory."),
+    "reference": ("Reference data", "Locations, categories, metals, purities, vendors and pricing scenarios."),
+}
+
+
+def _wipe_plan(groups=None):
+    """Every table the wipe empties, leaf first, as ``(group, label, queryset)``.
+
+    The order is the safety, not a formality. A parent removed before its
+    children raises instead of cascading, so a mistake in this list fails
+    loudly and rolls back rather than quietly taking rows nobody listed.
     """
     from mediahub.models import MediaAsset
 
     from .models import (
-        Catalogue,
-        CatalogueItem,
-        CatalogueTemplate,
-        Category,
-        Collection,
-        ImportBatch,
-        JobCard,
-        Material,
-        MaterialCategory,
-        MaterialInventory,
-        PieceCertificate,
-        RateCard,
-        RateCardLine,
-        RepairMaterialChange,
-        Scenario,
-        ScenarioRole,
-        Style,
-        StyleTag,
-        Tag,
-        Vendor,
+        Catalogue, CatalogueItem, CatalogueTemplate, Category, Collection, ImportBatch, JobCard,
+        Material, MaterialCategory, MaterialInventory, PieceCertificate, RateCard, RateCardLine,
+        RepairMaterialChange, Scenario, ScenarioRole, Style, StyleTag, Tag, Vendor,
     )
 
-    return [
-        ("stock count scans", StockCountScan.objects.all()),
-        ("stock counts", StockCount.objects.all()),
-        ("catalogue items", CatalogueItem.objects.all()),
-        ("catalogues", Catalogue.objects.all()),
-        ("catalogue templates", CatalogueTemplate.objects.all()),
-        ("repair material changes", RepairMaterialChange.objects.all()),
-        ("repair jobs", RepairJob.objects.all()),
-        ("melt records", MeltRecord.objects.all()),
-        ("job cards", JobCard.objects.all()),
+    plan = [
+        ("pieces", "stock count scans", StockCountScan.objects.all()),
+        ("pieces", "stock counts", StockCount.objects.all()),
+        ("pieces", "catalogue items", CatalogueItem.objects.all()),
+        ("pieces", "catalogues", Catalogue.objects.all()),
+        ("pieces", "catalogue templates", CatalogueTemplate.objects.all()),
+        ("pieces", "repair material changes", RepairMaterialChange.objects.all()),
+        ("pieces", "repair jobs", RepairJob.objects.all()),
+        ("pieces", "melt records", MeltRecord.objects.all()),
+        ("pieces", "job cards", JobCard.objects.all()),
         # filtered, not emptied: the CRM's purchases live in this table
-        ("stock sales", Sale.objects.filter(source=Sale.STOCK)),
-        ("stock movements", StockMovement.objects.all()),
-        ("piece certificates", PieceCertificate.objects.all()),
-        ("BOM lines", BomLine.objects.all()),
-        ("BOM versions", BomVersion.objects.all()),
+        ("pieces", "stock sales", Sale.objects.filter(source=Sale.STOCK)),
+        ("pieces", "stock movements", StockMovement.objects.all()),
+        ("pieces", "piece certificates", PieceCertificate.objects.all()),
+        ("pieces", "BOM lines", BomLine.objects.all()),
+        ("pieces", "BOM versions", BomVersion.objects.all()),
         # the batch PROTECTs the workbook asset it stored, so it goes first
-        ("import batches", ImportBatch.objects.all()),
+        ("pieces", "import batches", ImportBatch.objects.all()),
         # filtered, not emptied: the CRM's attachments live in this table.
-        # Deleted before pieces and styles so the bucket keys can be read off
-        # the rows first — that FK is CASCADE and would take them silently.
-        ("media assets", MediaAsset.objects.filter(STOCK_MEDIA)),
-        ("pieces", Piece.objects.all()),
-        ("style tags", StyleTag.objects.all()),
-        ("styles", Style.objects.all()),
-        ("material inventory", MaterialInventory.objects.all()),
-        ("rate chart lines", RateChartLine.objects.all()),
-        ("rate charts", RateChart.objects.all()),
-        ("rate card lines", RateCardLine.objects.all()),
-        ("rate cards", RateCard.objects.all()),
-        ("materials", Material.objects.all()),
-        ("material categories", MaterialCategory.objects.all()),
-        ("scenario roles", ScenarioRole.objects.all()),
-        ("scenarios", Scenario.objects.all()),
-        ("collections", Collection.objects.all()),
-        ("tags", Tag.objects.all()),
-        ("vendors", Vendor.objects.all()),
-        ("categories", Category.objects.all()),
-        ("metal purities", MetalPurity.objects.all()),
-        ("metals", Metal.objects.all()),
-        ("locations", Location.objects.all()),
+        # Deleted before the rows they hang off so the bucket keys can be read
+        # first — that FK is CASCADE and would take them silently.
+        ("pieces", "piece photos", MediaAsset.objects.filter(Q(piece__isnull=False) | Q(scope="import"))),
+        ("pieces", "pieces", Piece.objects.all()),
+        ("designs", "style tags", StyleTag.objects.all()),
+        ("designs", "design images", MediaAsset.objects.filter(style__isnull=False)),
+        ("designs", "styles", Style.objects.all()),
+        ("materials", "material inventory", MaterialInventory.objects.all()),
+        ("materials", "rate chart lines", RateChartLine.objects.all()),
+        ("materials", "rate charts", RateChart.objects.all()),
+        ("materials", "rate card lines", RateCardLine.objects.all()),
+        ("materials", "rate cards", RateCard.objects.all()),
+        ("materials", "materials", Material.objects.all()),
+        ("materials", "material categories", MaterialCategory.objects.all()),
+        ("reference", "scenario roles", ScenarioRole.objects.all()),
+        ("reference", "scenarios", Scenario.objects.all()),
+        ("reference", "collections", Collection.objects.all()),
+        ("reference", "tags", Tag.objects.all()),
+        ("reference", "vendors", Vendor.objects.all()),
+        ("reference", "categories", Category.objects.all()),
+        ("reference", "metal purities", MetalPurity.objects.all()),
+        ("reference", "metals", Metal.objects.all()),
+        ("reference", "locations", Location.objects.all()),
     ]
+    if groups is None:
+        return plan
+    picked = set(groups)
+    return [row for row in plan if row[0] in picked]
+
+
+def wipe_groups(groups):
+    """The chosen groups, ordered, refusing a selection the FKs cannot honour."""
+    picked = [key for key in WIPE_GROUPS if key in set(groups or [])]
+    if not picked:
+        raise ServiceError("Nothing was selected.")
+    if picked != WIPE_GROUPS[: len(picked)]:
+        missing = [WIPE_GROUPS[i] for i in range(len(picked)) if WIPE_GROUPS[i] not in picked]
+        need = ", ".join(WIPE_GROUP_TITLES[key][0] for key in missing)
+        raise ServiceError(f"That selection cannot be deleted on its own — {need} has to go first.")
+    return picked
 
 
 def stock_wipe_preview():
-    """What a wipe would remove and what it would leave. Reads nothing but counts."""
+    """What each group would remove, and what the whole thing would leave."""
     from crm.models import Customer, Order
     from mediahub.models import MediaAsset
 
-    removes = [(label, queryset.count()) for label, queryset in _wipe_plan()]
+    counted = [(group, label, queryset.count()) for group, label, queryset in _wipe_plan()]
+    groups = []
+    for key in WIPE_GROUPS:
+        title, blurb = WIPE_GROUP_TITLES[key]
+        rows = [(label, count) for group, label, count in counted if group == key and count]
+        groups.append({"key": key, "title": title, "blurb": blurb, "rows": rows, "total": sum(c for _, c in rows)})
     return {
-        "removes": [(label, count) for label, count in removes if count],
-        "total": sum(count for _, count in removes),
+        "groups": groups,
+        "total": sum(group["total"] for group in groups),
         "keeps": [
             ("CRM purchases in the sale ledger", Sale.objects.filter(source=Sale.CRM).count()),
             ("CRM attachments", MediaAsset.objects.exclude(STOCK_MEDIA).count()),
@@ -1504,8 +1522,8 @@ def _crm_rows_pointing_into_stock():
     ]
 
 
-def truncate_stock(user, delete_media_files=False):
-    """Empty the stock side of the app. The CRM is not touched.
+def truncate_stock(user, groups=None, delete_media_files=False):
+    """Empty the chosen part of the stock side. The CRM is not touched.
 
     Two guarantees, in this order. The CRM's rows in the two shared tables are
     filtered out before anything is deleted, and the whole delete is one
@@ -1519,7 +1537,8 @@ def truncate_stock(user, delete_media_files=False):
     if not (user and user.is_authenticated and user.is_superuser):
         raise PermissionDenied("Only a superuser can wipe the stock data.")
 
-    blocked = _crm_rows_pointing_into_stock()
+    picked = wipe_groups(groups if groups is not None else WIPE_GROUPS)
+    blocked = _crm_rows_pointing_into_stock() if "pieces" in picked else []
     if blocked:
         raise ServiceError(
             "The CRM still points into stock — "
@@ -1529,26 +1548,34 @@ def truncate_stock(user, delete_media_files=False):
 
     from mediahub.models import MediaAsset
 
+    from .models import Category, Style
+
     # Which bucket objects may go. Not a path prefix — the stock keys are legacy
     # and jewel-code-prefixed (``24P00088/...``) while the import workbooks sit
     # under ``crm/import/``, so a prefix rule gets this exactly backwards. The
     # real invariant is simpler and holds whatever the key looks like: never
     # delete an object a surviving row still points at.
+    going = MediaAsset.objects.none()
+    for group, label, queryset in _wipe_plan(picked):
+        if queryset.model is MediaAsset:
+            going = going | queryset
     keys = []
     if delete_media_files:
-        surviving = set(MediaAsset.objects.exclude(STOCK_MEDIA).values_list("storage_key", flat=True))
-        keys = [
-            key
-            for key in MediaAsset.objects.filter(STOCK_MEDIA).values_list("storage_key", flat=True)
-            if key and key not in surviving
-        ]
+        surviving = set(MediaAsset.objects.exclude(pk__in=going.values("pk")).values_list("storage_key", flat=True))
+        keys = [key for key in going.values_list("storage_key", flat=True) if key and key not in surviving]
 
     deleted = []
     with transaction.atomic():
         # logged before the rows go, so the entry survives whatever follows and
         # says what was there — activity_log is deliberately not in the plan
-        log(user, "DELETE", "stock", "truncate", "stock data wiped — CRM untouched")
-        for label, queryset in _wipe_plan():
+        log(user, "DELETE", "stock", "truncate", "stock data wiped (" + ", ".join(picked) + ") — CRM untouched")
+        # a self-referential parent PROTECTs its own children; clearing the
+        # link first is one UPDATE and removes the whole ordering question
+        if "designs" in picked:
+            Style.objects.update(parent_style=None)
+        if "reference" in picked:
+            Category.objects.update(parent=None)
+        for group, label, queryset in _wipe_plan(picked):
             count = queryset.count()
             if count:
                 queryset.delete()
@@ -1560,7 +1587,10 @@ def truncate_stock(user, delete_media_files=False):
 
         failed = storage.delete_keys(keys)
 
-    return {"deleted": deleted, "total": sum(count for _, count in deleted), "media_keys": len(keys), "media_failed": failed}
+    return {
+        "deleted": deleted, "total": sum(count for _, count in deleted), "groups": picked,
+        "media_keys": len(keys), "media_failed": failed,
+    }
 
 
 # ── rate charts: the lifecycle the mockup's rail implies ─────────────────

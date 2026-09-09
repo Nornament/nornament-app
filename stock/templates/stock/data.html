@@ -52,49 +52,107 @@
 
 {% if wipe %}
 <div class="card">
-  <h3>Wipe the stock data</h3>
-  <p class="hint" style="max-width:82ch">Empties the stock side so it can be imported again from
-    scratch. <b>The CRM is not touched.</b> Two tables are shared with it and are filtered rather than
-    emptied — the sale ledger holds CRM purchases as <span class="code">source='CRM'</span> rows and
-    they are what FoN commission is paid off, and the media table carries the CRM's own attachments.
-    Both are counted below so you can see them survive.</p>
+  <h3>Wipe stock data</h3>
+  <p class="hint" style="max-width:82ch">Choose how far back to clear, so the stock side can be built
+    again from scratch. <b>The CRM is never touched.</b> Two tables are shared with it and are filtered
+    rather than emptied — the sale ledger holds CRM purchases as <span class="code">source='CRM'</span>
+    rows and they are what FoN commission is paid off, and the media table carries the CRM's own
+    attachments. Both are counted on the right so you can watch them survive.</p>
 
-  <div class="row" style="align-items:flex-start;gap:22px;margin-top:14px">
-    <div style="flex:1;min-width:260px">
-      <table><thead><tr><th>Removed</th><th class="num">Rows</th></tr></thead><tbody>
-        {% for label, count in wipe.removes %}
-        <tr><td>{{ label }}</td><td class="num mono">{{ count }}</td></tr>
-        {% empty %}<tr><td colspan="2"><div class="empty">There is no stock data to remove.</div></td></tr>{% endfor %}
-        {% if wipe.removes %}<tr><td><b>Total</b></td><td class="num mono"><b>{{ wipe.total }}</b></td></tr>{% endif %}
-      </tbody></table>
+  <form method="post" action="{% url 'stock:stock_wipe' %}" id="wipeform" style="margin-top:16px">{% csrf_token %}
+  <div class="wipe-cols">
+    <div>
+      {% for group in wipe.groups %}
+      <div class="toggle-row wipe-group{% if not group.total %} spent{% endif %}">
+        <label class="switch">
+          <input type="checkbox" name="groups" value="{{ group.key }}" data-rank="{{ forloop.counter0 }}"
+                 {% if not group.total %}disabled{% endif %}>
+          <span class="track"><span class="knob"></span></span>
+        </label>
+        <div style="flex:1;min-width:0">
+          <div class="spread" style="gap:10px">
+            <b>{{ group.title }}</b>
+            <span class="mono dim">{{ group.total }} row{{ group.total|pluralize }}</span>
+          </div>
+          <div class="hint" style="margin:2px 0 0">{{ group.blurb }}</div>
+          {% if group.rows %}
+          <div class="wipe-rows">
+            {% for label, count in group.rows %}<span>{{ label }} <b class="mono">{{ count }}</b></span>{% endfor %}
+          </div>
+          {% else %}<div class="hint" style="margin:4px 0 0">Nothing here to remove.</div>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+      <p class="hint" style="margin:10px 0 0">Each group rests on the one above it — a style cannot go
+        while a piece is still made from it — so choosing one selects everything above it too.</p>
     </div>
-    <div style="flex:1;min-width:260px">
+
+    <aside>
       <table><thead><tr><th>Kept, untouched</th><th class="num">Rows</th></tr></thead><tbody>
         {% for label, count in wipe.keeps %}
         <tr><td>{{ label }}</td><td class="num mono">{{ count }}</td></tr>{% endfor %}
       </tbody></table>
+    </aside>
+  </div>
+
+  {% if wipe.total %}
+  <div class="toggle-row" style="margin-top:14px">
+    <label class="switch">
+      <input type="checkbox" name="delete_media_files" value="1" id="wipe_files">
+      <span class="track"><span class="knob"></span></span>
+    </label>
+    <div>
+      <label class="f" for="wipe_files" style="margin:0">Also delete the image files from the bucket</label>
+      <div class="hint" style="margin:2px 0 0">Off, the rows go and the files stay in Contabo — recoverable
+        if you find you needed one. On, they are gone for good. A CRM attachment is never deleted either
+        way: a file another row still points at is skipped.</div>
     </div>
   </div>
 
-  {% if wipe.removes %}
-  <form method="post" action="{% url 'stock:stock_wipe' %}" style="margin-top:18px">{% csrf_token %}
-    <div class="field" style="max-width:420px">
+  <div class="row" style="margin-top:16px;align-items:flex-end;gap:14px;flex-wrap:wrap">
+    <div class="field" style="max-width:320px;margin:0">
       <label class="f" for="wipe_confirm">Type <span class="code">DELETE STOCK</span> to confirm</label>
       <input id="wipe_confirm" name="confirm" autocomplete="off" placeholder="DELETE STOCK" required>
     </div>
-    <label class="row tight" style="margin:12px 0">
-      <input type="checkbox" name="delete_media_files" value="1">
-      <span>Also delete the stock images from the Contabo bucket. Leave this unticked and the rows go
-        but the files stay, which is the recoverable choice. A CRM attachment is never deleted either
-        way — an object another row still points at is skipped.</span>
-    </label>
-    <button class="btn danger">Wipe the stock data</button>
-  </form>
+    <button class="btn danger" id="wipe_go" disabled>Wipe <span id="wipe_count">nothing</span></button>
+  </div>
+  {% else %}
+  <div class="note" style="margin-top:14px">There is no stock data to remove.</div>
   {% endif %}
+  </form>
 
-  <div class="note"><b>One transaction.</b> Either the stock side is empty or nothing happened, so there
-    is no half-wiped state to explain. Bucket files are removed only after that commits, because an S3
-    delete cannot be rolled back. The wipe itself is written to the activity log before the rows go.</div>
+  <div class="note"><b>One transaction.</b> Either the chosen groups are empty or nothing happened, so
+    there is no half-wiped state to explain. Bucket files are removed only after that commits, because an
+    S3 delete cannot be rolled back. The wipe is written to the activity log before the rows go.</div>
 </div>
+
+<script>
+(function () {
+  const form = document.getElementById('wipeform');
+  if (!form) return;
+  const boxes = [...form.querySelectorAll('input[name="groups"]')];
+  const totals = boxes.map(b => Number(b.closest('.wipe-group').querySelector('.mono').textContent) || 0);
+  const go = document.getElementById('wipe_go'), count = document.getElementById('wipe_count');
+  const typed = document.getElementById('wipe_confirm');
+
+  function sync(changed) {
+    // a group rests on the ones above it, so ticking one ticks those and
+    // unticking one unticks everything that stands on it
+    const i = boxes.indexOf(changed);
+    if (changed.checked) boxes.slice(0, i).forEach(b => { if (!b.disabled) b.checked = true; });
+    else boxes.slice(i + 1).forEach(b => { b.checked = false; });
+    paint();
+  }
+  function paint() {
+    const rows = boxes.reduce((sum, b, i) => sum + (b.checked ? totals[i] : 0), 0);
+    const n = boxes.filter(b => b.checked).length;
+    count.textContent = rows ? rows.toLocaleString() + ' row' + (rows === 1 ? '' : 's') : 'nothing';
+    go.disabled = !n || typed.value.trim().toUpperCase() !== 'DELETE STOCK';
+  }
+  boxes.forEach(b => b.addEventListener('change', () => sync(b)));
+  typed.addEventListener('input', paint);
+  paint();
+})();
+</script>
 {% endif %}
 {% endblock %}

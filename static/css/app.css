@@ -800,3 +800,15 @@ table.rates tr.want{background:color-mix(in srgb,var(--critical) 6%,transparent)
   font-size:12.5px;font-family:var(--mono);text-align:right;width:88px;color:var(--ink)}
 .in:focus{outline:2px solid var(--ring);outline-offset:1px}
 .in.bad{border-color:var(--critical);background:color-mix(in srgb,var(--critical) 8%,var(--surface))}
+
+/* ── the stock wipe: pick how far back to clear ──────────────────────────
+   Each group is a toggle-row for the same reason the material switch is one:
+   a bare checkbox beside a paragraph reads as a stray tick, and this is a
+   decision worth a control that looks like one. */
+.wipe-cols{display:grid;grid-template-columns:1fr 260px;gap:18px;align-items:start}
+.wipe-group{margin-top:0;margin-bottom:8px}
+.wipe-group.spent{opacity:.55}
+.wipe-group:has(input[name="groups"]:checked){border-color:var(--critical);
+  background:color-mix(in srgb,var(--critical) 6%,var(--surface-2))}
+.wipe-rows{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;font-size:11.5px;color:var(--muted)}
+@media(max-width:820px){.wipe-cols{grid-template-columns:1fr}}

@@ -1472,12 +1472,17 @@ def stock_wipe(request):
         messages.error(request, "Nothing was deleted — type DELETE STOCK to confirm.")
         return redirect(back)
     try:
-        result = services.truncate_stock(request.user, delete_media_files=bool(request.POST.get("delete_media_files")))
+        result = services.truncate_stock(
+            request.user,
+            groups=request.POST.getlist("groups"),
+            delete_media_files=bool(request.POST.get("delete_media_files")),
+        )
     except (services.ServiceError, ValidationError) as error:
         messages.error(request, "; ".join(error.messages) if hasattr(error, "messages") else str(error))
         return redirect(back)
 
-    note = f"Stock data wiped — {result['total']} row(s) removed. The CRM was not touched."
+    titles = ", ".join(services.WIPE_GROUP_TITLES[key][0].lower() for key in result["groups"])
+    note = f"Wiped {titles} — {result['total']} row(s) removed. The CRM was not touched."
     if result["media_keys"]:
         note += f" {result['media_keys']} image(s) deleted from the bucket."
         if result["media_failed"]:
