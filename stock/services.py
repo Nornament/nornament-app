@@ -1365,3 +1365,191 @@ def delete_material(user, material, reassign_to=None):
     material.delete()
     log(user, "DELETE", "material", code, f"deleted{' after reassign' if reassign_to else ''}")
     return moved
+
+
+# ── wiping the stock side, and only the stock side ───────────────────────
+#: Two tables in this app are shared with the CRM, and they are the whole
+#: reason this is a service and not a ``TRUNCATE``:
+#:
+#: * ``sale`` is one revenue ledger. A CRM purchase is a row in it with
+#:   ``source='CRM'``, and FoN commission is paid off exactly those rows.
+#: * ``media_asset`` carries CRM attachments too, under ``scope`` — an order's
+#:   photos, a client material's, a repair's.
+#:
+#: Emptying either table wipes the CRM. Both are therefore filtered, never
+#: truncated, and the filters live here rather than in a view.
+STOCK_MEDIA = Q(style__isnull=False) | Q(piece__isnull=False) | Q(scope__in=["style", "piece", "import"])
+
+
+def _wipe_plan():
+    """Every table the wipe empties, leaf first, as ``(label, queryset)``.
+
+    The order is the safety, not a formality. Every FK in this app is PROTECT,
+    so a parent removed before its children raises instead of cascading — which
+    means a mistake in this list fails loudly and rolls back, rather than
+    quietly taking rows nobody listed.
+    """
+    from mediahub.models import MediaAsset
+
+    from .models import (
+        Catalogue,
+        CatalogueItem,
+        CatalogueTemplate,
+        Category,
+        Collection,
+        ImportBatch,
+        JobCard,
+        Material,
+        MaterialCategory,
+        MaterialInventory,
+        PieceCertificate,
+        RateCard,
+        RateCardLine,
+        RepairMaterialChange,
+        Scenario,
+        ScenarioRole,
+        Style,
+        StyleTag,
+        Tag,
+        Vendor,
+    )
+
+    return [
+        ("stock count scans", StockCountScan.objects.all()),
+        ("stock counts", StockCount.objects.all()),
+        ("catalogue items", CatalogueItem.objects.all()),
+        ("catalogues", Catalogue.objects.all()),
+        ("catalogue templates", CatalogueTemplate.objects.all()),
+        ("repair material changes", RepairMaterialChange.objects.all()),
+        ("repair jobs", RepairJob.objects.all()),
+        ("melt records", MeltRecord.objects.all()),
+        ("job cards", JobCard.objects.all()),
+        # filtered, not emptied: the CRM's purchases live in this table
+        ("stock sales", Sale.objects.filter(source=Sale.STOCK)),
+        ("stock movements", StockMovement.objects.all()),
+        ("piece certificates", PieceCertificate.objects.all()),
+        ("BOM lines", BomLine.objects.all()),
+        ("BOM versions", BomVersion.objects.all()),
+        # the batch PROTECTs the workbook asset it stored, so it goes first
+        ("import batches", ImportBatch.objects.all()),
+        # filtered, not emptied: the CRM's attachments live in this table.
+        # Deleted before pieces and styles so the bucket keys can be read off
+        # the rows first — that FK is CASCADE and would take them silently.
+        ("media assets", MediaAsset.objects.filter(STOCK_MEDIA)),
+        ("pieces", Piece.objects.all()),
+        ("style tags", StyleTag.objects.all()),
+        ("styles", Style.objects.all()),
+        ("material inventory", MaterialInventory.objects.all()),
+        ("rate chart lines", RateChartLine.objects.all()),
+        ("rate charts", RateChart.objects.all()),
+        ("rate card lines", RateCardLine.objects.all()),
+        ("rate cards", RateCard.objects.all()),
+        ("materials", Material.objects.all()),
+        ("material categories", MaterialCategory.objects.all()),
+        ("scenario roles", ScenarioRole.objects.all()),
+        ("scenarios", Scenario.objects.all()),
+        ("collections", Collection.objects.all()),
+        ("tags", Tag.objects.all()),
+        ("vendors", Vendor.objects.all()),
+        ("categories", Category.objects.all()),
+        ("metal purities", MetalPurity.objects.all()),
+        ("metals", Metal.objects.all()),
+        ("locations", Location.objects.all()),
+    ]
+
+
+def stock_wipe_preview():
+    """What a wipe would remove and what it would leave. Reads nothing but counts."""
+    from crm.models import Customer, Order
+    from mediahub.models import MediaAsset
+
+    removes = [(label, queryset.count()) for label, queryset in _wipe_plan()]
+    return {
+        "removes": [(label, count) for label, count in removes if count],
+        "total": sum(count for _, count in removes),
+        "keeps": [
+            ("CRM purchases in the sale ledger", Sale.objects.filter(source=Sale.CRM).count()),
+            ("CRM attachments", MediaAsset.objects.exclude(STOCK_MEDIA).count()),
+            ("CRM customers", Customer.objects.count()),
+            ("CRM orders", Order.objects.count()),
+            ("activity log entries", ActivityLog.objects.count()),
+            ("system settings", SystemSetting.objects.count()),
+        ],
+    }
+
+
+def _crm_rows_pointing_into_stock():
+    """CRM-sourced sale rows that reference something the wipe is about to remove.
+
+    There are none today, and the FKs are PROTECT so the delete would raise
+    anyway. This turns that raise into a sentence naming the problem, because
+    "ProtectedError" on a button labelled Delete everything is not an answer.
+    """
+    crm_sales = Sale.objects.filter(source=Sale.CRM)
+    return [
+        (label, count)
+        for label, count in (
+            ("CRM sales sitting at a stock location", crm_sales.filter(location__isnull=False).count()),
+            ("CRM sales linked to a piece", crm_sales.filter(piece__isnull=False).count()),
+        )
+        if count
+    ]
+
+
+def truncate_stock(user, delete_media_files=False):
+    """Empty the stock side of the app. The CRM is not touched.
+
+    Two guarantees, in this order. The CRM's rows in the two shared tables are
+    filtered out before anything is deleted, and the whole delete is one
+    transaction — so either the stock side is empty or nothing happened, and
+    there is no third state to explain afterwards.
+
+    Bucket objects are removed *after* the transaction commits, never inside it:
+    an S3 delete does not roll back, so doing it first would leave the database
+    intact and the images gone. Returns a summary of what went.
+    """
+    if not (user and user.is_authenticated and user.is_superuser):
+        raise PermissionDenied("Only a superuser can wipe the stock data.")
+
+    blocked = _crm_rows_pointing_into_stock()
+    if blocked:
+        raise ServiceError(
+            "The CRM still points into stock — "
+            + ", ".join(f"{count} {label}" for label, count in blocked)
+            + ". Nothing was deleted; unlink those first."
+        )
+
+    from mediahub.models import MediaAsset
+
+    # Which bucket objects may go. Not a path prefix — the stock keys are legacy
+    # and jewel-code-prefixed (``24P00088/...``) while the import workbooks sit
+    # under ``crm/import/``, so a prefix rule gets this exactly backwards. The
+    # real invariant is simpler and holds whatever the key looks like: never
+    # delete an object a surviving row still points at.
+    keys = []
+    if delete_media_files:
+        surviving = set(MediaAsset.objects.exclude(STOCK_MEDIA).values_list("storage_key", flat=True))
+        keys = [
+            key
+            for key in MediaAsset.objects.filter(STOCK_MEDIA).values_list("storage_key", flat=True)
+            if key and key not in surviving
+        ]
+
+    deleted = []
+    with transaction.atomic():
+        # logged before the rows go, so the entry survives whatever follows and
+        # says what was there — activity_log is deliberately not in the plan
+        log(user, "DELETE", "stock", "truncate", "stock data wiped — CRM untouched")
+        for label, queryset in _wipe_plan():
+            count = queryset.count()
+            if count:
+                queryset.delete()
+                deleted.append((label, count))
+
+    failed = []
+    if keys:
+        from mediahub import storage
+
+        failed = storage.delete_keys(keys)
+
+    return {"deleted": deleted, "total": sum(count for _, count in deleted), "media_keys": len(keys), "media_failed": failed}

@@ -107,3 +107,21 @@ def head(key):
 
 def get_bytes(key):
     return client().get_object(Bucket=settings.MEDIA_BUCKET, Key=key)["Body"].read()
+
+
+def delete_keys(keys, chunk=1000):
+    """Remove objects from the bucket, in batches of 1000 — the S3 API's limit.
+
+    Returns the keys the bucket refused, so a caller can report what it failed
+    to remove rather than claim a clean sweep it did not get. A key that is
+    already gone is not an error: the end state is what was asked for.
+    """
+    keys = [key for key in keys if key]
+    failed = []
+    for start in range(0, len(keys), chunk):
+        batch = keys[start : start + chunk]
+        response = client().delete_objects(
+            Bucket=settings.MEDIA_BUCKET, Delete={"Objects": [{"Key": key} for key in batch], "Quiet": True}
+        )
+        failed += [error.get("Key") for error in response.get("Errors", [])]
+    return failed

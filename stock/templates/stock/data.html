@@ -49,4 +49,52 @@
     <button class="btn primary" type="submit">Read the workbook</button>
   </form>
 </div>
+
+{% if wipe %}
+<div class="card">
+  <h3>Wipe the stock data</h3>
+  <p class="hint" style="max-width:82ch">Empties the stock side so it can be imported again from
+    scratch. <b>The CRM is not touched.</b> Two tables are shared with it and are filtered rather than
+    emptied — the sale ledger holds CRM purchases as <span class="code">source='CRM'</span> rows and
+    they are what FoN commission is paid off, and the media table carries the CRM's own attachments.
+    Both are counted below so you can see them survive.</p>
+
+  <div class="row" style="align-items:flex-start;gap:22px;margin-top:14px">
+    <div style="flex:1;min-width:260px">
+      <table><thead><tr><th>Removed</th><th class="num">Rows</th></tr></thead><tbody>
+        {% for label, count in wipe.removes %}
+        <tr><td>{{ label }}</td><td class="num mono">{{ count }}</td></tr>
+        {% empty %}<tr><td colspan="2"><div class="empty">There is no stock data to remove.</div></td></tr>{% endfor %}
+        {% if wipe.removes %}<tr><td><b>Total</b></td><td class="num mono"><b>{{ wipe.total }}</b></td></tr>{% endif %}
+      </tbody></table>
+    </div>
+    <div style="flex:1;min-width:260px">
+      <table><thead><tr><th>Kept, untouched</th><th class="num">Rows</th></tr></thead><tbody>
+        {% for label, count in wipe.keeps %}
+        <tr><td>{{ label }}</td><td class="num mono">{{ count }}</td></tr>{% endfor %}
+      </tbody></table>
+    </div>
+  </div>
+
+  {% if wipe.removes %}
+  <form method="post" action="{% url 'stock:stock_wipe' %}" style="margin-top:18px">{% csrf_token %}
+    <div class="field" style="max-width:420px">
+      <label class="f" for="wipe_confirm">Type <span class="code">DELETE STOCK</span> to confirm</label>
+      <input id="wipe_confirm" name="confirm" autocomplete="off" placeholder="DELETE STOCK" required>
+    </div>
+    <label class="row tight" style="margin:12px 0">
+      <input type="checkbox" name="delete_media_files" value="1">
+      <span>Also delete the stock images from the Contabo bucket. Leave this unticked and the rows go
+        but the files stay, which is the recoverable choice. A CRM attachment is never deleted either
+        way — an object another row still points at is skipped.</span>
+    </label>
+    <button class="btn danger">Wipe the stock data</button>
+  </form>
+  {% endif %}
+
+  <div class="note"><b>One transaction.</b> Either the stock side is empty or nothing happened, so there
+    is no half-wiped state to explain. Bucket files are removed only after that commits, because an S3
+    delete cannot be rolled back. The wipe itself is written to the activity log before the rows go.</div>
+</div>
+{% endif %}
 {% endblock %}

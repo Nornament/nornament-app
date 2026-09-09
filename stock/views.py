@@ -1441,6 +1441,7 @@ def data(request):
         "stock/data.html",
         {
             "nav": "data",
+            "wipe": services.stock_wipe_preview() if request.user.is_superuser else None,
             "counts": {
                 "pieces": Piece.objects.count(),
                 "bom_lines": BomLine.objects.count(),
@@ -1452,6 +1453,35 @@ def data(request):
             },
         },
     )
+
+
+@login_required
+@tab_required("data")
+@require_POST
+def stock_wipe(request):
+    """Empty the stock side of the app, on a typed confirmation.
+
+    The rules live in ``services.truncate_stock``; this only takes the answer.
+    The phrase has to be typed rather than a checkbox clicked because the whole
+    point of the step is to be slow enough to read what is about to go.
+    """
+    back = reverse("stock:data")
+    if (request.POST.get("confirm") or "").strip().upper() != "DELETE STOCK":
+        messages.error(request, "Nothing was deleted — type DELETE STOCK to confirm.")
+        return redirect(back)
+    try:
+        result = services.truncate_stock(request.user, delete_media_files=bool(request.POST.get("delete_media_files")))
+    except (services.ServiceError, ValidationError) as error:
+        messages.error(request, "; ".join(error.messages) if hasattr(error, "messages") else str(error))
+        return redirect(back)
+
+    note = f"Stock data wiped — {result['total']} row(s) removed. The CRM was not touched."
+    if result["media_keys"]:
+        note += f" {result['media_keys']} image(s) deleted from the bucket."
+        if result["media_failed"]:
+            note += f" {len(result['media_failed'])} could not be removed and are still there."
+    messages.success(request, note)
+    return redirect(back)
 
 
 # ── importing a workbook ─────────────────────────────────────────────────

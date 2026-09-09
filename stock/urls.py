@@ -49,6 +49,7 @@ urlpatterns = [
     path("reports/margin/", views.margin_report, name="margin_report"),
     path("reports/export.xlsx", views.reports_export, name="reports_export"),
     path("data/", views.data, name="data"),
+    path("data/wipe/", views.stock_wipe, name="stock_wipe"),
     path("data/import/", views.import_upload, name="import_upload"),
     path("data/import/<int:batch_id>/", views.import_review, name="import_review"),
     path("data/import/<int:batch_id>/step/<str:step>/", views.import_step, name="import_step"),
