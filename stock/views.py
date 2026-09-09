@@ -20,7 +20,7 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, F, Q, Sum
+from django.db.models import Count, F, ProtectedError, Q, Sum
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.forms import modelform_factory
@@ -30,7 +30,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 from openpyxl import Workbook
 
-from accounts.capabilities import EDIT_BOM, ROLE_GROUPS, ROLE_TABS, VIEW_COST, VIEW_MARGIN, VIEW_SALE
+from accounts.capabilities import ADJUST_STOCK, EDIT_BOM, ROLE_GROUPS, ROLE_TABS, VIEW_COST, VIEW_MARGIN, VIEW_SALE
 from accounts.context_processors import _role_code
 from crm import services as crm_services
 from crm.models import Customer
@@ -41,7 +41,6 @@ from . import services
 from .enums import BomChangeReason, COUNTABLE_STATES, MediaKind, MovementType, StockState, TERMINAL_STATES, Uom
 from .forms import (
     BomLineFormSet,
-    CategoryForm,
     LocationForm,
     MaterialForm,
     MeltForm,
@@ -1703,6 +1702,40 @@ def import_images(request, batch_id):
     return render(request, "stock/_import_progress.html", {"batch": batch})
 
 
+def _chart_log_entries(user, chart, lines):
+    """Every audit row for one rate chart — its lines and the chart itself.
+
+    Read once and handed to both the inline per-row history and the History
+    panel, so the two can never disagree about what a rate did. Cost and sale
+    are dropped from the diff before it is formatted, not after: a reader
+    without ``view_cost`` is shown the sale half of a change and nothing else.
+    """
+    hidden = {
+        field for capability, field in ((VIEW_COST, "cost_rate"), (VIEW_SALE, "sale_rate")) if not user.has_perm(capability)
+    }
+    by_pk = {str(line.pk): line for line in lines}
+    entries = list(
+        ActivityLog.objects.filter(
+            Q(table_name="rate_chart_line", record_pk__in=list(by_pk)) | Q(table_name="rate_chart", record_pk=str(chart.pk))
+        )
+        .select_related("user")
+        .order_by("-changed_at")
+    )
+    for entry in entries:
+        entry.line = by_pk.get(entry.record_pk) if entry.table_name == "rate_chart_line" else None
+        # a chart-level act (a bulk upload) has no before/after row to diff;
+        # what it wrote at the time is the honest summary
+        entry.shown = (
+            entry.detail
+            if entry.line is None
+            else _rate_diff(
+                {k: v for k, v in (entry.old_values or {}).items() if k not in hidden},
+                {k: v for k, v in (entry.new_values or {}).items() if k not in hidden},
+            )
+        )
+    return entries
+
+
 #: the legacy Settings tab bar, in its order
 SETTINGS_TABS = [
     ("cats", "Categories"),
@@ -1747,15 +1780,18 @@ def settings_view(request):
         return _settings_post(request, tab)
 
     if tab == "cats":
+        # read only: a category is created and renamed in the Django admin, so
+        # this tab carries no form and _settings_post refuses a "cats" write
         context["categories"] = Category.objects.annotate(
             designs=Count("styles", distinct=True), pieces=Count("styles__pieces", distinct=True)
         ).order_by("sort_order", "name")
-        context["form"] = CategoryForm()
     elif tab == "locs":
         context["locations"] = Location.objects.annotate(
             live=Count("pieces", filter=~Q(pieces__stock_state__in=TERMINAL_STATES), distinct=True)
         ).order_by("code")
         context["form"] = LocationForm()
+        if request.GET.get("delete"):
+            context |= _location_delete_step(request.GET["delete"])
     elif tab == "mats":
         query = (request.GET.get("q") or "").strip()
         picked = request.GET.get("cat") or ""
@@ -1797,30 +1833,17 @@ def settings_view(request):
             if chart
             else []
         )
-        # the edit history each row shows is the audit log, read back by pk —
-        # a second history table would be a second thing to keep honest
-        history = {}
-        for entry in ActivityLog.objects.filter(
-            table_name="rate_chart_line", record_pk__in=[str(line.pk) for line in lines]
-        ).select_related("user"):
-            history.setdefault(entry.record_pk, []).append(entry)
-        hidden = {
-            field
-            for capability, field in ((VIEW_COST, "cost_rate"), (VIEW_SALE, "sale_rate"))
-            if not request.user.has_perm(capability)
-        }
+        # the edit history is the audit log, read back — a second history table
+        # would be a second thing to keep honest. It is read once and shared:
+        # the per-row `details` and the panel below cannot disagree about a rate.
+        entries = _chart_log_entries(request.user, chart, lines) if chart else []
         for line in lines:
-            line.history = history.get(str(line.pk), [])
-            for entry in line.history:
-                # the log keeps everything; the row shows only what this reader may see
-                entry.shown = _rate_diff(
-                    {k: v for k, v in (entry.old_values or {}).items() if k not in hidden},
-                    {k: v for k, v in (entry.new_values or {}).items() if k not in hidden},
-                )
+            line.history = [entry for entry in entries if entry.line is line]
         context |= {
             "charts": charts,
             "chart": chart,
             "lines": lines,
+            "chart_log": Paginator(entries, 30).get_page(request.GET.get("page")),
             "line_form": RateChartLineForm(initial={"chart": chart}) if chart else None,
             "chart_in_use": chart.lines.filter(material__bom_lines__isnull=False).exists() if chart else False,
         }
@@ -1944,6 +1967,99 @@ def _scenario_post(request):
     return redirect(back)
 
 
+#: everything that PROTECTs a location. A delete has to name what held it,
+#: not just fail — "cannot delete" with no reason is a ticket, not an answer.
+LOCATION_REFERENCES = [
+    ("live pieces", lambda loc: loc.pieces.exclude(stock_state__in=TERMINAL_STATES).count()),
+    ("pieces", lambda loc: loc.pieces.count()),
+    ("movements out", lambda loc: loc.movements_out.count()),
+    ("movements in", lambda loc: loc.movements_in.count()),
+    ("sales", lambda loc: loc.sales.count()),
+    ("melts", lambda loc: loc.melts.count()),
+    ("stock counts", lambda loc: loc.counts.count()),
+    ("material inventory", lambda loc: loc.inventory.count()),
+    ("repair returns", lambda loc: RepairJob.objects.filter(return_location=loc).count()),
+]
+
+
+def _location_blockers(location, skip=("live pieces",)):
+    """What still points at this location, counted, for a refusal that explains itself."""
+    return [(label, count) for label, count in ((l, f(location)) for l, f in LOCATION_REFERENCES if l not in skip) if count]
+
+
+def _location_live_pieces(location):
+    return (
+        Piece.objects.filter(location=location)
+        .exclude(stock_state__in=TERMINAL_STATES)
+        .select_related("style")
+        .order_by("jewel_code")
+    )
+
+
+def _location_delete_step(pk):
+    """The confirm step behind Delete: what sits here, and where each piece can go."""
+    location = get_object_or_404(Location, pk=pk)
+    return {
+        "delete_location": location,
+        "delete_pieces": list(_location_live_pieces(location)),
+        "delete_targets": Location.objects.filter(is_active=True).exclude(pk=location.pk).order_by("code"),
+        "delete_blockers": _location_blockers(location),
+    }
+
+
+def _location_delete(request):
+    """Divert what sits here line by line, then remove the location.
+
+    The two halves are deliberately not one transaction. The diverts are real
+    stock movements and stand on their own; the delete is the part history can
+    refuse. A location a movement row still points at is *retired* instead —
+    PROTECT on every one of those FKs exists so old reports keep resolving, and
+    the honest outcome is an empty retired location, not a cascade.
+    """
+    location = get_object_or_404(Location, pk=request.POST["delete"])
+    back = f"{reverse('stock:settings')}?tab=locs"
+    pieces = list(_location_live_pieces(location))
+    if pieces and not request.user.has_perm(ADJUST_STOCK):
+        messages.error(request, f"{location.name} holds {len(pieces)} live piece(s), and moving stock is not yours to do.")
+        return redirect(back)
+
+    try:
+        with transaction.atomic():
+            for piece in pieces:
+                target = (request.POST.get(f"to_{piece.pk}") or request.POST.get("to_all") or "").strip()
+                if not target:
+                    raise services.ServiceError(f"{piece.jewel_code} has nowhere to go — pick a destination for every line.")
+                if str(target) == str(location.pk):
+                    raise services.ServiceError(f"{piece.jewel_code} cannot be diverted to the location being deleted.")
+                services.transfer_piece(request.user, piece, int(target), reference_no=f"Closing {location.code}")
+    except (services.ServiceError, ValidationError) as error:
+        detail = "; ".join(error.messages) if hasattr(error, "messages") else str(error)
+        messages.error(request, f"Nothing was moved — {detail}")
+        return redirect(back)
+
+    if pieces:
+        services.log(request.user, "UPDATE", "location", str(location.pk), f"{len(pieces)} piece(s) diverted out")
+
+    name, moved = str(location), (f" {len(pieces)} piece(s) moved out first." if pieces else "")
+    try:
+        with transaction.atomic():
+            location.delete()
+    except ProtectedError:
+        location.is_active = False
+        location.save(update_fields=["is_active"])
+        held = ", ".join(f"{count} {label}" for label, count in _location_blockers(location))
+        services.log(request.user, "UPDATE", "location", str(location.pk), "retired — delete refused by history")
+        messages.warning(
+            request,
+            f"{name} is empty and now retired.{moved} It was not deleted: {held} still point at it, "
+            "and history that resolves to nowhere is worse than a retired location.",
+        )
+    else:
+        services.log(request.user, "DELETE", "location", str(location.pk), name)
+        messages.success(request, f"{name} deleted.{moved}")
+    return redirect(back)
+
+
 def _settings_post(request, tab):
     """Category, location and material writes. Everything else is read-only here."""
     services.require(request.user, EDIT_BOM, "You cannot change reference data.")
@@ -1953,7 +2069,9 @@ def _settings_post(request, tab):
         return _material_import(request)
     if tab == "scen":
         return _scenario_post(request)
-    forms = {"cats": (CategoryForm, Category), "locs": (LocationForm, Location), "mats": (MaterialForm, Material)}
+    if tab == "locs" and request.POST.get("delete"):
+        return _location_delete(request)
+    forms = {"locs": (LocationForm, Location), "mats": (MaterialForm, Material)}
     if tab not in forms:
         raise PermissionDenied("That tab has nothing to save.")
     form_class, model = forms[tab]
@@ -2209,7 +2327,7 @@ def _rate_chart_import(request):
         messages.error(request, f"Nothing was saved — {len(errors)} row(s) were refused. " + " · ".join(errors[:5]))
     else:
         services.log(
-            request.user, "IMPORT", "rate_chart_line", str(chart.pk), f"{created} new, {updated} updated", row_count=len(rows)
+            request.user, "IMPORT", "rate_chart", str(chart.pk), f"CSV upload — {created} new, {updated} updated", row_count=len(rows)
         )
         messages.success(request, f"{created} rate(s) added, {updated} updated.")
     return redirect(back)

@@ -251,16 +251,6 @@ class MoveForm(forms.Form):
 
 
 # ── reference data ───────────────────────────────────────────────────────
-class CategoryForm(forms.ModelForm):
-    class Meta:
-        model = Category
-        fields = ["code", "name", "code_prefix", "sort_order"]
-        labels = {"code": "Code", "name": "Category", "code_prefix": "Code prefix", "sort_order": "Sort"}
-        help_texts = {
-            "code_prefix": "New jewel codes are built from this. Changing it never moves an existing code.",
-        }
-
-
 class LocationForm(forms.ModelForm):
     class Meta:
         model = Location

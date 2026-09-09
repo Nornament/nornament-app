@@ -12,21 +12,15 @@
     <div><h3>Categories</h3><p class="hint" style="margin:0">The code prefix is what new jewel codes are
       built from — change it and only future codes are affected. Existing codes never move.</p></div>
   </div>
-  <table style="margin-top:14px"><thead><tr><th>Code</th><th>Category</th><th>Code prefix</th>
+  <table style="margin-top:14px"><thead><tr><th>Code prefix</th><th>Category</th>
     <th class="num">Designs</th><th class="num">Pieces</th></tr></thead><tbody>
     {% for row in categories %}
-    <tr><td class="code">{{ row.code }}</td><td>{{ row.name }}</td><td class="mono">{{ row.code_prefix|default:"—" }}</td>
+    <tr><td class="mono">{{ row.code_prefix|default:"—" }}</td><td>{{ row.name }}</td>
       <td class="num">{{ row.designs }}</td><td class="num">{{ row.pieces }}</td></tr>
-    {% endfor %}
+    {% empty %}<tr><td colspan="4"><div class="empty">No categories.</div></td></tr>{% endfor %}
   </tbody></table>
-  {% if caps.edit_bom %}
-  <form method="post" class="row" style="margin-top:14px">{% csrf_token %}
-    {% for field in form %}<div>{{ field.label_tag }}{{ field }}</div>{% endfor %}
-    <div class="tight"><button class="btn primary">Add category</button></div>
-  </form>
-  {% endif %}
-  <div class="note">A category in use is not offered for removal. Deleting it would orphan every design
-    under it, and the pieces below those.</div>
+  <div class="note">Read only. A category is what every design and piece below it hangs from, so it is
+    created and renamed in the Django admin, deliberately and rarely — not from a form on a settings tab.</div>
 </div>
 
 {% elif tab == 'locs' %}
@@ -41,9 +35,10 @@
     <tr><td class="code">{{ row.code }}</td><td>{{ row.name }}</td><td>{{ row.get_kind_display }}</td>
       <td class="num">{{ row.live }}</td>
       <td>{% if row.is_active %}<span class="chip c-good">active</span>{% else %}<span class="chip c-neutral">retired</span>{% endif %}</td>
-      <td>{% if caps.edit_bom %}
+      <td class="row tight">{% if caps.edit_bom %}
         <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="retire" value="{{ row.pk }}">
           <button class="btn sm">{% if row.is_active %}Retire{% else %}Reinstate{% endif %}</button></form>
+        <a class="btn sm danger" href="?tab=locs&amp;delete={{ row.pk }}">Delete</a>
       {% endif %}</td></tr>
     {% endfor %}
   </tbody></table>
@@ -53,10 +48,64 @@
     <div class="tight"><button class="btn primary">Add location</button></div>
   </form>
   {% endif %}
-  <div class="note">A location is <b>retired</b>, never deleted. Movements and old pieces still point at
-    it, so deleting would leave history referring to somewhere that no longer exists. One holding live
-    stock cannot be retired at all — move the stock first.</div>
+  <div class="note">Retiring keeps a location on every old movement and piece that points at it, and one
+    holding live stock cannot be retired — move the stock first. <b>Delete</b> walks that move for you,
+    line by line, and only removes the location if nothing in the history still needs it.</div>
 </div>
+
+{% if delete_location %}
+<div class="card" id="loc-delete">
+  <div class="spread" style="margin-bottom:4px">
+    <div><h3>Delete {{ delete_location }}</h3>
+      <p class="hint" style="margin:0;max-width:80ch">Everything live here has to land somewhere first. Pick a
+        destination for the whole batch, or override any single line. Nothing moves until you confirm, and if
+        one line cannot move, none of them do.</p></div>
+    <a class="btn" href="?tab=locs">Cancel</a>
+  </div>
+
+  {% if not delete_targets %}
+  <div class="note"><b>There is nowhere to divert to.</b> Every other location is retired, so add or
+    reinstate one before closing this.</div>
+  {% else %}
+  <form method="post">{% csrf_token %}<input type="hidden" name="delete" value="{{ delete_location.pk }}">
+    {% if delete_pieces %}
+    <div class="row" style="margin:12px 0 6px">
+      <label class="f" for="to_all">Send everything to</label>
+      <select id="to_all" name="to_all" onchange="for (const s of document.querySelectorAll('select.divert')) s.value = this.value">
+        <option value="">— pick per line —</option>
+        {% for loc in delete_targets %}<option value="{{ loc.pk }}">{{ loc.code }} — {{ loc.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <table style="margin-top:8px"><thead><tr><th>Jewel code</th><th>Design</th><th>State</th>
+      <th style="width:280px">Divert to</th></tr></thead><tbody>
+      {% for piece in delete_pieces %}
+      <tr><td class="code">{{ piece.jewel_code }}</td><td>{{ piece.style.style_code|default:"—" }}</td>
+        <td>{{ piece.get_stock_state_display }}</td>
+        <td><select class="divert" name="to_{{ piece.pk }}" style="width:100%">
+          <option value="">— pick —</option>
+          {% for loc in delete_targets %}<option value="{{ loc.pk }}">{{ loc.code }} — {{ loc.name }}</option>{% endfor %}
+        </select></td></tr>
+      {% endfor %}
+    </tbody></table>
+    {% else %}
+    <div class="note" style="margin-top:12px">Nothing live sits here, so there is nothing to divert.</div>
+    {% endif %}
+
+    {% if delete_blockers %}
+    <div class="note"><b>History still points at this location:</b>
+      {% for label, count in delete_blockers %}{{ count }} {{ label }}{% if not forloop.last %}, {% endif %}{% endfor %}.
+      It will be emptied and <b>retired</b> rather than deleted — an old report that resolves to nowhere is
+      worse than a location marked closed.</div>
+    {% endif %}
+
+    <div class="row" style="margin-top:14px">
+      <button class="btn danger">{% if delete_pieces %}Divert {{ delete_pieces|length }} piece{{ delete_pieces|pluralize }} and close{% else %}Delete {{ delete_location.code }}{% endif %}</button>
+      <a class="btn" href="?tab=locs">Cancel</a>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
 
 {% elif tab == 'mats' %}
 <div class="card">
@@ -197,6 +246,37 @@
     A <b>locked</b> chart refuses edits: fork it, so a quote from March still reconciles in September.
     {% if chart_in_use %} <b>This one has priced live stock.</b>{% endif %}</div>
 </div>
+
+{% if chart %}
+<div class="card">
+  <div class="spread" style="margin-bottom:4px">
+    <div><h3>History</h3><p class="hint" style="margin:0;max-width:80ch">Every change to
+      {{ chart.code }} v{{ chart.version_no }}, newest first — the same audit log the rows above read,
+      gathered in one place so a rate that moved can be traced to who moved it.</p></div>
+  </div>
+  <table style="margin-top:12px"><thead><tr><th style="width:150px">When</th><th style="width:170px">Who</th>
+    <th style="width:90px">Action</th><th>Line</th><th>Change</th></tr></thead><tbody>
+    {% for entry in chart_log %}
+    <tr><td class="mono">{{ entry.changed_at|date:"d M Y H:i" }}</td>
+      <td>{{ entry.user|default:"system" }}</td>
+      <td><span class="chip c-neutral">{{ entry.action }}</span></td>
+      <td class="code">{% if entry.line %}{{ entry.line.material.item_code }}{% if entry.line.size_band %}
+        <span class="dim">{{ entry.line.size_band }}</span>{% endif %}{% else %}<span class="dim">whole chart</span>{% endif %}</td>
+      <td class="mono" style="font-size:12px">{{ entry.shown|default:"—" }}{% if entry.row_count %}
+        <span class="dim">({{ entry.row_count }} rows)</span>{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="5"><div class="empty">Nothing has changed on this chart yet.</div></td></tr>{% endfor %}
+  </tbody></table>
+  {% if chart_log.has_other_pages %}
+  <div class="row" style="margin-top:12px;align-items:center">
+    {% if chart_log.has_previous %}<a class="btn sm" href="?tab=charts&amp;chart={{ chart.pk }}&amp;page={{ chart_log.previous_page_number }}">← Newer</a>{% endif %}
+    <span class="dim">Page {{ chart_log.number }} of {{ chart_log.paginator.num_pages }}</span>
+    {% if chart_log.has_next %}<a class="btn sm" href="?tab=charts&amp;chart={{ chart.pk }}&amp;page={{ chart_log.next_page_number }}">Older →</a>{% endif %}
+  </div>
+  {% endif %}
+  <div class="note">A rate this login cannot see is left out of the change it appears in, not blanked —
+    so a showroom reader sees that a sale rate moved and never learns the cost moved with it.</div>
+</div>
+{% endif %}
 
 {% if caps.edit_bom and chart %}
 <dialog class="modal" id="ratebulkdlg">
