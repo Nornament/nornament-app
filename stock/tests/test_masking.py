@@ -307,6 +307,9 @@ def test_every_stock_and_crm_screen_is_in_the_sales_walk():
         # gated on manage_materials, and asserted to 403 for a login without it
         # in test_material_admin.test_a_login_without_manage_materials_is_refused
         "stock:material_edit", "stock:material_delete",
+        # POST-only and superuser-only; it renders nothing, so there is no row
+        # for the walk to inspect. Its gate is the one thing worth asserting.
+        "stock:stock_wipe",
     }
     named = set()
     for resolver in get_resolver().url_patterns:

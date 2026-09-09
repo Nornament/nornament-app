@@ -746,3 +746,57 @@ a.btn,a.chip,a.code,a.fchip{text-decoration:none}
 .switch input:checked + .track .knob{transform:translateX(17px)}
 .switch input:focus-visible + .track{outline:2px solid var(--brand);outline-offset:2px}
 @media(max-width:560px){.mgrid{grid-template-columns:1fr}}
+
+/* ── rate charts ─────────────────────────────────────────────────────────
+   The design's category tints, as tokens so the dark theme can restate them
+   rather than re-deriving a wash of the same four hues. */
+:root{
+  --g-metal-bg:#f6efdc;   --g-metal-ink:#6d5525;
+  --g-diamond-bg:#f0edf6; --g-diamond-ink:#5b4a7a;
+  --g-polki-bg:#eef1f6;   --g-polki-ink:#3f5a8a;
+  --g-setting-bg:#edf4ef; --g-setting-ink:#37674f;
+  --g-purai-bg:#f6f1ee;   --g-purai-ink:#7a5340;
+  --g-other-bg:#f2f1ec;   --g-other-ink:#52514e;
+  --g-labour-bg:#f4f1e8;  --g-labour-ink:#6b6244;
+}
+:root[data-theme="dark"]{
+  --g-metal-bg:#2a241a;   --g-metal-ink:#d4af62;
+  --g-diamond-bg:#231f2c; --g-diamond-ink:#b7a6d6;
+  --g-polki-bg:#1c222c;   --g-polki-ink:#9db6dd;
+  --g-setting-bg:#1a241d; --g-setting-ink:#8fc2a4;
+  --g-purai-bg:#282020;   --g-purai-ink:#d0a795;
+  --g-other-bg:#242422;   --g-other-ink:#c3c2b7;
+  --g-labour-bg:#26241c;  --g-labour-ink:#c9bd90;
+}
+
+.chart-wrap{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.chart-rail{flex:none;width:262px}
+
+.chart-card{display:block;border:1px solid var(--line);border-radius:9px;padding:10px 12px;
+  margin-bottom:8px;color:inherit;text-decoration:none}
+.chart-card:hover{border-color:var(--rule)}
+.chart-card .nm{font-size:13.5px;font-weight:600}
+.chart-card .sub{font-size:11.5px;color:var(--muted);margin-top:2px}
+.chart-card.on{border-color:var(--brand);background:var(--brand-soft)}
+.chart-card.on .nm{color:var(--brand)}
+.chart-card.on .sub{color:var(--brand)}
+.chart-card.locked{border-style:dashed}
+.chart-card.locked .nm{color:var(--muted);font-weight:500}
+
+.chip.c-gold{background:var(--brand);color:#fff;border-color:var(--brand)}
+
+table.rates tr.grp td{padding:5px 10px;font-size:10.5px;font-weight:700;letter-spacing:.07em;
+  text-transform:uppercase;background:var(--g-other-bg);color:var(--g-other-ink)}
+table.rates tr.g-metal td{background:var(--g-metal-bg);color:var(--g-metal-ink)}
+table.rates tr.g-diamond td{background:var(--g-diamond-bg);color:var(--g-diamond-ink)}
+table.rates tr.g-polki td{background:var(--g-polki-bg);color:var(--g-polki-ink)}
+table.rates tr.g-setting td{background:var(--g-setting-bg);color:var(--g-setting-ink)}
+table.rates tr.g-purai td{background:var(--g-purai-bg);color:var(--g-purai-ink)}
+table.rates tr.g-labour td{background:var(--g-labour-bg);color:var(--g-labour-ink)}
+/* a rate the chart is missing: loud enough to find, quiet enough to live with */
+table.rates tr.want{background:color-mix(in srgb,var(--critical) 6%,transparent)}
+
+.in{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:3px 7px;
+  font-size:12.5px;font-family:var(--mono);text-align:right;width:88px;color:var(--ink)}
+.in:focus{outline:2px solid var(--ring);outline-offset:1px}
+.in.bad{border-color:var(--critical);background:color-mix(in srgb,var(--critical) 8%,var(--surface))}

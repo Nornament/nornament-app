@@ -434,13 +434,19 @@ def _priced(piece, scenario, version_no=None, lines=None):
     # is how ``current_cost`` and ``sale_lines`` add up, and a total reached the
     # other way lands a rupee off theirs often enough to be noticed
     metal_gm = sum((line_weight_gm(l.qty_value, l.qty_uom) for l in lines if l.material.is_metal), ZERO)
+    # The purity-derived rate is the basis; a chart line for that exact metal
+    # material overrides it. The override is per material and every metal
+    # material belongs to one metal, so silver still reads silver — what is
+    # new is that a chart may override a live rate, which is a decision, not
+    # the old defect of pricing every purity off the pure gold rate (0032b).
     sale_rate, cost_rate = alloy_sale_rate(piece.metal_purity), alloy_cost_rate(piece.metal_purity)
-    metal_sale = sum(
-        (round_to(sale_rate * Decimal(l.qty_value or 0), ldp) for l in lines if l.material.is_metal), ZERO
-    )
-    metal_cost = sum(
-        (round_to(cost_rate * Decimal(l.qty_value or 0), ldp) for l in lines if l.material.is_metal), ZERO
-    )
+    metal_sale = metal_cost = ZERO
+    for line in (l for l in lines if l.material.is_metal):
+        qty = Decimal(line.qty_value or 0)
+        over_sale = None if line.off_chart else chart_rate(line.material.item_code, line.size_band, "SALE", scenario.chart_id)
+        over_cost = None if line.off_chart else chart_rate(line.material.item_code, line.size_band, "COST", scenario.chart_id)
+        metal_sale += round_to((over_sale if over_sale is not None else sale_rate) * qty, ldp)
+        metal_cost += round_to((over_cost if over_cost is not None else cost_rate) * qty, ldp)
 
     making_sale = making_cost = ZERO
     for line in (l for l in lines if l.material.is_labour):
@@ -881,7 +887,9 @@ def refresh_bom_rates(user, piece, chart=None, side="BOTH"):
     piece = _as_piece(piece)
     touched = 0
     for line in _lines_for(piece.pk, piece.current_bom_version):
-        if line.off_chart or line.material.is_metal:
+        # metal is no longer skipped: a chart may now carry a metal rate, and a
+        # material the chart says nothing about is left on what it already had
+        if line.off_chart:
             continue
         fields = []
         if side in ("BOTH", "COST"):
@@ -1553,3 +1561,149 @@ def truncate_stock(user, delete_media_files=False):
         failed = storage.delete_keys(keys)
 
     return {"deleted": deleted, "total": sum(count for _, count in deleted), "media_keys": len(keys), "media_failed": failed}
+
+
+# ── rate charts: the lifecycle the mockup's rail implies ─────────────────
+def _next_chart_code(name):
+    """A short code from the name, made unique against what already exists."""
+    base = re.sub(r"[^A-Z0-9]+", "", (name or "").upper())[:12] or "CHART"
+    code, n = base, 1
+    while RateChart.objects.filter(code=code).exists():
+        n += 1
+        code = f"{base[:10]}{n}"
+    return code
+
+
+def chart_is_in_use(chart):
+    """Whether this chart has priced a piece that is still live.
+
+    A chart reaches a piece through its scenario, and the default chart reaches
+    every piece whose scenario names no chart of its own. Both count: the point
+    of locking is that a quote already given still reconciles.
+    """
+    scenarios = Q(scenario__chart=chart)
+    if chart.is_default:
+        scenarios |= Q(scenario__chart__isnull=True) | Q(scenario__isnull=True)
+    return Piece.objects.exclude(stock_state__in=TERMINAL_STATES).filter(scenarios).count()
+
+
+@transaction.atomic
+def create_chart(user, name, note=None, copy_from=None):
+    """A new rate chart, optionally starting as a copy of another one's lines."""
+    require(user, EDIT_BOM, "You cannot create a rate chart.")
+    name = (name or "").strip()
+    if not name:
+        raise ServiceError("A chart needs a name.")
+    if RateChart.objects.filter(name__iexact=name).exists():
+        raise ServiceError(f"There is already a chart called {name}.")
+
+    chart = RateChart.objects.create(
+        code=_next_chart_code(name),
+        name=name,
+        version_no=1,
+        note=(note or "").strip() or None,
+        # the very first chart is the default, because a costing run with no
+        # default silently prices every stone at nothing
+        is_default=not RateChart.objects.exists(),
+        created_by=user if getattr(user, "is_authenticated", False) else None,
+    )
+    copied = _copy_lines(copy_from, chart) if copy_from else 0
+    log(user, "INSERT", "rate_chart", chart.pk, f"created {chart.name}" + (f" from {copy_from.name} ({copied} lines)" if copy_from else ""))
+    return chart
+
+
+def _copy_lines(source, target):
+    RateChartLine.objects.bulk_create(
+        [
+            RateChartLine(
+                chart=target,
+                material_id=line.material_id,
+                size_band=line.size_band,
+                cost_rate=line.cost_rate,
+                sale_rate=line.sale_rate,
+                rate_uom=line.rate_uom,
+            )
+            for line in source.lines.all()
+        ]
+    )
+    return source.lines.count()
+
+
+@transaction.atomic
+def fork_chart(user, chart, note=None):
+    """Copy a chart to the next version of the same code, and lock the original.
+
+    This is what makes a March quote still reconcile in September: the rows the
+    quote was priced from stop moving, and the new work happens on v+1.
+    """
+    require(user, EDIT_BOM, "You cannot fork a rate chart.")
+    version = (RateChart.objects.filter(code=chart.code).aggregate(Max("version_no"))["version_no__max"] or 0) + 1
+    fork = RateChart.objects.create(
+        code=chart.code,
+        name=chart.name,
+        version_no=version,
+        note=(note or "").strip() or chart.note,
+        forked_from=chart,
+        created_by=user if getattr(user, "is_authenticated", False) else None,
+    )
+    copied = _copy_lines(chart, fork)
+    # the default follows the fork: a new quote should price on the new version
+    if chart.is_default:
+        RateChart.objects.filter(pk=chart.pk).update(is_default=False)
+        RateChart.objects.filter(pk=fork.pk).update(is_default=True)
+        fork.is_default = True
+    RateChart.objects.filter(pk=chart.pk).update(is_locked=True)
+    chart.is_locked = True
+    log(user, "INSERT", "rate_chart", fork.pk, f"forked {chart.name} v{chart.version_no} -> v{version} ({copied} lines)")
+    log(user, "UPDATE", "rate_chart", chart.pk, f"locked — forked to v{version}")
+    return fork
+
+
+@transaction.atomic
+def set_default_chart(user, chart):
+    """Exactly one chart is the default; the DB has a partial unique index on it."""
+    require(user, EDIT_BOM, "You cannot change the default rate chart.")
+    if chart.is_locked:
+        raise ServiceError(f"{chart.name} v{chart.version_no} is locked. Make a live version the default.")
+    RateChart.objects.filter(is_default=True).update(is_default=False)
+    RateChart.objects.filter(pk=chart.pk).update(is_default=True)
+    chart.is_default = True
+    log(user, "UPDATE", "rate_chart", chart.pk, f"{chart.name} is now the default chart")
+    return chart
+
+
+@transaction.atomic
+def rename_chart(user, chart, name, note=None):
+    require(user, EDIT_BOM, "You cannot rename a rate chart.")
+    name = (name or "").strip()
+    if not name:
+        raise ServiceError("A chart needs a name.")
+    if RateChart.objects.filter(name__iexact=name).exclude(code=chart.code).exists():
+        raise ServiceError(f"There is already a chart called {name}.")
+    was = chart.name
+    # the name belongs to the code, not to one version: renaming v2 and leaving
+    # v1 under the old name would read as two unrelated charts in the rail
+    RateChart.objects.filter(code=chart.code).update(name=name)
+    chart.name = name
+    if note is not None:
+        RateChart.objects.filter(pk=chart.pk).update(note=(note or "").strip() or None)
+    log(user, "UPDATE", "rate_chart", chart.pk, f"renamed {was} -> {name}" if was != name else "note updated")
+    return chart
+
+
+@transaction.atomic
+def delete_chart(user, chart):
+    """Remove a chart. Refused while anything still prices from it."""
+    require(user, EDIT_BOM, "You cannot delete a rate chart.")
+    if chart.is_default:
+        raise ServiceError("That is the default chart. Make another one the default first.")
+    scenarios = list(chart.scenarios.values_list("name", flat=True))
+    if scenarios:
+        raise ServiceError("Still used by the scenario " + ", ".join(scenarios) + ". Point those elsewhere first.")
+    live = chart_is_in_use(chart)
+    if live:
+        raise ServiceError(f"It has priced {live} live piece(s). Fork it or retire those first.")
+    name, lines = f"{chart.name} v{chart.version_no}", chart.lines.count()
+    log(user, "DELETE", "rate_chart", chart.pk, f"deleted {name} ({lines} lines)")
+    chart.delete()
+    return name

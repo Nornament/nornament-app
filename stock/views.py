@@ -11,8 +11,9 @@ import csv
 import datetime
 import io
 import re
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from functools import wraps
+from types import SimpleNamespace
 from urllib.parse import urlencode
 
 from django.contrib import messages
@@ -41,6 +42,7 @@ from . import services
 from .enums import BomChangeReason, COUNTABLE_STATES, MediaKind, MovementType, StockState, TERMINAL_STATES, Uom
 from .forms import (
     BomLineFormSet,
+    RateChartForm,
     LocationForm,
     MaterialForm,
     MeltForm,
@@ -1766,6 +1768,102 @@ def _chart_log_entries(user, chart, lines):
     return entries
 
 
+def _chart_rail(charts):
+    """The chart cards down the left: what each one holds, and whether it moved.
+
+    ``sides`` is what a reader of the rail actually wants to know — a chart with
+    no cost rates anywhere prices a quote but not a margin, and that is worth
+    seeing before opening it.
+    """
+    counts = {
+        row["chart"]: row
+        for row in RateChartLine.objects.values("chart").annotate(
+            materials=Count("material", distinct=True),
+            costed=Count("pk", filter=Q(cost_rate__isnull=False)),
+            sold=Count("pk", filter=Q(sale_rate__isnull=False)),
+        )
+    }
+    for chart in charts:
+        row = counts.get(chart.pk, {})
+        chart.materials = row.get("materials", 0)
+        chart.sides = (
+            "cost + sale" if row.get("costed") and row.get("sold") else "sale only" if row.get("sold") else
+            "cost only" if row.get("costed") else "no rates yet"
+        )
+        # only asked of a locked chart: it is a query per chart, and an open
+        # chart's card does not show the number anyway
+        chart.live_pieces = services.chart_is_in_use(chart) if chart.is_locked else 0
+    return charts
+
+
+def _chart_groups(user, chart, lines):
+    """The chart's rates, grouped by material category the way the sheet reads.
+
+    The Metal group is the exception. A metal material with no line on the chart
+    has no single rate to show: costing derives it from the *piece's* purity, so
+    the honest cell is the metal's live per-gram rate and a note that the purity
+    factor applies. A line, where one exists, overrides that.
+    """
+    by_category = {}
+    for line in lines:
+        line.multiple = (
+            services.round_to(line.sale_rate / line.cost_rate, 2) if line.cost_rate and line.sale_rate else None
+        )
+        line.needs_sale = line.sale_rate is None
+        by_category.setdefault(line.material.category_id, []).append(line)
+
+    # every metal material, so the group reads as the whole metal picture
+    if user.has_perm(VIEW_COST) or user.has_perm(VIEW_SALE):
+        priced = {(line.material_id, line.size_band) for line in lines}
+        for material in Material.objects.filter(category="METAL", is_active=True).select_related("metal"):
+            if (material.pk, "") in priced:
+                continue
+            by_category.setdefault("METAL", []).append(
+                SimpleNamespace(
+                    pk=None, material=material, size_band="", cost_rate=None, sale_rate=None,
+                    rate_uom="GM", multiple=None, needs_sale=False, history=[],
+                    live_rate=material.metal.pure_rate if material.metal else None,
+                )
+            )
+
+    order = {category.pk: (category.sort_order, category.name) for category in MaterialCategory.objects.all()}
+    return [
+        (order.get(code, (99, code))[1], code, sorted(rows, key=lambda r: (r.material.item_code, r.size_band)))
+        for code, rows in sorted(by_category.items(), key=lambda kv: order.get(kv[0], (99, kv[0]))[0])
+    ]
+
+
+def _chart_tab(request):
+    """Users & Settings -> Rate charts. The rail, the open chart, its history."""
+    charts = _chart_rail(list(RateChart.objects.order_by("-is_default", "is_locked", "name", "-version_no")))
+    chart_id = request.GET.get("chart")
+    chart = next((c for c in charts if str(c.pk) == chart_id), None) or next(iter(charts), None)
+    lines = (
+        list(
+            RateChartLine.objects.filter(chart=chart)
+            .select_related("material", "material__metal")
+            .order_by("material__item_code", "size_band")
+        )
+        if chart
+        else []
+    )
+    # the edit history is the audit log, read back — a second history table
+    # would be a second thing to keep honest. It is read once and shared:
+    # the per-row history and the panel below cannot disagree about a rate.
+    entries = _chart_log_entries(request.user, chart, lines) if chart else []
+    for line in lines:
+        line.history = [entry for entry in entries if entry.line is line]
+    return {
+        "charts": charts,
+        "chart": chart,
+        "groups": _chart_groups(request.user, chart, lines) if chart else [],
+        "chart_log": Paginator(entries, 30).get_page(request.GET.get("page")),
+        "chart_form": RateChartForm(),
+        "line_form": RateChartLineForm(initial={"chart": chart}) if chart else None,
+        "chart_live_pieces": services.chart_is_in_use(chart) if chart else 0,
+    }
+
+
 #: the legacy Settings tab bar, in its order
 SETTINGS_TABS = [
     ("cats", "Categories"),
@@ -1851,32 +1949,7 @@ def settings_view(request):
             "form": MaterialForm(),
         }
     elif tab == "charts":
-        chart_id = request.GET.get("chart")
-        charts = list(RateChart.objects.order_by("-is_default", "code", "-version_no"))
-        chart = next((c for c in charts if str(c.pk) == chart_id), None) or next(iter(charts), None)
-        lines = (
-            list(
-                RateChartLine.objects.filter(chart=chart)
-                .select_related("material")
-                .order_by("material__item_code", "size_band")
-            )
-            if chart
-            else []
-        )
-        # the edit history is the audit log, read back — a second history table
-        # would be a second thing to keep honest. It is read once and shared:
-        # the per-row `details` and the panel below cannot disagree about a rate.
-        entries = _chart_log_entries(request.user, chart, lines) if chart else []
-        for line in lines:
-            line.history = [entry for entry in entries if entry.line is line]
-        context |= {
-            "charts": charts,
-            "chart": chart,
-            "lines": lines,
-            "chart_log": Paginator(entries, 30).get_page(request.GET.get("page")),
-            "line_form": RateChartLineForm(initial={"chart": chart}) if chart else None,
-            "chart_in_use": chart.lines.filter(material__bom_lines__isnull=False).exists() if chart else False,
-        }
+        context |= _chart_tab(request)
     elif tab == "scen":
         context |= _scenario_tab(request)
     elif tab == "users":
@@ -2094,7 +2167,13 @@ def _settings_post(request, tab):
     """Category, location and material writes. Everything else is read-only here."""
     services.require(request.user, EDIT_BOM, "You cannot change reference data.")
     if tab == "charts":
-        return _rate_chart_import(request) if request.FILES.get("csv") else _chart_line_post(request)
+        if request.FILES.get("csv"):
+            return _rate_chart_import(request)
+        if request.POST.get("chart_action"):
+            return _chart_action(request)
+        if request.POST.get("save_rates"):
+            return _chart_rates_post(request)
+        return _chart_line_post(request)
     if tab == "mats" and request.FILES.get("csv"):
         return _material_import(request)
     if tab == "scen":
@@ -2377,6 +2456,117 @@ def _rate_diff(before, after):
         return " · ".join(f"{k} {v}" for k, v in after.items() if v is not None) or "added"
     moved = [f"{k} {before.get(k) or '—'} → {after[k] or '—'}" for k in after if before.get(k) != after[k]]
     return " · ".join(moved) or "no change"
+
+
+def _chart_back(chart=None, page=None):
+    query = {"tab": "charts"}
+    if chart is not None:
+        query["chart"] = chart.pk if hasattr(chart, "pk") else chart
+    return f"{reverse('stock:settings')}?{urlencode(query)}"
+
+
+def _chart_action(request):
+    """New, rename, duplicate, set default, fork, delete. One rule each, in services."""
+    action = request.POST["chart_action"]
+    chart = get_object_or_404(RateChart, pk=request.POST["chart"]) if request.POST.get("chart") else None
+    try:
+        if action == "new":
+            form = RateChartForm(request.POST)
+            if not form.is_valid():
+                messages.error(request, "; ".join(f"{f}: {e[0]}" for f, e in form.errors.items()))
+                return redirect(_chart_back(chart))
+            chart = services.create_chart(
+                request.user,
+                form.cleaned_data["name"],
+                form.cleaned_data.get("note"),
+                copy_from=form.cleaned_data.get("copy_from"),
+            )
+            messages.success(request, f"{chart.name} created.")
+        elif action == "rename":
+            services.rename_chart(request.user, chart, request.POST.get("name"), request.POST.get("note"))
+            messages.success(request, f"{chart.name} saved.")
+        elif action == "duplicate":
+            copy = services.create_chart(request.user, request.POST.get("name") or f"{chart.name} copy", chart.note, copy_from=chart)
+            messages.success(request, f"{copy.name} created from {chart.name}.")
+            chart = copy
+        elif action == "default":
+            services.set_default_chart(request.user, chart)
+            messages.success(request, f"{chart.name} is now the default.")
+        elif action == "fork":
+            fork = services.fork_chart(request.user, chart)
+            messages.success(request, f"{fork.name} v{fork.version_no} created. v{chart.version_no} is locked.")
+            chart = fork
+        elif action == "delete":
+            name = services.delete_chart(request.user, chart)
+            messages.success(request, f"{name} deleted.")
+            chart = None
+        else:
+            raise Http404
+    except (services.ServiceError, ValidationError) as error:
+        messages.error(request, "; ".join(error.messages) if hasattr(error, "messages") else str(error))
+    return redirect(_chart_back(chart))
+
+
+def _chart_rates_post(request):
+    """Save the rates typed straight into the table.
+
+    A locked chart is not edited — the edit forks it and lands on the new
+    version, which is the whole point of locking: a quote priced in March has
+    to still reconcile in September. The user is told which version they are
+    now on rather than silently redirected.
+    """
+    chart = get_object_or_404(RateChart, pk=request.POST["chart"])
+    forked = None
+    if chart.is_locked:
+        try:
+            chart, forked = services.fork_chart(request.user, chart), chart
+        except (services.ServiceError, ValidationError) as error:
+            messages.error(request, "; ".join(error.messages) if hasattr(error, "messages") else str(error))
+            return redirect(_chart_back(chart))
+
+    # a rate this reader cannot see is not rendered, so it is never posted —
+    # carried over from the row rather than saved as the blank that came back
+    hidden = {field for capability, field in ((VIEW_COST, "cost_rate"), (VIEW_SALE, "sale_rate")) if not request.user.has_perm(capability)}
+    lines = {str(line.pk): line for line in RateChartLine.objects.filter(chart=chart).select_related("material")}
+    saved = 0
+    try:
+        with transaction.atomic():
+            for key in (k for k in request.POST if k.startswith("cost_") or k.startswith("sale_")):
+                side, _, ref = key.partition("_")
+                field = f"{side}_rate"
+                if field in hidden:
+                    continue
+                value = (request.POST.get(key) or "").strip()
+                line = lines.get(ref)
+                if line is None:
+                    if not value:
+                        continue
+                    material = get_object_or_404(Material, pk=ref.split(":")[0])
+                    line = RateChartLine.objects.filter(chart=chart, material=material, size_band="").first() or RateChartLine(
+                        chart=chart, material=material, size_band=""
+                    )
+                    lines[ref] = line
+                before = _rate_snapshot(line) if line.pk else {}
+                new = Decimal(value) if value else None
+                if getattr(line, field) == new:
+                    continue
+                setattr(line, field, new)
+                line.save()
+                services.log(
+                    request.user, "UPDATE" if before else "INSERT", "rate_chart_line", line.pk,
+                    detail=_rate_diff(before, _rate_snapshot(line)),
+                    old_values=before or None, new_values=_rate_snapshot(line),
+                )
+                saved += 1
+    except (InvalidOperation, ValidationError) as error:
+        messages.error(request, f"Nothing was saved — {error}")
+        return redirect(_chart_back(chart))
+
+    if forked:
+        messages.success(request, f"{forked.name} v{forked.version_no} was locked, so this landed on v{chart.version_no}. {saved} rate(s) saved.")
+    else:
+        messages.success(request, f"{saved} rate(s) saved." if saved else "No rate changed.")
+    return redirect(_chart_back(chart))
 
 
 def _chart_line_post(request):

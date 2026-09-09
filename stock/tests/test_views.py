@@ -286,8 +286,14 @@ def test_the_material_csv_round_trips_and_one_bad_row_saves_nothing(client, admi
     assert "Nothing was saved" in response.content.decode()
 
 
-def test_the_rate_chart_csv_round_trips_and_a_metal_row_saves_nothing(client, admin_user_, chart):
-    """The export is the upload template, and a row the Add rate modal refuses rolls the file back."""
+def test_the_rate_chart_csv_round_trips_and_a_metal_row_is_an_override(client, admin_user_, chart):
+    """The export is the upload template, and a row the Add rate modal refuses rolls the file back.
+
+    A metal row used to be refused outright. It is now accepted as a deliberate
+    per-material override: the rate lands against that one material, and every
+    other metal still prices from its own metal's live rate and the piece's
+    purity. That is what keeps silver reading silver (0032b).
+    """
     from stock.models import RateChartLine
 
     client.force_login(admin_user_)
@@ -303,12 +309,17 @@ def test_the_rate_chart_csv_round_trips_and_a_metal_row_saves_nothing(client, ad
     assert RateChartLine.objects.get(chart=chart, material__item_code="DRKL").cost_rate == Decimal("160000")
     assert RateChartLine.objects.filter(chart=chart, material__item_code="MAKING").exists()
 
-    # gold is a metal: it prices from its live rate and the chart must not override it
-    bad = "item_code,size_band,cost_rate,sale_rate,rate_uom\nDRKL,,1,1,CT\nG,,5000,6000,GM\n"
+    # a metal row is an override now, and it lands on that material alone
+    metal = "item_code,size_band,cost_rate,sale_rate,rate_uom\nG,,5000,6000,GM\n"
+    client.post(settings_url, {"chart": chart.pk, "csv": SimpleUploadedFile("rates.csv", metal.encode())})
+    assert RateChartLine.objects.get(chart=chart, material__item_code="G").cost_rate == Decimal("5000")
+    assert not RateChartLine.objects.filter(chart=chart, material__item_code="G18K").exists()
+
+    # a row naming a material that does not exist still rolls the whole file back
+    bad = "item_code,size_band,cost_rate,sale_rate,rate_uom\nDRKL,,1,1,CT\nNOSUCH,,5000,6000,GM\n"
     response = client.post(
         settings_url, {"chart": chart.pk, "csv": SimpleUploadedFile("rates.csv", bad.encode())}, follow=True
     )
-    assert not RateChartLine.objects.filter(chart=chart, material__item_code="G").exists()
     assert RateChartLine.objects.get(chart=chart, material__item_code="DRKL").cost_rate == Decimal("160000")
     assert "Nothing was saved" in response.content.decode()
 

@@ -198,60 +198,111 @@
 {% endif %}
 
 {% elif tab == 'charts' %}
-<div class="card">
-  <div class="spread" style="margin-bottom:4px">
-    <div><h3>Rate charts</h3><p class="hint" style="margin:0;max-width:78ch">Cost and sale for every
-      material, on one line. Metal is deliberately absent — it prices from its live rate and a chart
-      must not be able to override that.</p></div>
-    <div class="row">
-      <form method="get" class="row"><input type="hidden" name="tab" value="charts">
-        <select name="chart" onchange="this.form.submit()">
-          {% for c in charts %}<option value="{{ c.pk }}" {% if chart and c.pk == chart.pk %}selected{% endif %}>{{ c.code }} v{{ c.version_no }}{% if c.is_default %} · default{% endif %}</option>{% endfor %}
-        </select></form>
-      {% if caps.edit_bom and chart %}
-      <button type="button" class="btn" onclick="document.getElementById('ratebulkdlg').showModal()">⇅ Bulk CSV</button>
-      {% endif %}
-      {% if caps.edit_bom and chart and not chart.is_locked %}
-      <button type="button" class="btn primary" onclick="rateEdit(this)">+ Add rate</button>
+<div class="chart-wrap">
+
+  <aside class="card chart-rail">
+    <div class="spread" style="margin-bottom:10px">
+      <h3 style="margin:0">Charts</h3>
+      {% if caps.edit_bom %}
+      <button type="button" class="btn sm" onclick="document.getElementById('chartnewdlg').showModal()">+ New</button>
       {% endif %}
     </div>
+    {% for c in charts %}
+    <a class="chart-card{% if chart and c.pk == chart.pk %} on{% endif %}{% if c.is_locked %} locked{% endif %}"
+       href="?tab=charts&amp;chart={{ c.pk }}">
+      <div class="nm">{{ c.name }}{% if c.version_no > 1 %} <span class="dim">v{{ c.version_no }}</span>{% endif %}</div>
+      <div class="sub">{{ c.materials }} material{{ c.materials|pluralize }} · {{ c.sides }}</div>
+      {% if c.is_default %}<div style="margin-top:6px"><span class="chip c-gold">default</span></div>{% endif %}
+      {% if c.is_locked %}<div class="sub">locked{% if c.live_pieces %} · still prices {{ c.live_pieces }} live piece{{ c.live_pieces|pluralize }}{% endif %}</div>{% endif %}
+    </a>
+    {% empty %}<div class="empty">No charts yet.</div>{% endfor %}
+    <p class="hint" style="margin-top:12px">A chart is never edited in place once a piece has used it.
+      Changing a rate forks a new version so an old quote still reconciles.</p>
+  </aside>
+
+  <div class="card" style="flex:1;min-width:430px">
+    {% if not chart %}
+    <div class="empty">Make a chart to start pricing.</div>
+    {% else %}
+    <div class="spread" style="align-items:flex-start;gap:14px">
+      <div>
+        <h3 style="margin:0 0 3px">{{ chart.name }}{% if chart.version_no > 1 %} <span class="dim">v{{ chart.version_no }}</span>{% endif %}</h3>
+        <p class="hint" style="margin:0">{{ chart.note|default:"Cost is what you pay. Sale is the starting ask — a pricing scenario may move it." }}</p>
+      </div>
+      <div class="row tight">
+        {% if caps.edit_bom %}
+        <button type="button" class="btn" onclick="document.getElementById('ratebulkdlg').showModal()">⇅ Import from Excel</button>
+        <button type="button" class="btn" onclick="document.getElementById('chartedit').showModal()">Manage</button>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if chart.is_locked %}
+    <div class="note" style="margin-top:12px"><b>This version is locked.</b>{% if chart_live_pieces %}
+      It still prices {{ chart_live_pieces }} live piece{{ chart_live_pieces|pluralize }}.{% endif %}
+      Saving a rate here forks v{{ chart.version_no|add:1 }} and leaves this one as it was.</div>
+    {% endif %}
+
+    <form method="post">{% csrf_token %}
+      <input type="hidden" name="chart" value="{{ chart.pk }}">
+      <table class="rates" style="margin-top:14px"><thead><tr>
+        <th>Material</th><th style="width:86px">Size</th>
+        {% if caps.view_cost %}<th class="num" style="width:110px">Cost rate</th>{% endif %}
+        {% if caps.view_sale %}<th class="num" style="width:110px">Sale rate</th>{% endif %}
+        <th class="num" style="width:66px">Mult.</th>
+      </tr></thead><tbody>
+        {% for label, code, rows in groups %}
+        <tr class="grp g-{{ code|lower }}"><td colspan="5">{{ label }}</td></tr>
+          {% for row in rows %}
+          <tr{% if row.needs_sale %} class="want"{% endif %}>
+            <td><span class="mono" style="font-weight:600">{{ row.material.item_code }}</span> {{ row.material.item_name }}
+              {% if row.history %}
+              <details style="margin-top:4px">
+                <summary class="dim" style="font-size:12px;cursor:pointer">{{ row.history|length }} edit{{ row.history|pluralize }}</summary>
+                <div class="dim mono" style="font-size:11.5px;padding:4px 0 2px">
+                  {% for entry in row.history %}<div>{{ entry.changed_at|date:"d M Y H:i" }} · {{ entry.user|default:"system" }} · {{ entry.shown }}</div>{% endfor %}
+                </div>
+              </details>
+              {% endif %}</td>
+            <td class="mono dim">{{ row.size_band|default:"—" }}</td>
+            {% if caps.view_cost %}
+            <td class="num">{% if caps.edit_bom %}<input class="in" name="cost_{% if row.pk %}{{ row.pk }}{% else %}{{ row.material.pk }}:new{% endif %}"
+              value="{{ row.cost_rate|default_if_none:''|floatformat:'-4' }}"{% if row.live_rate %} placeholder="live {{ row.live_rate|floatformat:0 }}"{% endif %}>
+              {% else %}{{ row.cost_rate|default_if_none:"—"|floatformat:0 }}{% endif %}</td>
+            {% endif %}
+            {% if caps.view_sale %}
+            <td class="num">{% if caps.edit_bom %}<input class="in{% if row.needs_sale and row.pk %} bad{% endif %}"
+              name="sale_{% if row.pk %}{{ row.pk }}{% else %}{{ row.material.pk }}:new{% endif %}"
+              value="{{ row.sale_rate|default_if_none:''|floatformat:'-4' }}"
+              placeholder="{% if row.live_rate %}live {{ row.live_rate|floatformat:0 }}{% elif row.pk %}needed{% endif %}">
+              {% else %}{{ row.sale_rate|default_if_none:"—"|floatformat:0 }}{% endif %}</td>
+            {% endif %}
+            <td class="num dim">{% if row.multiple %}{{ row.multiple|floatformat:2 }}×{% else %}—{% endif %}</td></tr>
+          {% endfor %}
+        {% empty %}<tr><td colspan="5"><div class="empty">This chart has no rates yet. Import a sheet, or add one below.</div></td></tr>{% endfor %}
+      </tbody></table>
+      {% if caps.edit_bom %}
+      <div class="row" style="margin-top:14px">
+        <button class="btn primary" name="save_rates" value="1">Save rates</button>
+        <button type="button" class="btn" onclick="rateEdit(this)">+ Add a material</button>
+      </div>
+      {% endif %}
+    </form>
+
+    <div class="note">A metal row with no rate of its own prices from that metal's live rate and the
+      piece's purity — the placeholder is the live per-gram figure. Type one and this chart overrides it
+      for that material only, so a silver line still reads silver. When a rate is typed on a bill of
+      materials the chart's figure is the suggestion, never forced; a stone bought at an odd price stays
+      at that price and the line is marked off-chart so you can find it later.</div>
+    {% endif %}
   </div>
-  <table style="margin-top:12px"><thead><tr><th>Material</th><th style="width:96px">Size</th>
-    {% if caps.view_cost %}<th class="num" style="width:118px">Cost rate</th>{% endif %}
-    {% if caps.view_sale %}<th class="num" style="width:118px">Sale rate</th>{% endif %}
-    <th style="width:70px"></th></tr></thead><tbody>
-    {% for line in lines %}
-    <tr><td class="code">{{ line.material.item_code }} <span class="dim">{{ line.material.item_name }}</span>
-        {% if line.history %}
-        <details style="margin-top:4px">
-          <summary class="dim" style="font-size:12px;cursor:pointer">{{ line.history|length }} edit{{ line.history|pluralize }}</summary>
-          <div class="dim mono" style="font-size:11.5px;padding:4px 0 2px">
-            {% for entry in line.history %}<div>{{ entry.changed_at|date:"d M Y H:i" }} · {{ entry.user|default:"system" }} · {{ entry.shown }}</div>{% endfor %}
-          </div>
-        </details>
-        {% endif %}</td>
-      <td>{{ line.size_band|default:"—" }}</td>
-      {% if caps.view_cost %}<td class="num mono">{{ line.cost_rate|default_if_none:"—"|floatformat:0 }}</td>{% endif %}
-      {% if caps.view_sale %}<td class="num mono">{{ line.sale_rate|default_if_none:"—"|floatformat:0 }}</td>{% endif %}
-      <td>{% if caps.edit_bom and not chart.is_locked %}
-        <button type="button" class="btn sm" onclick="rateEdit(this)" data-pk="{{ line.pk }}" data-material="{{ line.material_id }}"
-          data-size_band="{{ line.size_band }}" data-rate_uom="{{ line.rate_uom|default_if_none:'' }}"
-          {% if caps.view_cost %}data-cost_rate="{{ line.cost_rate|default_if_none:'' }}"{% endif %}
-          {% if caps.view_sale %}data-sale_rate="{{ line.sale_rate|default_if_none:'' }}"{% endif %}>Edit</button>
-      {% endif %}</td></tr>
-    {% empty %}<tr><td colspan="5"><div class="empty">This chart has no lines.</div></td></tr>{% endfor %}
-  </tbody></table>
-  <div class="note">Every rate change is written to the audit log against that line, and the row shows
-    it back — so a rate that moved twice reads as two entries, not as one number that was always this.
-    A <b>locked</b> chart refuses edits: fork it, so a quote from March still reconciles in September.
-    {% if chart_in_use %} <b>This one has priced live stock.</b>{% endif %}</div>
 </div>
 
 {% if chart %}
 <div class="card">
   <div class="spread" style="margin-bottom:4px">
     <div><h3>History</h3><p class="hint" style="margin:0;max-width:80ch">Every change to
-      {{ chart.code }} v{{ chart.version_no }}, newest first — the same audit log the rows above read,
+      {{ chart.name }} v{{ chart.version_no }}, newest first — the same audit log the rows above read,
       gathered in one place so a rate that moved can be traced to who moved it.</p></div>
   </div>
   <table style="margin-top:12px"><thead><tr><th style="width:150px">When</th><th style="width:170px">Who</th>
@@ -287,19 +338,20 @@
         is the file you edit and put back. It is this chart only — a rate belongs to a version.</p></header>
     <div class="content">
       <div class="row" style="margin-bottom:14px">
-        <a class="btn" href="{% url 'stock:rate_chart_export' %}?chart={{ chart.pk }}" download>⇩ Export {{ chart.code }} v{{ chart.version_no }} ({{ lines|length }})</a>
+        <a class="btn" href="{% url 'stock:rate_chart_export' %}?chart={{ chart.pk }}" download>⇩ Export {{ chart.name }} v{{ chart.version_no }}</a>
         <a class="btn" href="{% url 'stock:rate_chart_export' %}?chart={{ chart.pk }}&amp;sample=1" download>⇩ Sample CSV</a>
       </div>
       {% if chart.is_locked %}
-      <div class="note" style="margin:0"><b>{{ chart }} is locked</b>, so it takes no upload. Fork it and
-        put the sheet on the fork — a quote priced in March has to still reconcile in September.</div>
+      <div class="note" style="margin:0"><b>{{ chart.name }} v{{ chart.version_no }} is locked</b>, so it takes
+        no upload. Fork it and put the sheet on the fork — a quote priced in March has to still reconcile
+        in September.</div>
       {% else %}
       <div class="field"><label class="f" for="ratecsv">CSV to upload</label>
         <input id="ratecsv" type="file" name="csv" accept=".csv,text/csv" required></div>
       <div class="note" style="margin:0"><b>item_code</b> and <b>size_band</b> together are the key: a pair
-        already on this chart is updated, a new one is added. A metal is refused — it prices from its live
-        rate. One row the Add rate modal would have refused rolls the whole file back, and every row that
-        does land is written to the audit log exactly as an edit here would be.</div>
+        already on this chart is updated, a new one is added. A metal is accepted and read as an override
+        for that material alone. One row the Add rate modal would have refused rolls the whole file back,
+        and every row that does land is written to the audit log exactly as an edit here would be.</div>
       {% endif %}
     </div>
     <footer>
@@ -308,13 +360,13 @@
     </footer>
   </form>
 </dialog>
-{% endif %}
 
-{% if caps.edit_bom and line_form and not chart.is_locked %}
+{% if line_form %}
 <dialog class="modal" id="ratedlg">
   <form method="post">{% csrf_token %}<input type="hidden" name="pk" id="rate_pk">
     <header><h3 id="ratedlg_title">Add a rate</h3>
-      <p>The old values are kept — this row's history is what an audit reads.</p></header>
+      <p>For a material or size band the table does not list yet. The old values are kept — this row's
+        history is what an audit reads.</p></header>
     <div class="content">
       {% for field in line_form %}{% if field.is_hidden %}{{ field }}
       {% elif field.name == 'cost_rate' and not caps.view_cost %}{% elif field.name == 'sale_rate' and not caps.view_sale %}
@@ -338,6 +390,49 @@ function rateEdit(button) {
   dialog.showModal();
 }
 </script>
+{% endif %}
+{% endif %}
+
+{% if caps.edit_bom %}
+<dialog class="modal" id="chartnewdlg">
+  <form method="post">{% csrf_token %}<input type="hidden" name="chart_action" value="new">
+    <header><h3>New rate chart</h3><p>Start empty, or from a copy of one you already have.</p></header>
+    <div class="content">
+      {% for field in chart_form %}<div class="field">{{ field.label_tag }}{{ field }}</div>{% endfor %}
+    </div>
+    <footer><button class="btn" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn primary">Create</button></footer>
+  </form>
+</dialog>
+{% endif %}
+
+{% if caps.edit_bom and chart %}
+<dialog class="modal" id="chartedit">
+  <form method="post">{% csrf_token %}<input type="hidden" name="chart" value="{{ chart.pk }}">
+    <header><h3>{{ chart.name }} v{{ chart.version_no }}</h3>
+      <p>The name belongs to every version of this chart, so renaming here renames them together.</p></header>
+    <div class="content">
+      <div class="field"><label class="f" for="chart_name">Name</label>
+        <input id="chart_name" name="name" value="{{ chart.name }}" required></div>
+      <div class="field"><label class="f" for="chart_note">What it is for</label>
+        <textarea id="chart_note" name="note" rows="2">{{ chart.note|default:"" }}</textarea></div>
+      <div class="row" style="flex-wrap:wrap;gap:8px">
+        <button class="btn" name="chart_action" value="rename">Save name</button>
+        <button class="btn" name="chart_action" value="duplicate">Duplicate</button>
+        {% if not chart.is_default and not chart.is_locked %}
+        <button class="btn" name="chart_action" value="default">Make default</button>{% endif %}
+        {% if not chart.is_locked %}
+        <button class="btn" name="chart_action" value="fork">Fork v{{ chart.version_no|add:1 }} and lock this</button>{% endif %}
+        {% if not chart.is_default %}
+        <button class="btn danger" name="chart_action" value="delete">Delete</button>{% endif %}
+      </div>
+      <div class="note" style="margin:12px 0 0">Forking copies every rate to a new version and locks this
+        one, so a quote already given still reconciles. Deleting is refused while a scenario points at it
+        or it still prices a live piece.</div>
+    </div>
+    <footer><button class="btn" formmethod="dialog" formnovalidate>Close</button></footer>
+  </form>
+</dialog>
 {% endif %}
 
 {% elif tab == 'scen' %}

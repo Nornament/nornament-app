@@ -333,8 +333,31 @@ class StyleForm(forms.ModelForm):
             self.fields["style_code"].disabled = True
 
 
+class RateChartForm(forms.ModelForm):
+    """A chart's own identity. The code is derived, the version is not typed."""
+
+    copy_from = forms.ModelChoiceField(
+        queryset=RateChart.objects.none(), required=False, label="Start from", empty_label="An empty chart"
+    )
+
+    class Meta:
+        model = RateChart
+        fields = ["name", "note"]
+        labels = {"name": "Chart name *", "note": "What it is for"}
+        widgets = {"note": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["copy_from"].queryset = RateChart.objects.order_by("-is_default", "name", "-version_no")
+
+
 class RateChartLineForm(forms.ModelForm):
-    """One rate on a chart. Metal is not offered: it prices from its live rate."""
+    """One rate on a chart.
+
+    Metal is offered here. It used to be excluded so a chart could never
+    override a live metal rate; that is now a deliberate override, resolved per
+    material in ``recost_piece`` so a purity still reads its own metal.
+    """
 
     class Meta:
         model = RateChartLine
@@ -353,9 +376,7 @@ class RateChartLineForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["material"].queryset = Material.objects.exclude(category="METAL").order_by(
-            "item_code"
-        )
+        self.fields["material"].queryset = Material.objects.order_by("category__sort_order", "item_code")
 
 
 class ScenarioForm(forms.ModelForm):
