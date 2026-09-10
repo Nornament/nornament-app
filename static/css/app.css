@@ -814,3 +814,11 @@ table.rates tr.want{background:color-mix(in srgb,var(--critical) 6%,transparent)
 @media(max-width:820px){.wipe-cols{grid-template-columns:1fr}}
 /* the design marks the multiplier of a row it cannot compute, not just the box */
 table.rates td.lacks{color:var(--critical-ink)}
+
+/* ── a search form is one control ────────────────────────────────────────
+   These sit inside a .row of buttons, and .row wraps — so a nested .row put
+   its own button on a second line the moment the bar got tight. The box
+   shrinks instead, and the button stays beside it. */
+.searchbar{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;flex:0 1 auto;min-width:0}
+.searchbar input[type=search]{flex:1 1 auto;min-width:110px}
+.searchbar .btn{flex:0 0 auto;white-space:nowrap}

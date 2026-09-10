@@ -115,7 +115,7 @@
   <div class="spread" style="margin-bottom:4px">
     <div><h3>Materials</h3></div>
     <div class="row">
-      <form method="get" class="row"><input type="hidden" name="tab" value="mats">
+      <form method="get" class="searchbar"><input type="hidden" name="tab" value="mats">
         <input type="hidden" name="cat" value="{{ cat }}">
         <input type="search" name="q" value="{{ q }}" placeholder="Code or description" style="max-width:240px">
         <button class="btn sm">Search</button></form>
@@ -224,7 +224,7 @@
         
       </div>
       <div class="row tight">
-        <form method="get" class="row tight"><input type="hidden" name="tab" value="charts">
+        <form method="get" class="searchbar"><input type="hidden" name="tab" value="charts">
           <input type="hidden" name="chart" value="{{ chart.pk }}">
           <input type="hidden" name="cat" value="{{ cat }}">
           <input type="search" name="q" value="{{ q }}" placeholder="Code or description" style="max-width:200px">

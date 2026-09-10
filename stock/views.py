@@ -767,18 +767,30 @@ def move_piece_view(request, jewel_code):
     return redirect("stock:piece_detail", jewel_code=piece.jewel_code)
 
 
-def _redirect_back(request, fallback):
-    """Honour ``?next=`` when it points at us, and ignore it when it does not.
+def _safe_next(request):
+    """The posted ``next`` if it points at us, else "".
 
     ``startswith("/")`` is not enough: ``//evil.com`` and its backslash twin both
-    start with a slash and both send the browser off-site.
+    start with a slash and both send the browser off-site, and a ``javascript:``
+    value is a live script the moment it reaches an ``href``. Templates render
+    this, never the raw parameter — a redirect the view refuses is a link the
+    page must not offer either.
     """
-    target = request.POST.get("next") or request.GET.get("next")
-    if target and url_has_allowed_host_and_scheme(
-        target, allowed_hosts={request.get_host()}, require_https=request.is_secure()
-    ):
-        return redirect(target)
-    return redirect(fallback)
+    target = request.POST.get("next") or request.GET.get("next") or ""
+    return (
+        target
+        if target
+        and url_has_allowed_host_and_scheme(
+            target, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+        )
+        else ""
+    )
+
+
+def _redirect_back(request, fallback):
+    """Honour ``?next=`` when it points at us, and ignore it when it does not."""
+    target = _safe_next(request)
+    return redirect(target) if target else redirect(fallback)
 
 
 def _message(error):
@@ -830,7 +842,7 @@ def material_edit(request, item_code):
     return render(request, "stock/material_form.html", {
         "nav": "settings",
         "material": material,
-        "next": request.GET.get("next") or "",
+        "next": _safe_next(request),
         "form": form,
         "usage": services.material_usage(material),
     })
@@ -852,7 +864,7 @@ def material_delete(request, item_code):
     # the screen's own error round-trips have to carry the return path too, or
     # a refused delete quietly forgets where the user came from
     here = reverse("stock:material_delete", kwargs={"item_code": item_code})
-    back_to = request.POST.get("next") or request.GET.get("next") or ""
+    back_to = _safe_next(request)
     if back_to:
         here = f"{here}?{urlencode({'next': back_to})}"
 
