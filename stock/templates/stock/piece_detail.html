@@ -25,7 +25,7 @@
 </div>
 
 {% if gaps %}<div class="gaps" style="margin-bottom:14px">{% for gap in gaps %}<span class="gap">{{ gap }}</span>{% endfor %}</div>{% endif %}
-{% if open_repair %}<div class="note"><b>{{ open_repair.job_no }}</b> is open on this piece — it is at the workshop.</div>{% endif %}
+{% if open_repair %}{% endif %}
 
 <div class="tabs">
   {% for id, label in detail_tabs %}<a href="?tab={{ id }}" aria-selected="{% if tab == id %}true{% else %}false{% endif %}">{{ label }}</a>{% endfor %}
@@ -90,8 +90,7 @@
       <div class="biorow"><dt>Certificate code</dt><dd class="mono">{{ certificate.cert_number|default:"—" }}</dd></div>
     </dl>
   </div>
-  <div class="note">HUID is engraved per individual article by BIS rule — it is the one identifier
-    that legally cannot live at design level.</div>
+  
 </div>
 
 <div class="card"><h3>Availability</h3>
@@ -149,7 +148,7 @@
 {% elif tab == 'media' %}
 <div class="card">
   <h3>Assets</h3>
-  <p class="hint">The <b>display picture</b> is what every list and the catalogue pull.</p>
+  
   {% if media %}
   <div class="mgrid">
     {% for asset in media %}
@@ -190,8 +189,7 @@
 {% elif tab == 'similar' %}
 <div class="card">
   <h3>Suggested automatically</h3>
-  <p class="hint">Matched on category, then price, then metal — live pieces only, with location shown.
-    These are guesses.</p>
+  
   {% if similar %}
   <div class="simgrid">
     {% for entry in similar %}
@@ -211,8 +209,7 @@
     {% endfor %}
   </div>
   {% else %}<div class="empty">Nothing else live in this category.</div>{% endif %}
-  <div class="note">The legacy screen also had a <b>Linked by your team</b> list. The Supabase schema has
-    no table behind it — it was demo data in the mock — so there is nothing to port and nothing was lost.</div>
+  
 </div>
 
 {# ── Marketing ────────────────────────────────────────────────────────── #}
@@ -234,8 +231,7 @@
   {% if caps.edit_bom %}
   <p style="margin-top:12px"><a class="btn sm" href="{% url 'stock:style_edit' piece.style.style_code %}">✎ Edit the design copy</a></p>
   {% endif %}
-  <div class="note">Story and website copy belong to the <b>design</b>, not the piece — every jewel code
-    of this style shares them, which is why they are edited on the style and not here.</div>
+  
 </div>
 
 {# ── History ──────────────────────────────────────────────────────────── #}
@@ -257,8 +253,7 @@
 </div>
 
 <div class="card"><h3>BOM versions</h3>
-  <p class="hint">A repair or a correction forks a version. The superseded one stays, which is what makes
-    the change auditable.</p>
+  
   <table><thead><tr><th>Version</th><th>Reason</th>
     {% if caps.view_cost %}<th class="num">Cost</th>{% endif %}<th>Note</th><th>Current</th></tr></thead><tbody>
     {% for version in bom_versions %}
@@ -283,8 +278,7 @@
 
 {% if caps.view_sale %}
 <div class="card"><h3>Sales</h3>
-  <p class="hint">Price is whatever was actually received on that day — never re-derived from today's
-    gold rate.</p>
+  
   <table><thead><tr><th>Date</th><th class="num">Sold price</th>
     {% if caps.view_margin %}<th class="num">Margin</th>{% endif %}<th>Invoice</th><th>Source</th></tr></thead><tbody>
     {% for entry in sales %}
@@ -349,7 +343,7 @@
           <div style="flex:1"><label class="f" for="new_customer_phone">Phone</label>
             <input id="new_customer_phone" name="new_customer_phone" inputmode="tel" autocomplete="off"></div>
         </div>
-        <p class="hint" style="margin:8px 0 0">Created in the CRM as this sale is recorded, and used for it.</p>
+        
       </fieldset>
 
       <div class="row">

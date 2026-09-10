@@ -9,7 +9,7 @@
     <h3>Identity</h3>
     <div class="row">
       <div>{{ form.jewel_code.label_tag }}{{ form.jewel_code }}{{ form.jewel_code.errors }}
-        {% if form.jewel_code.help_text %}<div class="hint">{{ form.jewel_code.help_text }}</div>{% endif %}</div>
+        {% if form.jewel_code.help_text %}{% endif %}</div>
       <div>{{ form.style.label_tag }}{{ form.style }}{{ form.style.errors }}</div>
       <div>{{ form.sub_category.label_tag }}{{ form.sub_category }}</div>
     </div>
@@ -34,8 +34,6 @@
       <div>{{ form.hallmarked_on.label_tag }}{{ form.hallmarked_on }}</div>
       <div>{{ form.hallmark_centre.label_tag }}{{ form.hallmark_centre }}</div>
     </div>
-    <p class="hint">HUID is engraved per individual article by BIS rule — it is the one identifier that
-      legally cannot live at design level.</p>
 
     <h3 style="margin-top:18px">Availability</h3>
     <div class="row">
@@ -58,9 +56,7 @@
       <a class="btn" href="{% if piece %}{% url 'stock:piece_detail' piece.jewel_code %}{% else %}{% url 'stock:piece_list' %}{% endif %}">Cancel</a>
     </div>
     {% if not piece %}
-    <p class="hint">A new piece is <b>received</b> into its location through the ledger, so it arrives
-      with a movement row rather than appearing somewhere with no history of getting there. Its bill of
-      materials starts empty — add it next, or the piece values at zero.</p>
+    
     {% endif %}
   </form>
 </div>

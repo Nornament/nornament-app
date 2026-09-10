@@ -6,7 +6,6 @@
   <div class="tcard{% if state.unexpected %} warn{% endif %}"><span class="tl">Unexpected</span><span class="tv">{{ state.unexpected }}</span></div>
 </div>
 <div class="cbar"><span style="width:{% if state.expected %}{% widthratio state.found state.expected 100 %}{% else %}0{% endif %}%"></span></div>
-<p class="hint" style="margin:7px 0 0">{% if state.expected %}{{ state.found }} of {{ state.expected }} accounted for{% if state.unexpected %}, plus {{ state.unexpected }} that should not be here{% endif %}.{% else %}Nothing is recorded at {{ state.location }}, so everything scanned reads as unexpected.{% endif %}</p>
 
 <div style="margin-top:18px">
   <h4 style="margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">

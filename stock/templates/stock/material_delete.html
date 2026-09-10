@@ -5,7 +5,6 @@
 
 <div class="card">
   <h3>{{ material.item_code }} <span class="dim" style="font-weight:400">{{ material.item_name }}</span></h3>
-  <p class="hint">{{ material.category.name }} · {{ material.default_uom }}{% if material.metal_id %} · {{ material.metal_id }}{% endif %}</p>
 
   {% if usage.total %}
     <div class="note bad">
@@ -29,17 +28,15 @@
 </div>
 
 <form method="post" class="card">
-  {% csrf_token %}
+  {% csrf_token %}{% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
   {% if usage.total %}
     <h3>Move its references</h3>
-    <p class="hint">Every line above is re-pointed at the material you choose, then this one is
-      deleted. Where the target already prices the same band, the duplicate is dropped rather
-      than written twice; loose stock in the same place is added together.</p>
+    
     <div class="row">
       <input list="reassign-codes" name="reassign_to" class="imp-code" style="width:200px"
              placeholder="item code to use instead" required>
       <button class="btn danger" type="submit">Reassign and delete</button>
-      <a class="btn" href="{% url 'stock:material_list' %}">Cancel</a>
+      <a class="btn" href="{% if next %}{{ next }}{% else %}{% url 'stock:material_list' %}{% endif %}">Cancel</a>
     </div>
     <datalist id="reassign-codes">
       {% for candidate in candidates %}
@@ -49,12 +46,11 @@
       <option value="{{ candidate.item_code }}">{{ candidate.item_name }} · {{ candidate.category.name }}</option>
       {% endfor %}
     </datalist>
-    <p class="hint" style="margin-top:10px">Materials in <b>{{ material.category.name }}</b> are
-      offered first, because a swap inside a category keeps the pricing rules the same.</p>
+    
   {% else %}
     <div class="row">
       <button class="btn danger" type="submit">Delete {{ material.item_code }}</button>
-      <a class="btn" href="{% url 'stock:material_list' %}">Cancel</a>
+      <a class="btn" href="{% if next %}{{ next }}{% else %}{% url 'stock:material_list' %}{% endif %}">Cancel</a>
     </div>
   {% endif %}
 </form>

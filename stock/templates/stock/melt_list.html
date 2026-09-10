@@ -5,8 +5,7 @@
 {% block content %}
 <div class="card">
   <h3>Melt register</h3>
-  <p class="hint">Admin only. A reason of at least 10 characters is mandatory, and melting is terminal —
-    a melted jewel code refuses every further movement forever.</p>
+  
   {% if melts %}
   <table><thead><tr><th>Jewel code</th><th>Reason</th>
     {% if caps.view_cost %}<th class="num">Written off</th>{% endif %}

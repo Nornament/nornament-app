@@ -8,8 +8,7 @@
 <div class="card">
   <div class="spread">
     <div><h3>Lines on v{{ version.version_no|default:1 }}</h3>
-      <p class="hint" style="margin:0">Saving forks a <b>new</b> version. The one you are editing is
-        superseded, never overwritten — which is what makes a correction auditable in the export.</p></div>
+      </div>
   </div>
 
   <form method="post" id="bomform">{% csrf_token %}
@@ -39,11 +38,6 @@
       </tbody>
     </table>
     <button type="button" class="btn sm" id="addrow" style="margin-top:10px">+ Add a line</button>
-
-    <div class="note"><b>Making</b> is charged one of two ways: <b>per gram of net metal weight</b> —
-      the stones are not made, so only the metal lines are in that weight — or as a <b>fixed charge</b>
-      for the piece. The <i>Charged</i> column applies to making lines; every other material is charged
-      on its quantity, and the column is left alone.</div>
 
     <div style="margin-top:16px;max-width:520px">
       <label for="note">Why (goes on the version)</label>

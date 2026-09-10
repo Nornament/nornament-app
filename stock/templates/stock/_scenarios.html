@@ -7,9 +7,7 @@ tab and by the standalone /scenarios/ page, which is the same screen deep-linked
 <div class="card">
   <div class="spread"><div>
     <h3>This piece under every scenario</h3>
-    <p class="hint" style="margin:0;max-width:82ch">The scenarios kept in Settings, priced
-      against this piece as it stands now. Nothing is stored until you put the piece on one.
-      Metal and making repeat down every row because a scenario cannot touch them.</p>
+    
   </div></div>
   <form method="post" action="{% url 'stock:set_piece_scenario' piece.jewel_code %}">{% csrf_token %}
   <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -56,8 +54,6 @@ tab and by the standalone /scenarios/ page, which is the same screen deep-linked
   </tr>
   </tbody></table>
   </form>
-  <div class="note">Metal always passes through at its live rate under every scenario. Only stones move.
-    Nothing is stored until a piece is put on one.</div>
-  {% if show_margin %}<div class="note">Margin is measured against <b>cost today</b>, not the frozen
-    figure — it is what you would make if you replaced the piece at this morning's metal rate.</div>{% endif %}
+  
+  {% if show_margin %}{% endif %}
 </div>

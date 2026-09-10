@@ -221,8 +221,24 @@ class Command(BaseCommand):
         counts = {}
         # clear in reverse dependency order first: deleting a metal while a
         # purity still points at it is a ProtectedError, not a wipe
+        #
+        # Two of these tables are shared with the CRM and must not be emptied.
+        # ``sale`` is one revenue ledger — a CRM purchase is a row in it with
+        # source='CRM' and is what FoN commission is paid off — and
+        # ``media_asset`` carries the CRM's attachments under ``scope``. The
+        # legacy dump has neither: its app.sale is stock-only and its media is
+        # style/piece only, so emptying these would delete CRM rows and put
+        # nothing back. The filters are the ones stock.services already uses,
+        # rather than a second opinion about where the boundary is.
+        from stock.services import STOCK_MEDIA
+
         for _, model, _ in reversed(STOCK_TABLES):
-            model.objects.all().delete()
+            if model is Sale:
+                model.objects.filter(source=Sale.STOCK).delete()
+            elif model is MediaAsset:
+                model.objects.filter(STOCK_MEDIA).delete()
+            else:
+                model.objects.all().delete()
 
         for table, model, _ in STOCK_TABLES:
             if not legacy.table_exists(table):

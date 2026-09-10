@@ -23,7 +23,6 @@
 
   <div class="card imp-card">
     <h3>{{ title }}{% if rows %} <span class="dim imp-count">{{ rows|length }}</span>{% endif %}</h3>
-    <p class="hint">{{ blurb }}</p>
 
     {% if step == 'confirm' %}
       {% if outstanding %}
@@ -42,9 +41,7 @@
       </table>
 
       <h3 style="margin-top:20px">Receive into</h3>
-      <p class="hint">The sheet carries no location. Leave this blank and new pieces stay
-        <b>Not received</b> with no location, which is what the stock ledger expects until
-        someone puts them on a shelf.</p>
+      
       <select name="location" form="commit-form" class="imp-loc">
         <option value="">— not received —</option>
         {% for location in locations %}<option value="{{ location.pk }}">{{ location.name }}</option>{% endfor %}

@@ -3,9 +3,7 @@
 {% block content %}
 <div class="card">
   <h3>Repairs</h3>
-  <p class="hint">A repair is not a note on a record — it forks the bill of materials.
-    Removing a stone and fitting a different one changes what the piece physically contains,
-    so it changes its cost.</p>
+  
   <table><thead><tr><th>Job</th><th>Jewel code</th><th>Fault</th><th>BOM</th><th>Status</th>
     {% if caps.view_cost %}<th class="num">Labour</th>{% endif %}
     <th>Opened</th><th>Closed</th><th class="num">TAT</th><th>Vendor</th><th></th></tr></thead><tbody>

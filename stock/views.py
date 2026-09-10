@@ -822,12 +822,15 @@ def material_edit(request, item_code):
             form.save()
             services.log(request.user, "UPDATE", "material", material.item_code, "edited")
             messages.success(request, f"{material.item_code} saved.")
-            return redirect("stock:material_list")
+            # reached from the Settings materials tab as well as the register,
+            # and landing somewhere the user did not come from is its own bug
+            return _redirect_back(request, "stock:material_list")
     else:
         form = MaterialForm(instance=material)
     return render(request, "stock/material_form.html", {
         "nav": "settings",
         "material": material,
+        "next": request.GET.get("next") or "",
         "form": form,
         "usage": services.material_usage(material),
     })
@@ -846,6 +849,13 @@ def material_delete(request, item_code):
     material = get_object_or_404(Material, item_code=item_code)
     usage = services.material_usage(material)
 
+    # the screen's own error round-trips have to carry the return path too, or
+    # a refused delete quietly forgets where the user came from
+    here = reverse("stock:material_delete", kwargs={"item_code": item_code})
+    back_to = request.POST.get("next") or request.GET.get("next") or ""
+    if back_to:
+        here = f"{here}?{urlencode({'next': back_to})}"
+
     if request.method == "POST":
         target = None
         wanted = (request.POST.get("reassign_to") or "").strip()
@@ -853,12 +863,12 @@ def material_delete(request, item_code):
             target = Material.objects.filter(item_code=wanted).first()
             if target is None:
                 messages.error(request, f"No material with the code {wanted!r}.")
-                return redirect("stock:material_delete", item_code=item_code)
+                return redirect(here)
         try:
             moved = services.delete_material(request.user, material, reassign_to=target)
         except services.ServiceError as error:
             messages.error(request, str(error))
-            return redirect("stock:material_delete", item_code=item_code)
+            return redirect(here)
         if target:
             messages.success(
                 request,
@@ -866,11 +876,12 @@ def material_delete(request, item_code):
             )
         else:
             messages.success(request, f"{item_code} deleted.")
-        return redirect("stock:material_list")
+        return _redirect_back(request, "stock:material_list")
 
     return render(request, "stock/material_delete.html", {
         "nav": "settings",
         "material": material,
+        "next": back_to,
         "usage": usage,
         "uses": [(label, usage[key]) for key, label, _ in services.MATERIAL_USES],
         "candidates": Material.objects.filter(category=material.category)
@@ -1801,7 +1812,32 @@ def _chart_rail(charts):
     return charts
 
 
-def _chart_groups(user, chart, lines):
+def _metal_courtesy_rows(user, chart, priced, query="", picked=""):
+    """Metal materials the chart says nothing about, shown so the group reads whole.
+
+    These are not chart rows — costing derives a metal rate from the *piece's*
+    purity — so the cell carries that metal's live per-gram figure and typing
+    one turns it into an override for that material alone.
+    """
+    if picked and picked != "METAL":
+        return []
+    if not (user.has_perm(VIEW_COST) or user.has_perm(VIEW_SALE)):
+        return []
+    materials = Material.objects.filter(category="METAL", is_active=True).select_related("metal")
+    if query:
+        materials = materials.filter(Q(item_code__icontains=query) | Q(item_name__icontains=query))
+    return [
+        SimpleNamespace(
+            pk=None, material=material, size_band="", cost_rate=None, sale_rate=None,
+            rate_uom="GM", multiple=None, needs_sale=False, history=[],
+            live_rate=material.metal.pure_rate if material.metal else None,
+        )
+        for material in materials
+        if (material.pk, "") not in priced
+    ]
+
+
+def _chart_groups(user, chart, lines, query="", picked=""):
     """The chart's rates, grouped by material category the way the sheet reads.
 
     The Metal group is the exception. A metal material with no line on the chart
@@ -1817,19 +1853,9 @@ def _chart_groups(user, chart, lines):
         line.needs_sale = line.sale_rate is None
         by_category.setdefault(line.material.category_id, []).append(line)
 
-    # every metal material, so the group reads as the whole metal picture
-    if user.has_perm(VIEW_COST) or user.has_perm(VIEW_SALE):
-        priced = {(line.material_id, line.size_band) for line in lines}
-        for material in Material.objects.filter(category="METAL", is_active=True).select_related("metal"):
-            if (material.pk, "") in priced:
-                continue
-            by_category.setdefault("METAL", []).append(
-                SimpleNamespace(
-                    pk=None, material=material, size_band="", cost_rate=None, sale_rate=None,
-                    rate_uom="GM", multiple=None, needs_sale=False, history=[],
-                    live_rate=material.metal.pure_rate if material.metal else None,
-                )
-            )
+    priced = {(line.material_id, line.size_band) for line in lines}
+    for row in _metal_courtesy_rows(user, chart, priced, query, picked):
+        by_category.setdefault("METAL", []).append(row)
 
     order = {category.pk: (category.sort_order, category.name) for category in MaterialCategory.objects.all()}
     return [
@@ -1843,25 +1869,45 @@ def _chart_tab(request):
     charts = _chart_rail(list(RateChart.objects.order_by("-is_default", "is_locked", "name", "-version_no")))
     chart_id = request.GET.get("chart")
     chart = next((c for c in charts if str(c.pk) == chart_id), None) or next(iter(charts), None)
-    lines = (
-        list(
-            RateChartLine.objects.filter(chart=chart)
-            .select_related("material", "material__metal")
-            .order_by("material__item_code", "size_band")
-        )
-        if chart
-        else []
+    query = (request.GET.get("q") or "").strip()
+    picked = request.GET.get("cat") or ""
+    rows = (
+        RateChartLine.objects.filter(chart=chart).select_related("material", "material__metal") if chart
+        else RateChartLine.objects.none()
     )
+    # the pills count the chart, not the filtered view, so picking one never
+    # changes the other numbers under it — the materials tab reads the same way
+    counts = {
+        row["material__category"]: row["n"]
+        for row in rows.values("material__category").annotate(n=Count("pk"))
+    }
+    if query:
+        rows = rows.filter(Q(material__item_code__icontains=query) | Q(material__item_name__icontains=query))
+    if picked:
+        rows = rows.filter(material__category=picked)
+    lines = list(rows.order_by("material__item_code", "size_band"))
     # the edit history is the audit log, read back — a second history table
     # would be a second thing to keep honest. It is read once and shared:
     # the per-row history and the panel below cannot disagree about a rate.
     entries = _chart_log_entries(request.user, chart, lines) if chart else []
     for line in lines:
         line.history = [entry for entry in entries if entry.line is line]
+    if chart:
+        # the metal rows are not chart lines, so the pill counts them separately
+        # or Metal never appears even though the table is full of it
+        priced = set(RateChartLine.objects.filter(chart=chart).values_list("material_id", "size_band"))
+        counts["METAL"] = counts.get("METAL", 0) + len(_metal_courtesy_rows(request.user, chart, priced))
+    categories = [c for c in MaterialCategory.objects.all() if counts.get(c.pk)]
+    for category in categories:
+        category.n, category.selected = counts.get(category.pk, 0), category.pk == picked
     return {
         "charts": charts,
         "chart": chart,
-        "groups": _chart_groups(request.user, chart, lines) if chart else [],
+        "q": query,
+        "cat": picked,
+        "line_categories": categories,
+        "line_total": sum(counts.values()),
+        "groups": _chart_groups(request.user, chart, lines, query, picked) if chart else [],
         "chart_log": Paginator(entries, 30).get_page(request.GET.get("page")),
         "chart_form": RateChartForm(),
         "line_form": RateChartLineForm(initial={"chart": chart}) if chart else None,
@@ -2189,7 +2235,10 @@ def _settings_post(request, tab):
     if tab not in forms:
         raise PermissionDenied("That tab has nothing to save.")
     form_class, model = forms[tab]
-    back = f"{reverse('stock:settings')}?tab={tab}"
+    # the filter the user was looking at is part of where they were: dropping
+    # q and cat on save lands them on a list they did not ask for
+    kept = {key: request.GET[key] for key in ("q", "cat") if request.GET.get(key)}
+    back = f"{reverse('stock:settings')}?{urlencode({'tab': tab} | kept)}"
 
     retire = request.POST.get("retire")
     if retire:

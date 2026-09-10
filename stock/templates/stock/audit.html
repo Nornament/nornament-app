@@ -5,8 +5,7 @@
 <div class="card">
   <div class="spread">
     <div><h3>Audit log</h3>
-      <p class="hint" style="margin:0">Append only. Nothing here can be edited or deleted from the
-        interface — including by you.</p></div>
+      </div>
     <form method="get" class="row">
       <select name="action" onchange="this.form.submit()">
         <option value="">Every action</option>
@@ -29,13 +28,9 @@
     {% endfor %}
   </tbody></table>
   {% if page.has_other_pages %}
-  <p class="hint">Page {{ page.number }} of {{ page.paginator.num_pages }} ·
-    {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&amp;action={{ action|urlencode }}">Previous</a>{% endif %}
-    {% if page.has_next %}<a href="?page={{ page.next_page_number }}&amp;action={{ action|urlencode }}">Next</a>{% endif %}</p>
+  
   {% endif %}
   {% else %}<div class="empty">Nothing logged yet.</div>{% endif %}
-  <div class="note"><b>“Who downloaded” on its own is close to useless.</b> Knowing that someone exported
-    at 3pm does not tell you whether they took five rows or your entire cost book — so an export row
-    records the row count and whether cost and margin columns were in the file.</div>
+  
 </div>
 {% endblock %}

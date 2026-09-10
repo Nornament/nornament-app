@@ -6,10 +6,7 @@ the standalone /bom/ page, which is the same screen deep-linked.
 {% if breakup and groups %}
 <div class="card">
   <h3>Sale breakup</h3>
-  <p class="hint">What the customer is shown. Rolled up by material, {% if caps.view_cost and money == "sale" %}no cost figures — {% endif %}this is
-    the {% if money == "sale" %}sale{% else %}cost{% endif %} side only.{% if money == "sale" %}
-    Priced on {% if active_scenario %}<b>{{ active_scenario.name }}</b>{% else %}<b>the rates on the piece's own
-    lines</b>{% endif %} — whatever the <a href="?tab=pricing">Pricing tab</a> has in use.{% endif %}</p>
+  
   <div class="breakup">
     <div class="brow bhead"><span>Component</span><span class="n">Pcs</span>
       <span class="n">Weight</span><span class="n">Amount</span></div>
@@ -23,12 +20,8 @@ the standalone /bom/ page, which is the same screen deep-linked.
       <span class="n">{% if piece.measured_gross_wt_gm %}{{ piece.measured_gross_wt_gm|floatformat:3 }} g gross{% endif %}</span>
       <span class="n">{{ breakup_total|inr }}</span></div>
   </div>
-  {% if derivation %}<div class="note">Gold rate is derived from the pure rate, never typed in:
-    <b>₹{{ derivation.pure_rate|floatformat:0 }}/g pure {{ derivation.metal|lower }}
-    × {{ derivation.sale_pct|floatformat:1 }}% ({{ piece.metal_purity }} sale purity)
-    = ₹{{ derivation.alloy_rate|floatformat:0 }}/g</b>.</div>{% endif %}
-  {% if version.net_metal_wt_gm %}<div class="note">Charged on <b>{{ version.net_metal_wt_gm|floatformat:3 }} g net metal</b>;
-    the making charge follows the same weight. Gross weight includes the stones, so it is never the basis for making.</div>{% endif %}
+  {% if derivation %}{% endif %}
+  {% if version.net_metal_wt_gm %}{% endif %}
 </div>
 {% endif %}
 
@@ -36,7 +29,7 @@ the standalone /bom/ page, which is the same screen deep-linked.
   <div class="spread" style="margin-bottom:10px">
     <div><h3>Full bill of materials — version {{ version.version_no }}
       <span class="chip {% if version.reason == 'REPAIR' %}c-ser{% else %}c-neutral{% endif %}">{{ version.reason }}</span></h3>
-      <p class="hint" style="margin:0">{{ version.note|default:"Line-level detail behind the breakup above." }}</p></div>
+      </div>
     <div class="row" style="gap:8px">
       {% if caps.edit_bom %}<a class="btn sm" href="{% url 'stock:piece_bom_edit' piece.jewel_code %}">✎ Edit BOM</a>{% endif %}
     </div>
@@ -103,10 +96,6 @@ the standalone /bom/ page, which is the same screen deep-linked.
     </tbody>
   </table>
   </div>
-  {% if caps.view_cost %}<div class="note">Only the <b>metal</b> rows differ between the two cost columns.
-    Everything else carries the rate written on its line and does not drift.
-    The <b>Chart</b> column is what the default rate chart says today; a line marked
-    <b>off chart</b> carries its own rate deliberately.</div>{% endif %}
-  {% if not caps.view_cost and not caps.view_sale %}<div class="note">Your role sees <b>what is in the piece</b>
-    but no rates or amounts — production needs the material list, not the pricing.</div>{% endif %}
+  {% if caps.view_cost %}{% endif %}
+  {% if not caps.view_cost and not caps.view_sale %}{% endif %}
 </div>

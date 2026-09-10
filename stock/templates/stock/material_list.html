@@ -4,9 +4,7 @@
 <div class="card">
   <div class="spread" style="margin-bottom:4px">
     <div><h3>Materials</h3>
-      <p class="hint" style="margin:0;max-width:76ch">Every item code that has appeared on a bill of
-        materials. A code arriving from an import lands in <b>Other Materials</b> and is flagged —
-        never guessed into a category that would change how it prices.</p></div>
+      </div>
   </div>
   <div class="fchips" style="margin:12px 0 2px">
     <a class="fchip" aria-pressed="{% if not selected_cat %}true{% else %}false{% endif %}" href="{% url 'stock:material_list' %}{% if q %}?q={{ q|urlencode }}{% endif %}">All</a>
