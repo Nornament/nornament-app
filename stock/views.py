@@ -1649,7 +1649,8 @@ def import_review(request, batch_id):
 def import_step(request, batch_id, step):
     """One set of the review. GET shows it, POST files the answers and moves on."""
     batch = get_object_or_404(ImportBatch, pk=batch_id)
-    plan = analyse_import.analyse(ivy.parse(_batch_workbook(batch)))
+    pieces = ivy.parse(_batch_workbook(batch))
+    plan = analyse_import.analyse(pieces)
     if not batch.decisions:
         batch.decisions = analyse_import.default_decisions(plan)
 
@@ -1684,6 +1685,9 @@ def import_step(request, batch_id, step):
         (label, plan.counts[name]) for name, label, _ in steps
         if name != "confirm" and name in plan.counts
     ]
+    # a handover file lists the same piece twice; say so rather than let the
+    # row count quietly disagree with the spreadsheet
+    superseded = sum(p.superseded for p in pieces)
     return render(request, "stock/import_step.html", {
         "nav": "data",
         "batch": batch,
@@ -1702,6 +1706,7 @@ def import_step(request, batch_id, step):
         "counts": plan.counts,
         "outstanding": outstanding,
         "summary": summary,
+        "superseded": superseded,
         "materials": Material.objects.order_by("item_code"),
         "material_categories": MaterialCategory.objects.order_by("sort_order"),
         "locations": Location.objects.filter(is_active=True),

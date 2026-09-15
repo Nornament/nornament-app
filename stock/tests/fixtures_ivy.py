@@ -124,3 +124,52 @@ def build_workbook(products=None):
     book.save(stream)
     stream.seek(0)
     return stream
+
+
+#: Row 3 of the handover export the client sent in September: "Image Name" was
+#: inserted at E and "Location Name" dropped, so Category and Sub Category sit
+#: one column to the right and L carries a certificate number. Everything from
+#: "Inw Date" on is identical, which is why only the header block moved.
+HANDOVER_HEADERS = (
+    HEADERS[:4]
+    + ["Image Name", "Category", "Sub Category"]
+    + ["Inw Date", "Qty", "Item Pieces", "Manuf. Name", "CertificateNo"]
+    + HEADERS[12:]
+)
+
+
+def build_handover(products=None):
+    """The same three products, written in the handover layout."""
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "Sheet1"
+    sheet["A1"] = "IVY Karigar Private Limited"
+    for index, name in enumerate(HANDOVER_HEADERS, start=1):
+        sheet.cell(row=3, column=index, value=name)
+
+    row = 4
+    for header, block in (THREE_PRODUCTS if products is None else products):
+        for offset, extras in enumerate(block):
+            cells = dict(extras)
+            if offset == 0:
+                # shift the header cells that moved: E..G become F..G with
+                # Image Name taking E, and the rest of the block is unchanged
+                moved = {}
+                for column, value in header.items():
+                    if column == 5:            # Category -> F
+                        moved[6] = value
+                    elif column == 6:          # Sub Category -> G
+                        moved[7] = value
+                    else:
+                        moved[column] = value
+                moved[5] = header.get(3)       # Image Name repeats the style code
+                cells.update(moved)
+            for column, value in cells.items():
+                sheet.cell(row=row, column=column, value=value)
+            row += 1
+    sheet.cell(row=row + 1, column=1, value="[admin] : 27:07:2026 11:18")
+
+    stream = io.BytesIO()
+    book.save(stream)
+    stream.seek(0)
+    return stream

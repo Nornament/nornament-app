@@ -188,3 +188,97 @@ def test_metal_lines_are_by_qty_never_by_net_metal_weight():
 def test_charge_lines_are_flat_so_the_rate_is_the_amount():
     basis, uom = guess.bom_basis_and_uom(_line("charge", "EC"), "LABOUR")
     assert basis == ChargeBasis.FLAT
+
+
+# ── the handover layout ──────────────────────────────────────────────────
+from stock.tests.fixtures_ivy import build_handover
+
+
+def test_the_handover_layout_is_accepted():
+    """Its header block is shifted, but it is still a stock export."""
+    assert ivy.header_problems(build_handover()) == []
+
+
+def test_category_is_read_by_name_not_by_column():
+    """The bug this guards: E became 'Image Name', so Category moved to F.
+
+    Read positionally, every piece took the style code as its category and the
+    real category as its sub-category — which creates one junk Category per
+    style and files nothing where it belongs.
+    """
+    pieces = ivy.parse(build_handover())
+    by_code = {p.jewel_code: p for p in pieces}
+    assert by_code["24P00088"].category == "Earring"
+    assert by_code["24P00095"].category == "Ring"
+    assert "RG" not in by_code["24P00095"].category
+    assert by_code["24P00088"].sub_category == "STUDS"
+
+
+def test_both_layouts_yield_the_same_pieces():
+    """The only difference between the two files is where the columns sit."""
+    old = {(p.jewel_code, p.category, p.sub_category, len(p.lines))
+           for p in ivy.parse(build_workbook())}
+    new = {(p.jewel_code, p.category, p.sub_category, len(p.lines))
+           for p in ivy.parse(build_handover())}
+    assert old == new
+
+
+def test_a_workbook_missing_a_required_column_is_refused():
+    from openpyxl import load_workbook
+    import io
+
+    book = load_workbook(build_handover())
+    book["Sheet1"]["D3"] = "Something Else"      # JewelCode gone
+    broken = io.BytesIO()
+    book.save(broken)
+    broken.seek(0)
+    problems = ivy.header_problems(broken)
+    assert problems and "JewelCode" in problems[0]
+
+
+# ── the same piece listed twice ──────────────────────────────────────────
+def _twice(first_date, second_date):
+    """One jewel code as two blocks, inwarded on the given dates."""
+    from stock.tests.fixtures_ivy import THREE_PRODUCTS
+
+    header, block = THREE_PRODUCTS[0]
+    return [
+        ({**header, 8: first_date, 2: 1}, block),
+        ({**header, 8: second_date, 2: 2}, block),
+    ]
+
+
+def test_the_later_inward_date_wins():
+    """A handover file lists a piece again each time it moves."""
+    from datetime import datetime
+
+    pieces = ivy.parse(build_workbook(
+        products=_twice(datetime(2026, 5, 9), datetime(2026, 7, 25))
+    ))
+    assert len(pieces) == 1, "two blocks for one jewel code must fold into one"
+    assert pieces[0].inw_date.month == 7
+    assert pieces[0].superseded == 1
+
+
+def test_the_later_date_wins_whichever_order_it_appears_in():
+    from datetime import datetime
+
+    pieces = ivy.parse(build_workbook(
+        products=_twice(datetime(2026, 7, 25), datetime(2026, 5, 9))
+    ))
+    assert len(pieces) == 1
+    assert pieces[0].inw_date.month == 7, "order in the file must not decide it"
+
+
+def test_a_row_with_no_date_never_beats_one_that_has_a_date():
+    from datetime import datetime
+
+    pieces = ivy.parse(build_workbook(products=_twice(datetime(2026, 5, 9), None)))
+    assert len(pieces) == 1
+    assert pieces[0].inw_date is not None
+
+
+def test_a_file_with_no_duplicates_folds_nothing():
+    pieces = ivy.parse(build_workbook())
+    assert len(pieces) == 3
+    assert all(p.superseded == 0 for p in pieces)

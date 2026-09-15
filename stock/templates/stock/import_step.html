@@ -23,6 +23,10 @@
 
   <div class="card imp-card">
     <h3>{{ title }}{% if rows %} <span class="dim imp-count">{{ rows|length }}</span>{% endif %}</h3>
+    {% if superseded and step == 'pieces' or superseded and step == 'confirm' %}
+    <div class="note"><b>{{ superseded }} row{{ superseded|pluralize }} superseded.</b>
+      Some jewel codes appear twice at different inward dates; the most recent was kept.</div>
+    {% endif %}
 
     {% if step == 'confirm' %}
       {% if outstanding %}
