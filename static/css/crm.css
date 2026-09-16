@@ -361,3 +361,19 @@ a{text-decoration:none}
   .print-foot{font-size:10px;color:#777;margin-top:20px}
   @page{margin:0}
 }
+
+/* ── tables with no mobile variant ────────────────────────────────────────
+   The list screens ship a MobRow layout and CSS picks (.only-mobile above).
+   The rest — dashboard, customer and friend detail, settings — are read-only
+   tables that were widening the page instead of scrolling, which put a
+   horizontal bar on the body and pushed the bottom nav off-centre. */
+@media(max-width:768px){
+  .card:has(table),.sc:has(table){overflow-x:auto}
+  .ph{flex-wrap:wrap;gap:8px}
+  .ph-t{min-width:0;overflow-wrap:anywhere}
+  /* the page header's action cluster, which is the one .fl that reliably
+     overflows — .fl is a bare display:flex utility and wrapping all of them
+     would break rows that mean to stay on one line */
+  .ph .fl{flex-wrap:wrap;justify-content:flex-end}
+  .doc-grid{gap:8px}
+}

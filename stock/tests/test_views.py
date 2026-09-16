@@ -402,3 +402,16 @@ def test_a_bom_remark_is_saved_and_shown_on_the_breakup(client, admin_user_, rec
     assert "Centre stone re-measured" in page
     # and it comes back into the editor rather than being wiped on the next save
     assert "Centre stone re-measured" in client.get(edit).content.decode()
+
+
+def test_the_shell_ships_the_mobile_nav_drawer(client, admin_user_, received_piece):
+    """Below 860px the sidebar is off-canvas and the burger is the only way in.
+
+    Lose any one of these three and the CSS still renders — a phone just has
+    no navigation at all, silently.
+    """
+    client.force_login(admin_user_)
+    page = client.get(reverse("stock:piece_list")).content.decode()
+    assert 'name="viewport"' in page
+    assert 'class="burger"' in page and 'aria-controls="sidenav"' in page
+    assert 'class="navscrim"' in page and 'id="sidenav"' in page

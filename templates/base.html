@@ -25,7 +25,9 @@ did not look alike.
 {% include "_preloader.html" %}
 {% if user.is_authenticated %}
 <div class="app">
-  <aside class="side">
+  {# The sidebar is a drawer below 860px; the scrim is its backdrop and its dismiss. #}
+  <div class="navscrim" hidden></div>
+  <aside class="side" id="sidenav">
     <div class="brand">
       <img class="brandimg" src="{% static 'img/logo.png' %}" alt="Nornament">
     </div>
@@ -40,6 +42,8 @@ did not look alike.
 
   <div class="main">
     <div class="top">
+      <button class="burger" type="button" aria-label="Show navigation"
+              aria-controls="sidenav" aria-expanded="false">☰</button>
       <h2>{% block heading %}{% endblock %}</h2>
       {% if caps.view_sale or caps.view_cost %}
       {% comment %}The ticker is one input per metal: the pure rate, from which
@@ -82,5 +86,29 @@ did not look alike.
   </div>
 </div>
 {% endif %}
+<script>
+/* The nav drawer. Below 860px the sidebar is off-canvas and this is the only
+   way back to it, so it closes on Esc, on the scrim, and on picking a
+   destination — a drawer still open over the page you just asked for is the
+   one thing people hate about them. */
+(function () {
+  var burger = document.querySelector('.burger');
+  var scrim = document.querySelector('.navscrim');
+  if (!burger || !scrim) return;
+  function show(open) {
+    document.body.classList.toggle('navopen', open);
+    burger.setAttribute('aria-expanded', open);
+    scrim.hidden = !open;
+  }
+  burger.addEventListener('click', function () {
+    show(!document.body.classList.contains('navopen'));
+  });
+  scrim.addEventListener('click', function () { show(false); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') show(false); });
+  document.getElementById('sidenav').addEventListener('click', function (e) {
+    if (e.target.closest('a')) show(false);
+  });
+})();
+</script>
 </body>
 </html>

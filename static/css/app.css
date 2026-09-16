@@ -78,7 +78,7 @@ textarea{width:100%;resize:vertical;line-height:1.5}
 .card h3{margin:0 0 3px;font-size:14.5px;letter-spacing:-.005em}
 .card .hint{color:var(--muted);font-size:12.5px;margin:0 0 14px}
 .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-.spread{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.spread{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
 
 /* stat tiles */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:12px;margin-bottom:16px}
@@ -127,8 +127,10 @@ td.code{font-family:var(--mono);font-size:13px;font-weight:600}
   font-size:12px;font-style:italic}
 
 /* tabs */
-.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:16px}
-.tabs button,.tabs a{display:inline-block;background:none;border:0;border-bottom:2px solid transparent;
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:16px;
+  overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button,.tabs a{flex:none;white-space:nowrap;display:inline-block;background:none;border:0;border-bottom:2px solid transparent;
   padding:9px 13px;color:var(--ink-2);font-size:13.5px;margin-bottom:-1px;text-decoration:none}
 .tabs button[aria-selected="true"],.tabs a[aria-selected="true"]{color:var(--brand);border-bottom-color:var(--brand);font-weight:600}
 .tabs a:hover{color:var(--ink)}
@@ -150,7 +152,7 @@ dialog.modal::backdrop{background:rgba(11,11,11,.42)}
 /* the legacy bolded a cost-today cell only where metal actually moved */
 .bomtab td.moved{font-weight:600;color:var(--brand)}
 .modal footer{padding:14px 22px 18px;border-top:1px solid var(--line);
-  display:flex;justify-content:flex-end;gap:9px}
+  display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap}
 label.f{display:block;font-size:12px;color:var(--ink-2);margin:0 0 5px;font-weight:600}
 .field{margin-bottom:15px}
 
@@ -206,7 +208,7 @@ label.f{display:block;font-size:12px;color:var(--ink-2);margin:0 0 5px;font-weig
   text-overflow:ellipsis;line-height:1.35}
 .mmeta{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis}
-.hero{display:flex;gap:16px;align-items:center}
+.hero{display:flex;gap:16px;align-items:center;flex-wrap:wrap;min-width:0}
 
 
 .ticker{display:flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--rule);
@@ -225,7 +227,7 @@ label.f{display:block;font-size:12px;color:var(--ink-2);margin:0 0 5px;font-weig
 .biorow{display:flex;justify-content:space-between;gap:14px;padding:7px 0;
   border-bottom:1px solid var(--line);font-size:13.5px}
 .biorow dt{color:var(--muted);flex:none}
-.biorow dd{margin:0;text-align:right;font-weight:500}
+.biorow dd{margin:0;text-align:right;font-weight:500;min-width:0;overflow-wrap:anywhere}
 .biorow dd.mono{font-family:var(--mono);font-size:12.5px}
 .tagrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
 .tagchip{background:var(--surface-2);border:1px solid var(--line);border-radius:99px;
@@ -389,7 +391,6 @@ input.inplace,select.inplace{width:auto;min-width:110px;max-width:230px;padding:
 .breakup .btot{background:var(--brand-soft);font-weight:600}
 .breakup .n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px}
 
-@media(max-width:860px){.app{grid-template-columns:1fr}.side{position:static;height:auto}}
 
 /* ── Add-a-piece form ──────────────────────────────────────────────────────
    The old version was one flat 3-column grid of twelve boxes with no labels
@@ -408,6 +409,10 @@ input.inplace,select.inplace{width:auto;min-width:110px;max-width:230px;padding:
         font-size:12px;color:var(--muted);margin-top:5px;max-width:74ch;line-height:1.5}
 .npgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 16px;margin-bottom:12px}
 .npgrid.npgrid2{grid-template-columns:repeat(2,minmax(0,1fr))}
+/* the scenario form's field pairs — a class rather than an inline style, so a
+   media query can collapse it to one column */
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 26px;max-width:760px}
+@media(max-width:620px){.grid2{grid-template-columns:1fr}}
 .npf input[readonly]{opacity:.62;cursor:not-allowed}
 .npgrid:last-child{margin-bottom:0}
 .npf input:not([type=checkbox]),.npf select{width:100%;box-sizing:border-box}
@@ -885,3 +890,102 @@ form.tagchip{display:inline-flex;align-items:center;gap:5px}
 .pin .art{transition:transform .4s ease;min-height:110px;object-fit:cover}
 .pin:hover .art{transform:scale(1.035)}
 @media (prefers-reduced-motion:reduce){.pin:hover .art{transform:none}}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Responsive
+   The shell is a two-column grid built for a desktop. Below 860px the
+   sidebar leaves the flow entirely and becomes a drawer — it used to just
+   un-stick and stack, which meant scrolling past twelve nav links to reach
+   the page you had asked for. Everything else here is the same screen with
+   less room: nothing is hidden that carries information.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* the burger only exists on small screens; the drawer only moves there */
+.burger{display:none;flex:none;background:var(--surface);border:1px solid var(--rule);
+  border-radius:8px;padding:5px 11px;font-size:16px;line-height:1.2;color:var(--ink-2)}
+.burger:hover{background:var(--surface-2);color:var(--ink)}
+.navscrim{display:none}
+
+@media (max-width:860px){
+  .app{grid-template-columns:1fr}
+  .burger{display:inline-block}
+
+  .side{position:fixed;top:0;left:0;bottom:0;z-index:50;width:min(280px,84vw);
+    height:100dvh;transform:translateX(-100%);transition:transform .22s ease;
+    box-shadow:var(--shadow)}
+  body.navopen .side{transform:none}
+  .navscrim{display:block;position:fixed;inset:0;z-index:45;
+    background:rgba(11,11,11,.42);backdrop-filter:blur(2px)}
+  .navscrim[hidden]{display:none}
+  body.navopen{overflow:hidden}
+  /* a 44px target: the drawer is reached by thumb here, not by cursor */
+  .nav a,.nav button{padding:11px 12px}
+
+  .top{padding:10px 14px;gap:9px;flex-wrap:wrap}
+  .top h2{font-size:15.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* the rate ticker is two number fields and will not share a line with the
+     title on a phone — it takes its own, and scrolls if even that is tight */
+  .ticker{order:9;flex-basis:100%;overflow-x:auto;scrollbar-width:none;
+    justify-content:flex-start}
+  .ticker::-webkit-scrollbar{display:none}
+  .ticker>*{flex:none}
+  .msep{margin:0 8px}
+
+  .body{padding:16px 14px 56px}
+
+  /* the filter bar is four rows of chips; pinned to a phone it would leave
+     the list a letterbox, and its sticky offset assumes a one-line topbar */
+  .filterbar{position:static;padding:12px 0 10px;margin-bottom:14px}
+
+  /* a table is the one thing that genuinely cannot reflow: nine columns of
+     jewel data are nine columns. It scrolls inside its card instead of
+     stretching the page, which is what put a horizontal bar on the body. */
+  .card:has(table){overflow-x:auto}
+  th,td{padding:7px 8px}
+  .card{padding:14px 15px}
+
+  .chart-rail{width:100%}
+  .toast{left:14px;right:14px;max-width:none}
+
+  /* two tiles across beats one full-width tile and a lot of scrolling */
+  .mgrid,.dgrid{grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:10px}
+  .mcard,.madd{height:210px}
+  .mshot{height:118px}
+  .dcard .thart{height:120px}
+
+  /* 16px is the threshold below which iOS zooms the page on focus, and the
+     zoom does not undo itself when the field is left.
+     ponytail: the dense grid editors — .in, .rin, the .imp-* cells — name
+     their own size on a class and keep it, because 16px in a fourteen-column
+     rate table is a table nobody can read. They scroll inside their card and
+     zoom on focus; give them a mobile layout of their own if that bites. */
+  .body input,.body select,.body textarea,.top input,.gate input{font-size:16px}
+  /* a comfortable target for a thumb, but only on things that are buttons in
+     their own right — the pencil in an inline edit and the × on a chip are
+     not, and 38px would break the line they sit on */
+  .btn:not(.sm){min-height:38px}
+}
+
+@media (max-width:620px){
+  .videoblock{flex-direction:column}
+  .vidart{width:100%;height:190px}
+  .vidart .thart{object-fit:cover}
+  /* the label above its chips rather than beside them: 74px of gutter is a
+     fifth of the screen */
+  .flabel{width:auto;flex-basis:100%;margin-bottom:2px}
+  .frow{align-items:center}
+  .breakup .brow{padding:9px 10px;gap:6px;font-size:12.5px}
+  .breakup .n{font-size:11.5px}
+  .modal header,.modal .content,.modal footer{padding-left:16px;padding-right:16px}
+  .empty{padding:26px 14px}
+  .kpi .val,.stat .value{font-size:25px}
+}
+
+@media (max-width:420px){
+  .body{padding:14px 11px 52px}
+  .card{padding:12px 13px}
+  table{font-size:12.5px}
+  th,td{padding:6px 7px}
+  .tabs button,.tabs a{padding:9px 10px;font-size:13px}
+  .fchip{padding:5px 12px}
+}
