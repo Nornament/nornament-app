@@ -40,7 +40,7 @@
         <span class="dim" style="font-size:11px">· cannot be changed</span></dd></div>
       <div class="biorow"><dt>Style / design no</dt><dd class="mono">{% include "stock/_inline.html" with name="style" field=inline.style value=piece.style.style_code %}</dd></div>
       <div class="biorow"><dt>Design name</dt><dd>{{ row.design_name|default:"—" }}
-        {% if caps.edit_bom %}<a class="dim" style="font-size:11px" href="{% url 'stock:style_edit' piece.style.style_code %}">· on the design</a>{% endif %}</dd></div>
+        {% if caps.edit_bom %}<a class="dim" style="font-size:11px" href="{% url 'stock:style_edit' piece.style.style_code %}?next={{ request.get_full_path|urlencode }}">· on the design</a>{% endif %}</dd></div>
       <div class="biorow"><dt>Category</dt><dd>{{ row.category|default:"—" }}</dd></div>
       <div class="biorow"><dt>Collection</dt><dd>{{ row.collection|default:"—" }}</dd></div>
       <div class="biorow"><dt>Sub category</dt><dd>{% include "stock/_inline.html" with name="sub_category" field=inline.sub_category value=row.sub_category %}</dd></div>
@@ -297,7 +297,7 @@
   </div>
 
   {% if caps.edit_bom %}
-  <p style="margin-top:14px"><a class="btn sm" href="{% url 'stock:style_edit' piece.style.style_code %}">✎ Edit the design copy</a></p>
+  <p style="margin-top:14px"><a class="btn sm" href="{% url 'stock:style_edit' piece.style.style_code %}?next={{ request.get_full_path|urlencode }}">✎ Edit the design copy</a></p>
   {% endif %}
 </div>
 

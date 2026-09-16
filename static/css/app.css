@@ -467,6 +467,15 @@ input.inplace,select.inplace{width:auto;min-width:110px;max-width:230px;padding:
 .vmeta{font-size:13px;min-width:0}
 .vmeta b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:52ch}
 .vmeta .dim{font-size:11.5px}
+/* the viewer is a dialog rather than the legacy scrim, so it carries its
+   own edge-to-edge box: no content padding, and a stage the iframe can
+   fill — an <iframe> has no intrinsic height to lay itself out from. */
+dialog#viewerdlg{padding:0;max-width:1120px;width:94vw}
+#viewerdlg .vwrap{margin:0}
+#viewerdlg .vstage iframe{width:100%;height:74vh;border:0;background:#fff}
+/* .vstage sets display:block on its img and video, which outranks the UA
+   rule for [hidden] — without this the hidden <video> sits on the photo. */
+.vstage [hidden]{display:none}
 
 /* a real photograph standing in for the generated artwork */
 .jart{display:block;width:100%;height:auto;background:var(--surface-2)}

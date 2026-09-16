@@ -19,6 +19,7 @@ did not look alike.
     (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : '');</script>
   <script src="{% static 'vendor/htmx.min.js' %}" defer></script>
   <script src="{% static 'js/crm-upload.js' %}" defer></script>
+  <script src="{% static 'js/media-viewer.js' %}" defer></script>
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
 {% include "_preloader.html" %}

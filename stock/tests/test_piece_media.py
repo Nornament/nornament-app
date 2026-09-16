@@ -210,6 +210,58 @@ def test_a_stale_talking_point_index_is_refused_rather_than_popping_the_wrong_li
     assert received_piece.style.talking_points == "only one"
 
 
+def test_the_design_copy_editor_comes_back_to_wherever_it_was_opened_from(
+    client, received_piece, admin_user_
+):
+    """Opened from a piece, Save and Cancel belong on that piece, not the library."""
+    client.force_login(admin_user_)
+    marketing = reverse("stock:piece_detail", kwargs={"jewel_code": received_piece.jewel_code}) + "?tab=marketing"
+    edit = reverse("stock:style_edit", kwargs={"style_code": received_piece.style.style_code})
+
+    page = client.get(edit, {"next": marketing})
+    assert page.context["back"] == marketing  # the Cancel link and the crumb
+
+    saved = client.post(
+        edit,
+        {
+            "next": marketing,
+            "style_code": received_piece.style.style_code,
+            "name": received_piece.style.name or "Petal studs",
+            "category": received_piece.style.category_id,
+            "state": received_piece.style.state,
+            "nos_min_qty": 0,
+            "story": "Made for a wedding in Jaipur.",
+            "website_description": "",
+        },
+    )
+    assert saved.status_code == 302
+    assert saved["Location"] == marketing
+
+
+def test_reached_from_the_library_it_still_goes_back_to_the_library(client, received_piece, admin_user_):
+    client.force_login(admin_user_)
+    edit = reverse("stock:style_edit", kwargs={"style_code": received_piece.style.style_code})
+    assert client.get(edit).context["back"] == reverse("stock:style_list")
+
+
+def test_an_off_site_next_is_ignored_rather_than_followed(client, received_piece, admin_user_):
+    """``?next=`` reaches an href, so a value pointing off-site must not survive."""
+    client.force_login(admin_user_)
+    edit = reverse("stock:style_edit", kwargs={"style_code": received_piece.style.style_code})
+    assert client.get(edit, {"next": "//evil.example/steal"}).context["back"] == reverse("stock:style_list")
+
+
+def test_a_viewable_tile_opens_the_gallery_rather_than_the_signed_url(client, received_piece, admin_user_):
+    """The tile carries what the viewer needs; nothing links straight to the bucket."""
+    _asset(MediaKind.PHOTO, piece=received_piece, name="front.jpg")
+    client.force_login(admin_user_)
+    body = _detail(client, received_piece, "media").content.decode()
+    assert "data-view-open" in body
+    assert 'id="viewerdlg"' in body
+    assert 'data-view-as="image"' in body
+    assert 'target="_blank"' not in body, "a media tile must not open a bare presigned URL"
+
+
 # ── the gates ────────────────────────────────────────────────────────────
 def test_every_write_on_these_tabs_refuses_a_login_without_edit_bom(client, received_piece, sibling, sales_user):
     asset = _asset(MediaKind.PHOTO, piece=received_piece)

@@ -27,8 +27,14 @@ which is how the first file of a kind gets there.{% endcomment %}
     </header>
     <div class="mgrid">
       {% for tile in section.tiles %}
-      <figure class="mcard{% if tile.asset.is_catalogue_default %} ishero{% endif %}">
-        <div class="mshot{% if tile.url %} clickable{% endif %}">
+      <figure class="mcard{% if tile.asset.is_catalogue_default %} ishero{% endif %}"
+        {% if tile.url %}data-view-url="{{ tile.url }}"
+        data-view-as="{% if tile.asset.is_video %}video{% elif tile.asset.is_image %}image{% elif tile.asset.mime_type == 'application/pdf' %}pdf{% else %}file{% endif %}"
+        data-view-ext="{{ tile.asset.file_name|file_ext }}"
+        data-view-name="{{ tile.asset.file_name|default:tile.asset.media_ref }}"
+        data-view-meta="{% if tile.asset.bytes %}{{ tile.asset.bytes|filesizeformat }} · {% endif %}{{ tile.asset.media_ref|default:tile.asset.pk }}"
+        data-view-save="{% url 'mediahub:media' tile.asset.pk %}"{% endif %}>
+        <div class="mshot{% if tile.url %} clickable{% endif %}"{% if tile.url %} data-view-open title="Click to view"{% endif %}>
           {% comment %}Three cases, and conflating them is what made the old grid
           confusing: the browser can draw it; it cannot but the file is there to
           open; or there is nothing to serve at all. A TIFF or a 3DM is not a
@@ -49,7 +55,7 @@ which is how the first file of a kind gets there.{% endcomment %}
           <span class="mmeta">{% if tile.asset.bytes %}{{ tile.asset.bytes|filesizeformat }}{% else %}—{% endif %}
             · <span class="mono">{{ tile.asset.media_ref|default:tile.asset.pk }}</span></span>
           <div class="macts">
-            {% if tile.url %}<a href="{{ tile.url }}" target="_blank" rel="noopener">view</a>{% endif %}
+            {% if tile.url %}<a href="{{ tile.url }}" data-view-open>view</a>{% endif %}
             <a href="{% url 'mediahub:media' tile.asset.pk %}" download>save</a>
             {% if caps.edit_bom and tile.can_be_hero %}
             <a href="#" onclick="event.preventDefault();this.nextElementSibling.requestSubmit()"
@@ -78,6 +84,33 @@ which is how the first file of a kind gets there.{% endcomment %}
     <button class="btn" onclick="document.getElementById('uploaddlg').showModal()">Add the first file</button>{% endif %}</div>
   {% endfor %}
 </div>
+
+{% comment %}The viewer. Every part of it is here and hidden; the script only
+sets src, href and text on it. A filename is typed by whoever uploads the file,
+so it is untrusted, and markup built around one would run it.{% endcomment %}
+<dialog class="modal wide" id="viewerdlg">
+  <div class="vwrap">
+    <div class="vstage">
+      <button class="vnav vprev" data-vgo="-1" aria-label="Previous" hidden>‹</button>
+      <img data-v="image" alt="" hidden>
+      <video data-v="video" controls autoplay playsinline hidden></video>
+      <iframe data-v="pdf" title="Document" hidden></iframe>
+      <div class="vnone" data-v="none" hidden>This file cannot be shown in a browser.<br>
+        <span><b data-v="ext"></b> — download it to open in Photos, Preview or Rhino.</span></div>
+      <button class="vnav vnext" data-vgo="1" aria-label="Next" hidden>›</button>
+    </div>
+    <div class="vbar">
+      <div class="vmeta">
+        <b data-v="name"></b>
+        <span class="dim mono" data-v="meta"></span>
+      </div>
+      <div class="row">
+        <a class="btn sm" data-v="save" href="#" download>⇩ Download original</a>
+        <button class="btn sm" data-vclose>Close</button>
+      </div>
+    </div>
+  </div>
+</dialog>
 
 <div class="card"><h3>Social &amp; web</h3>
   <div class="bio"><dl>

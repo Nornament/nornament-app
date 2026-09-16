@@ -2,9 +2,10 @@
 {% block title %}{% if style %}Edit {{ style.style_code }}{% else %}Add a design{% endif %} · Nornament{% endblock %}
 {% block heading %}{% if style %}Edit — {{ style.style_code }}{% else %}Add a design{% endif %}{% endblock %}
 {% block content %}
-<div class="crumb"><a href="{% url 'stock:style_list' %}">← Design Library</a></div>
+<div class="crumb"><a href="{{ back }}">← {{ back_label }}</a></div>
 <div class="card" style="max-width:760px">
   <form method="post">{% csrf_token %}
+    {% if request.GET.next %}<input type="hidden" name="next" value="{{ request.GET.next }}">{% endif %}
     {% if form.non_field_errors %}<div class="note bad">{{ form.non_field_errors }}</div>{% endif %}
     <div class="row">
       <div>{{ form.style_code.label_tag }}{{ form.style_code }}{{ form.style_code.errors }}</div>
@@ -25,7 +26,7 @@
     <div>{{ form.website_description.label_tag }}{{ form.website_description }}</div>
     <div class="row" style="margin-top:18px">
       <button class="btn primary">Save</button>
-      <a class="btn" href="{% url 'stock:style_list' %}">Cancel</a>
+      <a class="btn" href="{{ back }}">Cancel</a>
     </div>
   </form>
 </div>

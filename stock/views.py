@@ -3083,7 +3083,21 @@ def style_form(request, style_code=None):
             saved.save()
             services.log(request.user, "STYLE_SAVED", "style", str(saved.pk))
             messages.success(request, f"{saved.style_code} saved.")
-            return redirect("stock:style_list")
+            return _redirect_back(request, reverse("stock:style_list"))
     else:
         form = StyleForm(instance=style)
-    return render(request, "stock/style_form.html", {"nav": "styles", "form": form, "style": style})
+    # Opened from a piece's Marketing tab, Save and Cancel both belong back on
+    # that piece — the design library is where this screen is reached from, not
+    # where whoever is editing the copy was standing.
+    back = _safe_next(request)
+    return render(
+        request,
+        "stock/style_form.html",
+        {
+            "nav": "styles",
+            "form": form,
+            "style": style,
+            "back": back or reverse("stock:style_list"),
+            "back_label": "Back" if back else "Design Library",
+        },
+    )
