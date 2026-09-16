@@ -377,9 +377,6 @@ input.inplace,select.inplace{width:auto;min-width:110px;max-width:230px;padding:
 .pin .price{font-family:var(--mono);font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
 .pin .sub{font-size:11.5px;color:var(--muted);margin-top:6px;display:flex;gap:8px;flex-wrap:wrap}
 .pin .badge{position:absolute;top:10px;left:10px}
-.pin .locbadge{position:absolute;top:10px;right:10px;background:color-mix(in srgb,var(--surface) 88%,transparent);
-  backdrop-filter:blur(4px);border:1px solid var(--ring);border-radius:99px;
-  padding:3px 9px;font-size:11px;color:var(--ink-2);font-weight:600}
 .pin.dead .art{filter:grayscale(1);opacity:.5}
 
 /* customer breakup */
@@ -851,3 +848,40 @@ form.tagchip{display:inline-flex;align-items:center;gap:5px}
    Inside a card it resolves against the whole card and the picture comes
    out portrait; let the 1/1 aspect ratio do the work instead. */
 .dcard .jart.sq{height:auto}
+
+/* ---------- price slider (replaces the legacy price chips) ---------- */
+/* Two native ranges stacked on one track: the input itself is transparent and
+   click-through, only the thumbs take the pointer. No library, no polyfill. */
+.frow:has(.pslider){align-items:center}
+.pslider{position:relative;width:min(340px,100%);height:26px;flex:none}
+.pslider .ptrack{position:absolute;top:11px;left:0;right:0;height:4px;
+  border-radius:99px;background:var(--rule)}
+.pslider .pfill{position:absolute;top:0;bottom:0;border-radius:99px;background:var(--brand)}
+.pslider input[type=range]{position:absolute;top:0;left:0;width:100%;height:26px;margin:0;
+  -webkit-appearance:none;appearance:none;background:transparent;pointer-events:none}
+.pslider input[type=range]:focus{outline:none}
+.pslider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;pointer-events:auto;
+  width:16px;height:16px;border-radius:50%;background:var(--surface);
+  border:2px solid var(--brand);box-shadow:var(--shadow);cursor:grab}
+.pslider input[type=range]::-moz-range-thumb{pointer-events:auto;
+  width:16px;height:16px;border-radius:50%;background:var(--surface);
+  border:2px solid var(--brand);box-shadow:var(--shadow);cursor:grab}
+.pslider input[type=range]:focus-visible::-webkit-slider-thumb{outline:2px solid var(--brand);outline-offset:2px}
+.pout{font-family:var(--mono);font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+
+/* ---------- mirror flash on a piece photo ---------- */
+/* A sheen sweeping across the stone, the way a jeweller tilts a piece under the
+   light. Purely decorative, so it is off wherever motion is. */
+.shine{position:relative;overflow:hidden;display:block}
+.shine::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(105deg,transparent 38%,
+    color-mix(in srgb,#fff 62%,transparent) 48%,
+    color-mix(in srgb,#fff 88%,transparent) 50%,
+    color-mix(in srgb,#fff 62%,transparent) 52%,transparent 62%);
+  transform:translateX(-120%);transition:transform .85s ease}
+.pin:hover .shine::after,.shine:hover::after,.shine:focus-within::after{transform:translateX(120%)}
+@media (prefers-reduced-motion:reduce){.shine::after{display:none}}
+/* the photo is the card — give it room, a floor, and a slow lean-in */
+.pin .art{transition:transform .4s ease;min-height:110px;object-fit:cover}
+.pin:hover .art{transform:scale(1.035)}
+@media (prefers-reduced-motion:reduce){.pin:hover .art{transform:none}}

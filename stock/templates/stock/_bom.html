@@ -38,7 +38,7 @@ the standalone /bom/ page, which is the same screen deep-linked.
   <table class="bomtab">
     <thead>
       <tr class="band">
-        <th colspan="5"></th>
+        <th colspan="6"></th>
         {% if caps.view_cost %}<th colspan="3" class="c-old">Cost — frozen on BOM v{{ version.version_no }}</th>
           <th colspan="2" class="c-new">Cost — today</th>{% endif %}
         {% if caps.view_sale %}<th colspan="3">Sale</th>{% endif %}
@@ -48,6 +48,7 @@ the standalone /bom/ page, which is the same screen deep-linked.
         <th style="width:64px">Size</th>
         <th class="num" style="width:44px">Pcs</th>
         <th class="num" style="width:82px">Weight</th>
+        <th style="min-width:150px">Remarks</th>
         {% if caps.view_cost %}<th class="num c-old" style="width:72px">Rate</th>
           <th class="num c-old" style="width:86px">Cost</th>
           <th class="num c-old" style="width:72px">Chart</th>
@@ -68,6 +69,7 @@ the standalone /bom/ page, which is the same screen deep-linked.
       <td class="dim mono" style="font-size:12px">{{ row.size_band|default:"—" }}</td>
       <td class="num">{{ row.pcs|default_if_none:"—" }}</td>
       <td class="num">{% if row.qty_value is not None %}{{ row.qty_value|floatformat:2 }} {{ row.qty_uom|lower }}{% else %}—{% endif %}</td>
+      <td class="dim" style="font-size:12px;white-space:normal">{{ row.remarks|default:"—" }}</td>
       {% if caps.view_cost %}<td class="num c-old">{% if row.cost_rate is not None %}{{ row.cost_rate|grouped }}{% else %}—{% endif %}</td>
         <td class="num c-old">{% if row.cost_amount is not None %}{{ row.cost_amount|inr }}{% else %}—{% endif %}</td>
         <td class="num c-old dim">{% if row.chart_cost is not None %}{{ row.chart_cost|grouped }}{% else %}—{% endif %}</td>
@@ -83,7 +85,7 @@ the standalone /bom/ page, which is the same screen deep-linked.
     <tr><td colspan="{{ grp_span }}"><div class="empty">This piece has no costed BOM. It contributes zero to stock valuation.</div></td></tr>
     {% endfor %}
     <tr class="btotrow">
-      <td colspan="5" style="text-align:right">Total</td>
+      <td colspan="6" style="text-align:right">Total</td>
       {% if caps.view_cost %}<td class="num c-old"></td>
         <td class="num c-old"><b>{{ version.total_cost_price|inr }}</b></td>
         <td class="num c-old"></td>

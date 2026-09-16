@@ -162,6 +162,12 @@ PRICE_BANDS = [
     ("5 lakh +", 500_000, None),
 ]
 
+#: The stock list files the same ``price`` key from a slider rather than the
+#: bands, as ``low-high`` — sitting at the top of the track means "and up", so
+#: the high half goes out empty. The reports screen still sends band indexes.
+PRICE_CAP = 1_000_000
+PRICE_STEP = 25_000
+
 #: The dimensions the filter bar carries: the legacy's four first, then the
 #: four the reports screen adds. One filter function serves every screen, so a
 #: key added here works on the list, the CSV and the report at once.
@@ -214,23 +220,52 @@ def _filtered(request):
     return pieces, query, picked
 
 
+def _price_range(value):
+    """One ``price`` value → ``(low, high)``, or ``None`` if it is neither shape.
+
+    A band index (the reports chips) and a ``low-high`` slider range are the
+    same thing once read, so both screens filter through one function.
+    """
+    if value.isdigit() and int(value) < len(PRICE_BANDS):
+        return PRICE_BANDS[int(value)][1:]
+    low, dash, high = value.partition("-")
+    if not dash:
+        return None
+    try:
+        return (Decimal(low or 0), Decimal(high) if high else None)
+    except InvalidOperation:
+        return None
+
+
 def _in_price_bands(pieces, chosen):
-    """Keep the pieces whose asking price falls in one of the chosen bands.
+    """Keep the pieces whose asking price falls in one of the chosen ranges.
 
     ponytail: a sale price is computed, not stored — metal moves daily — so this
-    cannot be SQL and costs one BOM read per piece. It only runs when a price
-    chip is on, over a catalogue of a few hundred; make it a materialised column
-    if that stops being true.
+    cannot be SQL and costs one BOM read per piece. It only runs when the price
+    filter is on, over a catalogue of a few hundred; make it a materialised
+    column if that stops being true.
     """
-    bands = [PRICE_BANDS[int(index)] for index in chosen if index.isdigit() and int(index) < len(PRICE_BANDS)]
+    bands = [band for band in (_price_range(value) for value in chosen) if band]
     if not bands:
         return pieces
     return [
         piece
         for piece in pieces
         if any(low <= (price := services.live_sale_price(piece)) and (high is None or price < high)
-               for _, low, high in bands)
+               for low, high in bands)
     ]
+
+
+def _slider_positions(chosen):
+    """Where the two handles sit for whatever ``price`` came in on the URL.
+
+    Anything else — a band index from a bookmarked reports link, junk — leaves
+    the slider wide open rather than pretending to describe it.
+    """
+    band = _price_range(chosen[0]) if len(chosen) == 1 else None
+    if band is None or (band[1] is not None and band[1] > PRICE_CAP):
+        return 0, PRICE_CAP
+    return int(band[0]), PRICE_CAP if band[1] is None else int(band[1])
 
 
 def _filter_qs(query, picked):
@@ -268,6 +303,7 @@ def _piece_thumbs(piece_ids):
 @login_required
 def piece_list(request):
     pieces, query, picked = _filtered(request)
+    low, high = _slider_positions(picked["price"])
     page = Paginator(pieces, PAGE_SIZE).get_page(request.GET.get("page"))
     rows = [piece_row(request.user, piece) for piece in page]
     thumbs = _pin_thumbs(page)
@@ -296,9 +332,10 @@ def piece_list(request):
             "state_chips": _filter_chips(
                 [(state.value, state.label) for state in LIST_STATES], "state", picked, query
             ),
-            "price_chips": _filter_chips(
-                [(index, band[0]) for index, band in enumerate(PRICE_BANDS)], "price", picked, query
-            ),
+            "price_cap": PRICE_CAP,
+            "price_step": PRICE_STEP,
+            "price_lo": low,
+            "price_hi": high,
             "picked": picked,
         },
     )
@@ -312,7 +349,7 @@ def piece_rows(request):
     return render(
         request,
         "stock/_piece_rows.html",
-        {"page": page, "rows": [piece_row(request.user, piece) for piece in page], "total": pieces.count()},
+        {"page": page, "rows": [piece_row(request.user, piece) for piece in page]},
     )
 
 
@@ -593,6 +630,7 @@ def _bom_context(request, piece):
             "share_w": max(2, int(share * Decimal("0.38"))) if share is not None else 2,
             "chart_cost": services.chart_rate(line.material.item_code, line.size_band, "COST"),
             "chart_sale": services.chart_rate(line.material.item_code, line.size_band, "SALE"),
+            "remarks": line.remarks or "",
         }
         label = line.material.category.name
         if not groups or groups[-1]["label"] != label:
@@ -615,7 +653,7 @@ def _bom_context(request, piece):
         "row": piece_row(request.user, piece),
         "version": version,
         "groups": groups,
-        "grp_span": 5 + (5 if show_cost else 0) + (3 if show_sale else 0),
+        "grp_span": 6 + (5 if show_cost else 0) + (3 if show_sale else 0),
         "breakup": breakup if money else None,
         "money": money,
         "breakup_total": (sale_total if money == "sale" else version.total_cost_price)
@@ -2960,6 +2998,7 @@ def piece_bom_edit(request, jewel_code):
                 "basis": line.basis,
                 "cost_rate": line.cost_rate,
                 "sale_rate": line.sale_rate,
+                "remarks": line.remarks or "",
                 "is_labour": line.material.is_labour,
             }
             for line in BomLine.objects.filter(piece=piece, version_no=version.version_no)
@@ -2988,7 +3027,7 @@ def piece_bom_edit(request, jewel_code):
                 was = existing[index] if index < len(existing) else {}
                 line = {
                     key: entry.get(key)
-                    for key in ("material", "qty_value", "qty_uom", "pcs", "basis", "cost_rate", "sale_rate")
+                    for key in ("material", "qty_value", "qty_uom", "pcs", "basis", "cost_rate", "sale_rate", "remarks")
                 } | {"size_band": entry.get("size_band") or ""}
                 if was.get("material") == line["material"]:
                     for field in masked:

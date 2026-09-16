@@ -7,7 +7,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
 from stock import services
-from stock.models import Material
+from stock.models import BomLine, Material
 
 pytestmark = pytest.mark.django_db
 
@@ -357,3 +357,48 @@ def test_the_stock_report_filters_and_exports_the_same_set(client, admin_user_, 
 
     missing = load_workbook(io.BytesIO(client.get(reverse("stock:reports_export"), {"material": "NOTHING"}).content))
     assert missing["Pieces"].max_row == 1
+
+
+def test_the_price_slider_filters_on_its_range(client, admin_user_, received_piece, chart):
+    """``price=low-high`` is the slider's shape; the band indexes still work."""
+    client.force_login(admin_user_)
+    price = int(services.live_sale_price(received_piece))
+    url = reverse("stock:piece_list")
+    inside = client.get(url, {"price": f"{price - 1000}-{price + 1000}"}).content.decode()
+    outside = client.get(url, {"price": f"{price + 1000}-{price + 2000}"}).content.decode()
+    open_ended = client.get(url, {"price": f"{price - 1000}-"}).content.decode()
+    assert "ER00738" in inside and "ER00738" in open_ended
+    assert "ER00738" not in outside and "No pieces match" in outside
+
+
+def test_a_bom_remark_is_saved_and_shown_on_the_breakup(client, admin_user_, received_piece, materials):
+    client.force_login(admin_user_)
+    edit = reverse("stock:piece_bom_edit", kwargs={"jewel_code": "ER00738"})
+    lines = list(
+        BomLine.objects.filter(piece=received_piece, version_no=received_piece.current_bom_version)
+        .select_related("material")
+        .order_by("line_no")
+    )
+    post = {"line-TOTAL_FORMS": str(len(lines)), "line-INITIAL_FORMS": str(len(lines)),
+            "line-MIN_NUM_FORMS": "0", "line-MAX_NUM_FORMS": "1000"}
+    for index, line in enumerate(lines):
+        post |= {
+            f"line-{index}-material": line.material.item_code,
+            f"line-{index}-size_band": line.size_band or "",
+            f"line-{index}-qty_value": line.qty_value or "",
+            f"line-{index}-qty_uom": line.qty_uom,
+            f"line-{index}-pcs": line.pcs or "",
+            # the editor only offers a basis on a making line; the server puts
+            # BY_QTY back on everything else
+            f"line-{index}-basis": line.basis if line.material.is_labour else "",
+            f"line-{index}-cost_rate": line.cost_rate or "",
+            f"line-{index}-sale_rate": line.sale_rate or "",
+            f"line-{index}-remarks": "Centre stone re-measured" if index == 0 else "",
+        }
+    assert client.post(edit, post).status_code == 302
+    saved = BomLine.objects.filter(piece=received_piece, remarks="Centre stone re-measured")
+    assert saved.exists()
+    page = client.get(reverse("stock:piece_bom", kwargs={"jewel_code": "ER00738"})).content.decode()
+    assert "Centre stone re-measured" in page
+    # and it comes back into the editor rather than being wiped on the next save
+    assert "Centre stone re-measured" in client.get(edit).content.decode()

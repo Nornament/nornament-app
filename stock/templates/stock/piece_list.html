@@ -5,7 +5,7 @@
 chips in a row are an or, two rows are an and. The search box is this port's
 own; the legacy searched from the top bar instead.{% endcomment %}
 <form class="filterbar" method="get" action="{% url 'stock:piece_list' %}">
-  {% for key, values in picked.items %}{% for value in values %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}{% endfor %}
+  {% for key, values in picked.items %}{% if key != 'price' %}{% for value in values %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}{% endif %}{% endfor %}
   <div class="frow">
     <label class="flabel" for="q">Search</label>
     <input id="q" type="search" name="q" value="{{ q }}" placeholder="Jewel code, style, HUID"
@@ -32,11 +32,19 @@ own; the legacy searched from the top bar instead.{% endcomment %}
     </div>
   </div>
   {% if caps.view_sale %}
+  {% comment %}Two native range inputs overlaid make the dual handle — the band
+  chips this replaces could not say "1.4 to 3 lakh". The hidden field is what is
+  actually submitted, as ``low-high``; the form reloads on release, so the pins,
+  the table and the other chips all come back agreeing with it.{% endcomment %}
   <div class="frow">
     <div class="flabel">Price</div>
-    <div class="fchips">
-      {% for chip in price_chips %}<a class="fchip" aria-pressed="{% if chip.active %}true{% else %}false{% endif %}" href="{% url 'stock:piece_list' %}?{{ chip.qs }}">{{ chip.label }}</a>{% endfor %}
+    <div class="pslider" id="pslider">
+      <input type="hidden" name="price" id="pval" value="">
+      <div class="ptrack"><div class="pfill" id="pfill"></div></div>
+      <input type="range" id="plo" min="0" max="{{ price_cap }}" step="{{ price_step }}" value="{{ price_lo }}" aria-label="Lowest price">
+      <input type="range" id="phi" min="0" max="{{ price_cap }}" step="{{ price_step }}" value="{{ price_hi }}" aria-label="Highest price">
     </div>
+    <output class="pout" id="pout" for="plo phi"></output>
   </div>
   {% endif %}
 </form>
@@ -44,22 +52,54 @@ own; the legacy searched from the top bar instead.{% endcomment %}
 <div class="masonry">
   {% for pin in pins %}
   <article class="pin">
-    <a href="{% url 'stock:piece_detail' pin.row.jewel_code %}"><img class="art" src="{{ pin.thumb }}" alt="{{ pin.row.jewel_code }}" loading="lazy"></a>
+    <a class="shine" href="{% url 'stock:piece_detail' pin.row.jewel_code %}"><img class="art" src="{{ pin.thumb }}" alt="{{ pin.row.jewel_code }}" loading="lazy" decoding="async"></a>
     <div class="badge">{% include "stock/_chip.html" with state=pin.row.stock_state label=pin.row.stock_state_display %}</div>
-    {% if pin.row.location %}<div class="locbadge">{{ pin.row.location }}</div>{% endif %}
     <div class="meta">
       <div class="pcode"><a class="code" href="{% url 'stock:piece_detail' pin.row.jewel_code %}">{{ pin.row.jewel_code }}</a></div>
       <div class="pname">{{ pin.row.design_name|default:pin.row.style_code }}</div>
       <div class="prow">
         <span class="price">{% if caps.view_sale %}{% if pin.row.sale_price %}₹{{ pin.row.sale_price|floatformat:0 }}{% else %}<span class="chip c-ser">not costed</span>{% endif %}{% endif %}</span>
       </div>
-      <div class="sub"><span>{{ pin.row.karat|default:"—" }}</span><span>·</span>
-        <span>{{ pin.row.measured_gross_wt_gm|default_if_none:"—" }} g</span>
-        {% if caps.view_cost and pin.row.current_cost %}<span>·</span><span>cost ₹{{ pin.row.current_cost|floatformat:0 }}</span>{% endif %}</div>
+      {% comment %}Cost on a card is over the shoulder of whoever walks past the
+      screen, so it is the superuser's alone here — narrower than view_cost, which
+      still governs the table and the BOM.{% endcomment %}
+      <div class="sub"><span>{{ pin.row.karat|default:"—" }}</span>
+        <span>·</span><span>{{ pin.row.location|default:"—" }}</span>
+        {% if user.is_superuser and pin.row.current_cost %}<span>·</span><span>cost ₹{{ pin.row.current_cost|floatformat:0 }}</span>{% endif %}</div>
     </div>
   </article>
   {% endfor %}
 </div>
 {% endif %}
 <div id="rows">{% include "stock/_piece_rows.html" %}</div>
+
+<script>
+// The price slider. Two ranges share one track; whichever handle is lower is
+// the low end, so they may cross without the filter turning inside out. The
+// form is submitted on release — dragging does not fire a request per pixel.
+(function () {
+  var box = document.getElementById('pslider');
+  if (!box) return;
+  var lo = document.getElementById('plo'), hi = document.getElementById('phi');
+  var val = document.getElementById('pval'), out = document.getElementById('pout');
+  var fill = document.getElementById('pfill'), cap = Number(lo.max);
+
+  function label(n) {
+    if (n >= 100000) { var l = n / 100000; return '₹' + (n % 100000 ? l.toFixed(2) : l) + 'L'; }
+    return n ? '₹' + (n / 1000) + 'k' : '₹0';
+  }
+  function paint() {
+    var low = Math.min(Number(lo.value), Number(hi.value));
+    var high = Math.max(Number(lo.value), Number(hi.value));
+    fill.style.left = (100 * low / cap) + '%';
+    fill.style.right = (100 - 100 * high / cap) + '%';
+    var open = low === 0 && high === cap;
+    val.value = open ? '' : low + '-' + (high >= cap ? '' : high);
+    out.textContent = open ? 'Any price' : label(low) + ' – ' + label(high) + (high >= cap ? '+' : '');
+  }
+  box.addEventListener('input', paint);
+  box.addEventListener('change', function () { paint(); box.closest('form').submit(); });
+  paint();
+})();
+</script>
 {% endblock %}

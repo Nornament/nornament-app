@@ -149,6 +149,7 @@ class BomLineForm(forms.Form):
     basis = forms.ChoiceField(label="Charged", choices=MAKING_BASES, required=False)
     cost_rate = forms.DecimalField(label="Cost rate", max_digits=14, decimal_places=4, min_value=0, required=False)
     sale_rate = forms.DecimalField(label="Sale rate", max_digits=14, decimal_places=4, min_value=0, required=False)
+    remarks = forms.CharField(label="Remarks", max_length=500, required=False)
 
     def clean_material(self):
         code = self.cleaned_data["material"].strip().upper()
