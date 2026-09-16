@@ -146,50 +146,51 @@
 
 {# ── Media ────────────────────────────────────────────────────────────── #}
 {% elif tab == 'media' %}
-<div class="card">
-  <h3>Assets</h3>
-  
-  {% if media %}
-  <div class="mgrid">
-    {% for asset in media %}
-    <figure class="mcard{% if asset.is_catalogue_default %} ishero{% endif %}">
-      <div class="mshot">
-        {% with url=media_urls|get:asset.pk %}
-        {% if not url %}<span class="mext">{{ asset.kind }}</span>
-        {% elif asset.is_video %}<video src="{{ url }}" muted playsinline preload="metadata"></video>
-        {% else %}<img src="{{ url }}" alt="{{ asset.file_name }}" loading="lazy" decoding="async">{% endif %}
-        {% endwith %}
-        {% if asset.is_catalogue_default %}<span class="mhero">display</span>{% endif %}
-      </div>
-      <figcaption>
-        <span class="mname" title="{{ asset.file_name|default:asset.media_ref }}">{{ asset.file_name|default:asset.media_ref }}</span>
-        <span class="mmeta">{{ asset.get_kind_display }}{% if asset.bytes %} · {{ asset.bytes|filesizeformat }}{% endif %}
-          · <span class="mono">{{ asset.media_ref|default:asset.pk }}</span></span>
-      </figcaption>
-    </figure>
-    {% endfor %}
-  </div>
-  {% else %}<div class="empty">No media on this piece.</div>{% endif %}
-  {% if caps.edit_bom %}
-  <label class="drop-zone" style="display:block;margin-top:12px">
-    <input type="file" accept="image/*,video/*" multiple data-upload-scope="piece" data-upload-id="{{ piece.pk }}">
-    <span class="dim" style="font-size:12.5px">Drop photos here, or click to choose — they go straight to object storage</span>
-  </label>
-  <div class="dim" style="font-size:12.5px;margin-top:6px" data-upload-status></div>
-  {% endif %}
-</div>
-<div class="card"><h3>Social &amp; web</h3>
-  <div class="bio"><dl>
-    <div class="biorow"><dt>On website</dt><dd>{% if piece.on_website %}<span class="chip c-good">live</span>{% else %}<span class="chip c-neutral">not published</span>{% endif %}</dd></div>
-    <div class="biorow"><dt>URL</dt><dd class="mono">{% if piece.website_url %}<a href="{{ piece.website_url }}" target="_blank" rel="noopener">{{ piece.website_url }}</a>{% else %}—{% endif %}</dd></div>
-  </dl></div>
-</div>
+{% include "stock/_media_panel.html" %}
 
 {# ── Similar ──────────────────────────────────────────────────────────── #}
 {% elif tab == 'similar' %}
 <div class="card">
+  <div class="spread" style="margin-bottom:12px">
+    <div><h3>Linked by your team</h3>
+      <p class="hint" style="margin:0">Chosen by a person, not the algorithm. Links are
+        <b>two-way</b> — link the necklace here and this earring appears on the necklace too.</p></div>
+    {% if caps.edit_bom %}<button class="btn primary" onclick="document.getElementById('linkdlg').showModal()">+ Link a piece</button>{% endif %}
+  </div>
+  {% if links %}
+  <div class="simgrid">
+    {% for entry in links %}
+    <article class="dcard">
+      <a href="{% url 'stock:piece_detail' entry.piece.jewel_code %}">
+        {% if entry.thumb %}<img class="jart sq" src="{{ entry.thumb }}" alt="{{ entry.piece.jewel_code }}" loading="lazy">
+        {% else %}<div class="mph">no photo</div>{% endif %}</a>
+      <div class="m">
+        <div style="font-family:var(--mono);font-size:12.5px;font-weight:600">
+          <a href="{% url 'stock:piece_detail' entry.piece.jewel_code %}">{{ entry.piece.jewel_code }}</a></div>
+        <div style="font-size:12px;color:var(--muted)">{{ entry.row.design_name|default:entry.row.style_code }}</div>
+        <div style="margin-top:7px;display:flex;justify-content:space-between;align-items:center;gap:6px">
+          {% if caps.view_sale %}<span style="font-family:var(--mono);font-size:12.5px;font-weight:600">₹{{ entry.row.sale_price|default_if_none:0|floatformat:0 }}</span>{% else %}<span></span>{% endif %}
+          <span class="chip c-neutral" style="font-size:10.5px">{{ entry.row.location|default:"—" }}</span>
+        </div>
+        <div style="margin-top:9px;display:flex;justify-content:space-between;align-items:center;gap:6px">
+          <span class="chip c-good" style="font-size:10.5px">{{ entry.kind }}</span>
+          {% if caps.edit_bom %}
+          <form method="post" action="{% url 'stock:piece_unlink' piece.jewel_code entry.link_id %}">{% csrf_token %}
+            <button class="btn sm" style="padding:2px 8px;font-size:11.5px">Remove</button></form>
+          {% endif %}
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}<div class="empty">Nothing linked yet.{% if caps.edit_bom %}<br><br>
+    <button class="btn" onclick="document.getElementById('linkdlg').showModal()">Link the first piece</button>{% endif %}</div>{% endif %}
+</div>
+
+<div class="card">
   <h3>Suggested automatically</h3>
-  
+  <p class="hint">Matched on category, then price, then metal — live pieces only, with location shown.
+    These are guesses; anything worth keeping should be linked above.</p>
   {% if similar %}
   <div class="simgrid">
     {% for entry in similar %}
@@ -204,13 +205,58 @@
           {% if caps.view_sale %}<span style="font-family:var(--mono);font-size:12.5px;font-weight:600">₹{{ entry.row.sale_price|default_if_none:0|floatformat:0 }}</span>{% else %}<span></span>{% endif %}
           <span class="chip c-neutral" style="font-size:10.5px">{{ entry.row.location|default:"—" }}</span>
         </div>
+        {% if caps.edit_bom %}
+        <form method="post" action="{% url 'stock:piece_link' piece.jewel_code %}" style="margin-top:9px">{% csrf_token %}
+          <input type="hidden" name="other" value="{{ entry.piece.jewel_code }}">
+          <input type="hidden" name="kind" value="Goes with">
+          <button class="btn sm" style="width:100%;padding:3px">+ Link</button></form>
+        {% endif %}
       </div>
     </article>
     {% endfor %}
   </div>
   {% else %}<div class="empty">Nothing else live in this category.</div>{% endif %}
-  
 </div>
+
+{% if caps.edit_bom %}
+<dialog class="modal" id="linkdlg">
+  <form method="post" action="{% url 'stock:piece_link' piece.jewel_code %}">{% csrf_token %}
+    <header><h3>Link a piece to {{ piece.jewel_code }}</h3>
+      <p>Whatever you pick will also show {{ piece.jewel_code }} on its own page. Links are two-way.</p></header>
+    <div class="content">
+      <div class="field"><label class="f" for="linkkind">Relationship</label>
+        <select id="linkkind" name="kind" style="width:100%">
+          <option>Matching set</option><option>Goes with</option>
+          <option>Alternative at a lower price</option><option>Upsell</option>
+          <option>Same design, different metal</option></select></div>
+      <div class="field"><label class="f" for="picksearch">Search</label>
+        <input type="text" id="picksearch" style="width:100%" placeholder="Jewel code or design name…"
+               oninput="const q=this.value.toLowerCase().trim();
+                        this.closest('.content').querySelectorAll('.pickrow').forEach(r=>
+                          r.hidden = q && !r.dataset.search.includes(q))"></div>
+      <div class="picker">
+        {% for entry in linkable %}
+        <label class="pickrow" data-search="{{ entry.piece.jewel_code|lower }} {{ entry.row.design_name|default:entry.row.style_code|lower }}">
+          <input type="radio" name="other" value="{{ entry.piece.jewel_code }}" required>
+          <div style="flex:1;min-width:0">
+            <div style="font-family:var(--mono);font-size:12.5px;font-weight:600">{{ entry.piece.jewel_code }}</div>
+            <div class="dim" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              {{ entry.row.design_name|default:entry.row.style_code }} · {{ entry.row.karat|default:"—" }}</div></div>
+          {% if caps.view_sale %}<span style="font-family:var(--mono);font-size:12px">₹{{ entry.row.sale_price|default_if_none:0|floatformat:0 }}</span>{% endif %}
+          <span class="chip c-neutral" style="font-size:10.5px">{{ entry.row.location|default:"—" }}</span>
+        </label>
+        {% empty %}
+        <div class="empty">Nothing else live to link.</div>
+        {% endfor %}
+      </div>
+    </div>
+    <footer>
+      <button class="btn" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn primary">Link piece</button>
+    </footer>
+  </form>
+</dialog>
+{% endif %}
 
 {# ── Marketing ────────────────────────────────────────────────────────── #}
 {% elif tab == 'marketing' %}
@@ -228,11 +274,101 @@
         <dd style="max-width:60ch">{{ piece.remarks|default:"—"|linebreaksbr }}</dd></div>
     </dl>
   </div>
+
+  <div style="margin-top:14px">
+    <div class="lbl" style="font-size:12px;color:var(--ink-2);font-weight:600">Marketing keywords</div>
+    <div class="tagrow">
+      {% for tag in keywords %}
+      {% if caps.edit_bom %}
+      <form method="post" action="{% url 'stock:piece_marketing' piece.jewel_code %}" class="tagchip">{% csrf_token %}
+        <input type="hidden" name="action" value="remove_keyword">
+        <input type="hidden" name="value" value="{{ tag.name }}">
+        {{ tag.name }}<button class="chipx" title="Remove {{ tag.name }}">×</button></form>
+      {% else %}<span class="tagchip">{{ tag.name }}</span>{% endif %}
+      {% empty %}<span class="dim" style="font-size:12.5px">None yet.</span>{% endfor %}
+      {% if caps.edit_bom %}
+      <form method="post" action="{% url 'stock:piece_marketing' piece.jewel_code %}" class="inline">{% csrf_token %}
+        <input type="hidden" name="action" value="add_keyword">
+        <input name="value" maxlength="80" required placeholder="+ add"
+               style="border-radius:99px;padding:3px 12px;font-size:12px;width:9em">
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
   {% if caps.edit_bom %}
-  <p style="margin-top:12px"><a class="btn sm" href="{% url 'stock:style_edit' piece.style.style_code %}">✎ Edit the design copy</a></p>
+  <p style="margin-top:14px"><a class="btn sm" href="{% url 'stock:style_edit' piece.style.style_code %}">✎ Edit the design copy</a></p>
   {% endif %}
-  
 </div>
+
+{% if caps.view_sale %}
+<div class="card">
+  <div class="spread" style="margin-bottom:12px">
+    <div><h3>How to sell this piece</h3>
+      <p class="hint" style="margin:0">Sales training for this design — what to lead with, what the
+        objection usually is. Visible to Sales, Accounts and Admin; not to Production or Graphic.</p></div>
+    {% if caps.edit_bom %}
+    <button class="btn {% if not sell_video %}primary{% endif %}"
+            onclick="document.getElementById('sellviddlg').showModal()">{% if sell_video %}Replace video{% else %}+ Upload video{% endif %}</button>
+    {% endif %}
+  </div>
+  {% if sell_video %}
+  <div class="videoblock">
+    <div class="vidart">{% if sell_video_url %}<video src="{{ sell_video_url }}" controls preload="metadata" style="width:100%;height:100%"></video>{% else %}<div class="mph">video</div>{% endif %}</div>
+    <div class="vidmeta">
+      <div style="font-weight:600;font-size:14px">{{ sell_video.caption|default:sell_video.file_name }}</div>
+      <div class="dim" style="font-size:12.5px;margin-top:3px">{% if sell_video.bytes %}{{ sell_video.bytes|filesizeformat }} · {% endif %}
+        {% if sell_video.uploaded_by %}{{ sell_video.uploaded_by }} · {% endif %}uploaded {{ sell_video.uploaded_at|date:"j M Y" }}</div>
+      <div class="tagrow" style="margin-top:10px">
+        <span class="tagchip">Sales training</span><span class="tagchip">{{ piece.style.category.name }}</span></div>
+    </div>
+  </div>
+  {% else %}<div class="empty">No sell video yet.<br><br>
+    <span style="font-size:12.5px">A 2–4 minute clip from whoever sells this design best
+    is worth more to a new showroom hire than any spec sheet.</span></div>{% endif %}
+
+  <div style="margin-top:18px">
+    <div class="lbl" style="font-size:12px;color:var(--ink-2);font-weight:600;margin-bottom:8px">Talking points</div>
+    {% if talking_points %}
+    <ol class="points">
+      {% for point in talking_points %}
+      <li>{{ point }}{% if caps.edit_bom %}
+        <form method="post" action="{% url 'stock:piece_marketing' piece.jewel_code %}" class="inline">{% csrf_token %}
+          <input type="hidden" name="action" value="remove_point">
+          <input type="hidden" name="value" value="{{ forloop.counter0 }}">
+          <button class="chipx" title="Remove this point">×</button></form>{% endif %}</li>
+      {% endfor %}
+    </ol>
+    {% else %}<div class="dim" style="font-size:13px">None recorded.</div>{% endif %}
+    {% if caps.edit_bom %}
+    <form method="post" action="{% url 'stock:piece_marketing' piece.jewel_code %}" class="row" style="margin-top:10px;gap:8px">{% csrf_token %}
+      <input type="hidden" name="action" value="add_point">
+      <input name="value" required placeholder="What to lead with…" style="flex:1">
+      <button class="btn sm">+ Add a talking point</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if caps.edit_bom %}
+<dialog class="modal" id="sellviddlg">
+  <form data-upload-form data-kind="SELL_VIDEO" data-scope="style" data-entity="{{ piece.style_id }}">
+    <header><h3>Upload a sell video for {{ piece.style.style_code }}</h3>
+      <p>2–4 minutes from whoever sells this design best. It shows on every piece of this design.</p></header>
+    <div class="content">
+      <div class="field"><label class="f" for="sellvidfile">Video</label>
+        <input type="file" id="sellvidfile" name="files" accept=".mp4,.mov,.m4v,.webm" required style="width:100%">
+      </div>
+      <div class="dim" style="font-size:12.5px" data-upload-status></div>
+    </div>
+    <footer>
+      <button class="btn" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+      <button class="btn primary">Upload</button>
+    </footer>
+  </form>
+</dialog>
+{% endif %}
 
 {# ── History ──────────────────────────────────────────────────────────── #}
 {% elif tab == 'history' %}

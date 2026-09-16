@@ -10,7 +10,7 @@
   <div class="note bad">{{ form.non_field_errors }}</div>
   {% endif %}
 
-  <div class="mgrid">
+  <div class="fgrid">
     {% for field in form %}{% if field.name != 'is_active' %}
     <div class="field {% if field.name == 'item_name' %}wide{% endif %}">
       <label class="f" for="{{ field.id_for_label }}">{{ field.label }}</label>

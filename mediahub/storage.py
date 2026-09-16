@@ -35,8 +35,46 @@ SERVEABLE_TYPES = frozenset(
 )
 
 
+#: Extensions that belong in the bucket but never come back from our origin.
+#:
+#: A studio TIFF, a Rhino file and a zip of STLs are all legitimate stock media
+#: and none of them is in :data:`SERVEABLE_TYPES`, because a browser cannot
+#: draw them and we will not hand them back same-origin. They are fetched with
+#: a presigned GET straight from the bucket instead, so widening this does not
+#: widen what this app will serve — :func:`is_serveable` still decides that.
+STORABLE_SUFFIXES = frozenset(
+    {
+        ".tif", ".tiff",
+        ".3dm", ".stl", ".obj", ".step", ".stp", ".iges", ".igs", ".dwg", ".dxf",
+        ".zip", ".rar",
+    }
+)
+
+
+#: What an ``<img>`` can actually draw, which is narrower than "an image".
+#:
+#: A studio TIFF and an iPhone HEIC are images and are stored as such, but only
+#: Safari draws HEIC and nothing draws TIFF, so a tile that puts them in an
+#: ``<img>`` renders an empty box. They get a file card and a "no preview" note
+#: instead. Upload-time WebP conversion turns most of them into a drawable row
+#: anyway; this is what the screen does when it could not.
+DRAWABLE_TYPES = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"})
+
+
 def is_serveable(mime_type):
     return (mime_type or "").split(";", 1)[0].strip().lower() in SERVEABLE_TYPES
+
+
+def is_drawable(mime_type):
+    return (mime_type or "").split(";", 1)[0].strip().lower() in DRAWABLE_TYPES
+
+
+def is_storable(mime_type, file_name=None):
+    """May this file go into the bucket at all? Wider than :func:`is_serveable`."""
+    if is_serveable(mime_type):
+        return True
+    name = (file_name or "").lower()
+    return any(name.endswith(suffix) for suffix in STORABLE_SUFFIXES)
 
 
 class StorageNotConfigured(RuntimeError):

@@ -730,9 +730,9 @@ a.btn,a.chip,a.code,a.fchip{text-decoration:none}
 /* ── material form: a two-column grid and a real on/off switch ───────────
    The default checkbox reads as a stray tick beside a label; retiring a
    material is a decision worth a control that looks like one. */
-.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
-.mgrid .field.wide{grid-column:1 / -1}
-.mgrid input,.mgrid select{width:100%;box-sizing:border-box}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+.fgrid .field.wide{grid-column:1 / -1}
+.fgrid input,.fgrid select{width:100%;box-sizing:border-box}
 
 .toggle-row{display:flex;gap:13px;align-items:flex-start;padding:14px;margin-top:4px;
   border:1px solid var(--line);border-radius:9px;background:var(--surface-2)}
@@ -745,7 +745,7 @@ a.btn,a.chip,a.code,a.fchip{text-decoration:none}
 .switch input:checked + .track{background:var(--good)}
 .switch input:checked + .track .knob{transform:translateX(17px)}
 .switch input:focus-visible + .track{outline:2px solid var(--brand);outline-offset:2px}
-@media(max-width:560px){.mgrid{grid-template-columns:1fr}}
+@media(max-width:560px){.fgrid{grid-template-columns:1fr}}
 
 /* ── rate charts ─────────────────────────────────────────────────────────
    The design's category tints, as tokens so the dark theme can restate them
@@ -822,3 +822,23 @@ table.rates td.lacks{color:var(--critical-ink)}
 .searchbar{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;flex:0 1 auto;min-width:0}
 .searchbar input[type=search]{flex:1 1 auto;min-width:110px}
 .searchbar .btn{flex:0 0 auto;white-space:nowrap}
+
+/* ── the × on a keyword chip and a talking point, and the link picker ────
+   Both are a form, not a link: removing a keyword is a write. The chip is the
+   form, so a button inside it does not need a wrapper of its own. */
+form.tagchip{display:inline-flex;align-items:center;gap:5px}
+.chipx{background:none;border:0;padding:0;margin:0;cursor:pointer;font:inherit;
+  font-size:13px;line-height:1;color:var(--muted)}
+.chipx:hover{color:var(--critical-ink)}
+/* the modal stylesheet stretches every input to the field width, which
+   turned the radio into a 600px bar and squeezed the row to nothing */
+.pickrow input[type="radio"]{flex:none;width:15px;height:15px;min-width:0;margin:0;
+  accent-color:var(--brand)}
+.pickrow:has(input:checked){background:var(--brand-soft)}
+/* the row sets display:flex, which outranks the UA rule for [hidden] —
+   without this the search box filters nothing */
+.pickrow[hidden]{display:none}
+/* .jart.sq carries height:100% for the list pins, whose box has a height.
+   Inside a card it resolves against the whole card and the picture comes
+   out portrait; let the 1/1 aspect ratio do the work instead. */
+.dcard .jart.sq{height:auto}

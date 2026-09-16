@@ -1,0 +1,120 @@
+{% load stock_extras %}{% comment %}The legacy media tab (`mediaPanel` in nornament.html): one section
+per kind, never one grid for everything. A photograph belongs to this piece; a
+CAD file belongs to the design every piece of it shares, and the section says
+which. A kind with no files is not drawn — the upload modal still offers it,
+which is how the first file of a kind gets there.{% endcomment %}
+<div class="card">
+  <div class="spread">
+    <div>
+      <h3>Photographs, video and drawings</h3>
+      <p class="hint" style="margin:0">Files live in object storage at full size — TIFF, 3DM and CAD
+        included. Each carries its own reference, so a file someone renames still finds its way home.</p>
+    </div>
+    {% if caps.edit_bom %}
+    <button class="btn primary" onclick="document.getElementById('uploaddlg').showModal()">+ Add media</button>
+    {% endif %}
+  </div>
+
+  {% for section in media_sections %}
+  <section class="mgroup">
+    <header class="mghead">
+      <div>
+        <h4><span class="mgico">{{ section.icon }}</span>{{ section.label }}
+          <span class="mgcount">{{ section.count }}</span></h4>
+        <p class="mgnote"><span class="mgscope">{% if section.on == 'design' %}on the design
+          <b>{{ piece.style.style_code }}</b> — shared by every piece of it{% else %}on this piece{% endif %}</span></p>
+      </div>
+    </header>
+    <div class="mgrid">
+      {% for tile in section.tiles %}
+      <figure class="mcard{% if tile.asset.is_catalogue_default %} ishero{% endif %}">
+        <div class="mshot{% if tile.url %} clickable{% endif %}">
+          {% comment %}Three cases, and conflating them is what made the old grid
+          confusing: the browser can draw it; it cannot but the file is there to
+          open; or there is nothing to serve at all. A TIFF or a 3DM is not a
+          broken image — it is a file, and the tile says so.{% endcomment %}
+          {% if tile.url and tile.asset.is_video %}
+            <video src="{{ tile.url }}" muted playsinline preload="metadata"></video>
+          {% elif tile.url and tile.asset.is_image %}
+            <img src="{{ tile.url }}" alt="{{ tile.asset.file_name }}" loading="lazy" decoding="async">
+          {% else %}
+            <span class="mext">{{ tile.asset.file_name|file_ext }}</span>
+            <span class="mnoview">no preview<br><span>{{ tile.asset.file_name|file_ext }} —
+              {% if tile.url %}open it to view{% else %}browsers cannot draw this{% endif %}</span></span>
+          {% endif %}
+          {% if tile.asset.is_catalogue_default %}<span class="mhero">display</span>{% endif %}
+        </div>
+        <figcaption>
+          <span class="mname" title="{{ tile.asset.file_name }}">{{ tile.asset.file_name|default:tile.asset.media_ref }}</span>
+          <span class="mmeta">{% if tile.asset.bytes %}{{ tile.asset.bytes|filesizeformat }}{% else %}—{% endif %}
+            · <span class="mono">{{ tile.asset.media_ref|default:tile.asset.pk }}</span></span>
+          <div class="macts">
+            {% if tile.url %}<a href="{{ tile.url }}" target="_blank" rel="noopener">view</a>{% endif %}
+            <a href="{% url 'mediahub:media' tile.asset.pk %}" download>save</a>
+            {% if caps.edit_bom and tile.can_be_hero %}
+            <a href="#" onclick="event.preventDefault();this.nextElementSibling.requestSubmit()"
+               title="Use this as the picture shown wherever the piece is listed">{% if tile.asset.is_catalogue_default %}unset{% else %}display{% endif %}</a>
+            <form method="post" hidden
+                  action="{% url 'stock:piece_media_display' piece.jewel_code tile.asset.pk %}">{% csrf_token %}</form>
+            {% endif %}
+            {% if caps.edit_bom %}
+            <a href="#" class="mdel" data-detach="{% url 'mediahub:detach' tile.asset.pk %}">remove</a>
+            {% endif %}
+          </div>
+        </figcaption>
+      </figure>
+      {% endfor %}
+      {% if caps.edit_bom %}
+      <button class="madd" data-add-media="{{ section.kind }}">
+        <span class="maddplus">+</span>
+        <span class="maddlabel">Add {{ section.label|lower }}</span>
+        <span class="maddtypes">{{ section.types }}</span>
+      </button>
+      {% endif %}
+    </div>
+  </section>
+  {% empty %}
+  <div class="empty">No media on this piece.{% if caps.edit_bom %}<br><br>
+    <button class="btn" onclick="document.getElementById('uploaddlg').showModal()">Add the first file</button>{% endif %}</div>
+  {% endfor %}
+</div>
+
+<div class="card"><h3>Social &amp; web</h3>
+  <div class="bio"><dl>
+    <div class="biorow"><dt>On website</dt><dd>{% if piece.on_website %}<span class="chip c-good">live</span>{% else %}<span class="chip c-neutral">not published</span>{% endif %}</dd></div>
+    <div class="biorow"><dt>URL</dt><dd class="mono">{% if piece.website_url %}<a href="{{ piece.website_url }}" target="_blank" rel="noopener">{{ piece.website_url }}</a>{% else %}—{% endif %}</dd></div>
+  </dl></div>
+</div>
+
+{% if caps.edit_bom %}
+{% comment %}One modal for every kind. The kind picker carries its own scope and
+accept list, so choosing "CAD / 3DM" uploads against the design and offers .3dm
+— the piece's own photographs never land on the style by accident.{% endcomment %}
+<dialog class="modal" id="uploaddlg">
+  <form data-upload-form>
+    <header><h3>Add media to {{ piece.jewel_code }}</h3>
+      <p>Straight to object storage at full size. Nothing is resized on the way in.</p></header>
+    <div class="content">
+      <div class="field"><label class="f" for="uploadkind">What is this?</label>
+        <select id="uploadkind" name="kind" style="width:100%">
+          {% for spec in media_kinds %}
+          <option value="{{ spec.kind }}"
+                  data-scope="{% if spec.on == 'design' %}style{% else %}piece{% endif %}"
+                  data-entity="{% if spec.on == 'design' %}{{ style_id }}{% else %}{{ piece.pk }}{% endif %}"
+                  data-accept="{{ spec.accept }}"
+                  data-note="{{ spec.note }}">{{ spec.label }}{% if spec.on == 'design' %} · on the design{% endif %}</option>
+          {% endfor %}
+        </select>
+        <p class="hint" id="uploadnote" style="margin:6px 0 0"></p>
+      </div>
+      <div class="field"><label class="f" for="uploadfiles">Files</label>
+        <input type="file" id="uploadfiles" name="files" multiple style="width:100%"></div>
+      <div class="dim" style="font-size:12.5px" data-upload-status></div>
+    </div>
+    <footer>
+      <button class="btn" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+      <button class="btn primary">Upload</button>
+    </footer>
+  </form>
+</dialog>
+{% endif %}

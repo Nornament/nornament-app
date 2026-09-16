@@ -11,6 +11,7 @@ import csv
 import datetime
 import io
 import re
+from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 from functools import wraps
 from types import SimpleNamespace
@@ -39,7 +40,17 @@ from mediahub import services as media_services
 from mediahub.models import MediaAsset
 
 from . import services
-from .enums import BomChangeReason, COUNTABLE_STATES, MediaKind, MovementType, StockState, TERMINAL_STATES, Uom
+from .enums import (
+    BomChangeReason,
+    COUNTABLE_STATES,
+    HERO_KINDS,
+    MEDIA_SECTIONS,
+    MediaKind,
+    MovementType,
+    StockState,
+    TERMINAL_STATES,
+    Uom,
+)
 from .forms import (
     BomLineFormSet,
     RateChartForm,
@@ -74,6 +85,7 @@ from .models import (
     MetalPurity,
     Piece,
     PieceCertificate,
+    PieceLink,
     RateChart,
     RateChartLine,
     RepairJob,
@@ -83,6 +95,7 @@ from .models import (
     StockCount,
     StockMovement,
     Style,
+    Tag,
     Vendor,
 )
 
@@ -318,14 +331,15 @@ PIECE_TABS = [
 def _similar_pieces(request, piece, limit=6):
     """The legacy's "Suggested automatically": category, then price, then metal.
 
-    Guesses, and labelled as such on the screen. The legacy also had a
-    "Linked by your team" list, but the real Supabase schema has no table
-    behind it — it was demo data in the mock — so there is nothing to port.
+    Guesses, and labelled as such on the screen. Anything a person actually
+    chose is a :class:`PieceLink` and shows above these, so a suggestion never
+    repeats a link that has already been made.
     """
     mine = piece_row(request.user, piece).get("sale_price") or Decimal("0")
+    linked = {other.pk for other, _, _ in PieceLink.for_piece(piece)}
     candidates = (
         _visible_pieces(request)
-        .exclude(pk=piece.pk)
+        .exclude(pk__in=linked | {piece.pk})
         .exclude(stock_state__in=TERMINAL_STATES)
         .filter(style__category_id=piece.style.category_id)[:60]
     )
@@ -341,6 +355,103 @@ def _similar_pieces(request, piece, limit=6):
     chosen = scored[:limit]
     thumbs = _piece_thumbs(other.pk for _, other, _ in chosen)
     return [{"piece": other, "row": row, "thumb": thumbs.get(other.pk)} for _, other, row in chosen]
+
+
+#: the tag group the marketing keywords live in, so they do not mix with any
+#: other tagging the catalogue grows later
+MARKETING_TAGS = "MARKETING"
+
+
+def _media_panel(piece):
+    """The legacy media tab: one section per kind, never one grid for all of them.
+
+    ``on`` decides which files a section shows — a photograph belongs to this
+    one physical piece, a CAD file to the design every piece of it shares. A
+    kind with nothing in it is left out: nine empty headings on a piece that
+    has two photographs is nine headings of noise. The upload modal still
+    offers every kind, which is how the first file of a kind gets there.
+    """
+    assets = list(
+        MediaAsset.objects.filter(
+            Q(piece=piece) | Q(style=piece.style),
+            is_archived=False,
+            derivative_of__isnull=True,
+        )
+        .filter(Q(confirmed_at__isnull=False) | Q(inline_data__isnull=False))
+        .order_by("-is_catalogue_default", "rank_order", "media_id")
+    )
+    urls = media_services.urls_for(assets)
+    by_kind = defaultdict(list)
+    for asset in assets:
+        by_kind[asset.kind].append(asset)
+
+    sections = []
+    for spec in MEDIA_SECTIONS:
+        on_piece = spec["on"] == "piece"
+        tiles = [
+            {
+                "asset": asset,
+                "url": urls.get(asset.pk),
+                # only a piece's own photograph can be the picture the lists pull
+                "can_be_hero": asset.kind in HERO_KINDS and asset.piece_id == piece.pk,
+            }
+            for asset in by_kind.get(spec["kind"], [])
+            if (asset.piece_id == piece.pk) == on_piece
+        ]
+        if tiles:
+            # "jpg  jpeg  png" — the legacy's own spacing on the add tile
+            types = spec["accept"].replace(".", "").replace(",", "  ")
+            sections.append(spec | {"tiles": tiles, "count": len(tiles), "types": types})
+    return sections
+
+
+def _marketing_panel(piece):
+    """Story, keywords, the sell video and the talking points — all on the design.
+
+    A piece is one instance of a design, and the copy that sells it is written
+    once for the design, not re-typed for every piece cut from it.
+    """
+    style = piece.style
+    video = (
+        style.media.filter(kind=MediaKind.SELL_VIDEO, is_archived=False)
+        .order_by("-media_id")
+        .first()
+    )
+    return {
+        "keywords": list(style.tags.filter(tag_group=MARKETING_TAGS).order_by("name")),
+        "talking_points": [line.strip() for line in (style.talking_points or "").splitlines() if line.strip()],
+        "sell_video": video,
+        "sell_video_url": media_services.urls_for([video]).get(video.pk) if video else None,
+    }
+
+
+def _piece_links(request, piece):
+    """What a person linked to this piece, from either end of the row."""
+    visible = set(_visible_pieces(request).values_list("pk", flat=True))
+    pairs = [pair for pair in PieceLink.for_piece(piece) if pair[0].pk in visible]
+    thumbs = _piece_thumbs(other.pk for other, _, _ in pairs)
+    return [
+        {
+            "piece": other,
+            "row": piece_row(request.user, other),
+            "kind": kind,
+            "link_id": link_id,
+            "thumb": thumbs.get(other.pk),
+        }
+        for other, kind, link_id in pairs
+    ]
+
+
+def _linkable_pieces(request, piece, limit=200):
+    """Everything live this piece is not already linked to — the picker's list."""
+    taken = {other.pk for other, _, _ in PieceLink.for_piece(piece)} | {piece.pk}
+    pieces = (
+        _visible_pieces(request)
+        .exclude(pk__in=taken)
+        .exclude(stock_state__in=TERMINAL_STATES)
+        .select_related("style", "location")[:limit]
+    )
+    return [{"piece": other, "row": piece_row(request.user, other)} for other in pieces]
 
 
 def _margin_panel(row):
@@ -394,11 +505,16 @@ def piece_detail(request, jewel_code):
         },
     }
     if tab == "media":
-        assets = list(piece.media.filter(is_archived=False).order_by("rank_order"))
-        context["media_urls"] = media_services.urls_for(assets)
-        context["media"] = assets
+        context["media_sections"] = _media_panel(piece)
+        context["media_kinds"] = MEDIA_SECTIONS
+        context["style_id"] = piece.style_id
     if tab == "similar":
         context["similar"] = _similar_pieces(request, piece)
+        context["links"] = _piece_links(request, piece)
+        if request.user.has_perm(EDIT_BOM):
+            context["linkable"] = _linkable_pieces(request, piece)
+    if tab == "marketing":
+        context |= _marketing_panel(piece)
     if tab == "pricing":
         context |= _scenario_prices(request, piece)
     if tab == "bom" and request.user.has_perm("accounts.manage_materials"):
@@ -647,6 +763,112 @@ def piece_field(request, jewel_code):
     else:
         messages.error(request, "; ".join(f"{field}: {e}" for errors in form.errors.values() for e in errors))
     return _redirect_back(request, reverse("stock:piece_detail", args=[piece.jewel_code]))
+
+
+@login_required
+@require_POST
+def piece_media_display(request, jewel_code, media_id):
+    """Make one photograph the picture every list and the catalogue pulls.
+
+    Toggling: pressing it on the current display picture unsets it. One flag
+    per piece, so the set is cleared before the new one goes on — two display
+    pictures is not a state the lists could resolve.
+    """
+    piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
+    services.require(request.user, EDIT_BOM, "You cannot change this piece's media.")
+    asset = get_object_or_404(MediaAsset, pk=media_id, piece=piece, is_archived=False)
+    if asset.kind not in HERO_KINDS:
+        messages.error(request, f"A {asset.get_kind_display().lower()} cannot be the display picture.")
+        return _redirect_back(request, _media_tab(piece))
+    was_default = asset.is_catalogue_default
+    piece.media.filter(is_catalogue_default=True).update(is_catalogue_default=False)
+    if not was_default:
+        MediaAsset.objects.filter(pk=asset.pk).update(is_catalogue_default=True)
+    services.log(request.user, "UPDATE", "media_asset", asset.pk, "display picture cleared" if was_default else "display picture set")
+    messages.success(request, "Display picture cleared." if was_default else f"{asset.file_name or asset.media_ref} is now the display picture.")
+    return _redirect_back(request, _media_tab(piece))
+
+
+def _media_tab(piece):
+    return reverse("stock:piece_detail", args=[piece.jewel_code]) + "?tab=media"
+
+
+@login_required
+@require_POST
+def piece_link(request, jewel_code):
+    """Link another piece to this one. One row, read from both ends."""
+    piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
+    services.require(request.user, EDIT_BOM, "You cannot link pieces.")
+    back = reverse("stock:piece_detail", args=[piece.jewel_code]) + "?tab=similar"
+    other = _visible_pieces(request).filter(jewel_code__iexact=request.POST.get("other", "").strip()).first()
+    kind = request.POST.get("kind") or PieceLink.KINDS[0]
+    if kind not in PieceLink.KINDS:
+        messages.error(request, f"{kind!r} is not a relationship this app knows.")
+    elif other is None:
+        messages.error(request, "Pick a piece to link.")
+    elif other.pk == piece.pk:
+        messages.error(request, "A piece cannot be linked to itself.")
+    elif PieceLink.objects.filter(Q(piece=piece, other=other) | Q(piece=other, other=piece)).exists():
+        messages.error(request, f"{piece.jewel_code} and {other.jewel_code} are already linked.")
+    else:
+        PieceLink.objects.create(piece=piece, other=other, kind=kind, created_by=request.user)
+        services.log(request.user, "UPDATE", "jewel_code", piece.pk, f"linked to {other.jewel_code} as {kind}")
+        messages.success(request, f"{piece.jewel_code} ↔ {other.jewel_code} linked as “{kind}”. It shows on both pieces.")
+    return _redirect_back(request, back)
+
+
+@login_required
+@require_POST
+def piece_unlink(request, jewel_code, link_id):
+    piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
+    services.require(request.user, EDIT_BOM, "You cannot unlink pieces.")
+    link = get_object_or_404(PieceLink.objects.filter(Q(piece=piece) | Q(other=piece)), pk=link_id)
+    other = link.other if link.piece_id == piece.pk else link.piece
+    link.delete()
+    services.log(request.user, "UPDATE", "jewel_code", piece.pk, f"unlinked from {other.jewel_code}")
+    messages.success(request, f"Link removed from both {piece.jewel_code} and {other.jewel_code}.")
+    return _redirect_back(request, reverse("stock:piece_detail", args=[piece.jewel_code]) + "?tab=similar")
+
+
+@login_required
+@require_POST
+def piece_marketing(request, jewel_code):
+    """The marketing tab's small edits — keywords and talking points.
+
+    Both live on the design, not the piece: the copy that sells a design is
+    written once, and every piece cut from it says the same thing.
+    """
+    piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
+    services.require(request.user, EDIT_BOM, "You cannot edit the design copy.")
+    style = piece.style
+    action = request.POST.get("action")
+    value = (request.POST.get("value") or "").strip()
+    back = reverse("stock:piece_detail", args=[piece.jewel_code]) + "?tab=marketing"
+
+    if action == "add_keyword" and value:
+        tag, _ = Tag.objects.get_or_create(tag_group=MARKETING_TAGS, name=value[:80])
+        style.tags.add(tag)
+    elif action == "remove_keyword" and value:
+        style.tags.remove(*Tag.objects.filter(tag_group=MARKETING_TAGS, name=value))
+    elif action == "add_point" and value:
+        points = [line.strip() for line in (style.talking_points or "").splitlines() if line.strip()]
+        style.talking_points = "\n".join(points + [value])
+        style.save(update_fields=["talking_points"])
+    elif action == "remove_point":
+        points = [line.strip() for line in (style.talking_points or "").splitlines() if line.strip()]
+        try:
+            points.pop(int(value))
+        except (ValueError, IndexError):
+            messages.error(request, "That talking point is no longer there.")
+            return _redirect_back(request, back)
+        style.talking_points = "\n".join(points)
+        style.save(update_fields=["talking_points"])
+    else:
+        messages.error(request, "Nothing to save.")
+        return _redirect_back(request, back)
+
+    services.log(request.user, "UPDATE", "style", style.pk, f"marketing: {action}")
+    return _redirect_back(request, back)
 
 
 #: ``Meera — NOR-041 — 98…`` comes back from the datalist; the code is the part

@@ -97,5 +97,12 @@ class MediaAsset(models.Model):
 
     @property
     def is_image(self):
-        """The only kind an <img> can draw. A KYC PDF gets a file card instead."""
-        return not self.is_video and (self.mime_type or "").startswith("image/")
+        """The only kind an ``<img>`` can draw. A KYC PDF gets a file card instead.
+
+        Narrower than "the MIME starts with image/": a TIFF and a HEIC are
+        images that a browser will not draw, and putting one in an ``<img>``
+        renders an empty box rather than saying so.
+        """
+        from . import storage
+
+        return not self.is_video and storage.is_drawable(self.mime_type)

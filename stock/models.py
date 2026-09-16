@@ -262,6 +262,9 @@ class Style(AppModel):
     )
     story = models.TextField(blank=True, null=True)
     website_description = models.TextField(blank=True, null=True)
+    talking_points = models.TextField(
+        blank=True, null=True, help_text="One per line. What to lead with when selling this design."
+    )
     designed_on = models.DateField(null=True, blank=True)
     parent_style = models.ForeignKey(
         "self", null=True, blank=True, on_delete=models.SET_NULL, db_column="parent_style_id", related_name="versions"
@@ -551,6 +554,53 @@ class Piece(AppModel):
 
     def current_bom(self):
         return self.bom_versions.filter(is_current=True).first()
+
+
+class PieceLink(AppModel):
+    """A link a person made between two pieces — "matching set", "upsell".
+
+    One row, read from both ends: linking the necklace to the earring makes the
+    necklace show on the earring too. Storing it twice would let the two halves
+    drift apart, which is exactly the bug a two-way link is supposed to not have.
+    """
+
+    KINDS = [
+        "Matching set",
+        "Goes with",
+        "Alternative at a lower price",
+        "Upsell",
+        "Same design, different metal",
+    ]
+
+    link_id = models.AutoField(primary_key=True)
+    piece = models.ForeignKey(Piece, on_delete=models.CASCADE, db_column="jewel_code_id", related_name="links_out")
+    other = models.ForeignKey(
+        Piece, on_delete=models.CASCADE, db_column="other_jewel_code_id", related_name="links_in"
+    )
+    kind = models.CharField(max_length=48, default="Matching set")
+    created_at = models.DateTimeField(default=timezone.now)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, db_column="created_by", related_name="+"
+    )
+
+    class Meta:
+        db_table = "piece_link"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["piece", "other"], name="piece_link_is_unique"),
+            models.CheckConstraint(condition=~Q(piece=models.F("other")), name="piece_link_needs_two_pieces"),
+        ]
+
+    def __str__(self):
+        return f"{self.piece_id} \u2194 {self.other_id}"
+
+    @classmethod
+    def for_piece(cls, piece):
+        """Both directions, as ``(other_piece, kind, link_id)``."""
+        rows = cls.objects.filter(Q(piece=piece) | Q(other=piece)).select_related(
+            "piece__style", "other__style"
+        )
+        return [(row.other if row.piece_id == piece.pk else row.piece, row.kind, row.pk) for row in rows]
 
 
 class PieceCertificate(AppModel):

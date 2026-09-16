@@ -22,6 +22,10 @@ urlpatterns = [
     path("pieces/<str:jewel_code>/move/", views.move_piece_view, name="move_piece"),
     path("pieces/<str:jewel_code>/reserve/", views.reserve_piece_view, name="reserve_piece"),
     path("pieces/<str:jewel_code>/repair/", views.repair_open, name="repair_open"),
+    path("pieces/<str:jewel_code>/media/<int:media_id>/display/", views.piece_media_display, name="piece_media_display"),
+    path("pieces/<str:jewel_code>/link/", views.piece_link, name="piece_link"),
+    path("pieces/<str:jewel_code>/unlink/<int:link_id>/", views.piece_unlink, name="piece_unlink"),
+    path("pieces/<str:jewel_code>/marketing/", views.piece_marketing, name="piece_marketing"),
     # ── catalogue ────────────────────────────────────────────────────────
     path("styles/", views.style_list, name="style_list"),
     path("styles/new/", views.style_form, name="style_new"),

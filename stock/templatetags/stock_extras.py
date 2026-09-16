@@ -29,3 +29,10 @@ register.filter(crm_extras.inr)
 def grouped(amount):
     """Indian grouping without the ``₹`` — the legacy's rate columns."""
     return crm_extras.inr(amount).replace("₹", "")
+
+
+@register.filter
+def file_ext(file_name):
+    """``TIFF`` from ``ring-front.tiff`` — what a tile shows when it cannot draw."""
+    name = file_name or ""
+    return name.rsplit(".", 1)[-1].upper() if "." in name else "FILE"

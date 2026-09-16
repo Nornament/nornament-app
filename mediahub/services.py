@@ -12,7 +12,7 @@ def for_pieces(piece_ids, limit_each=None):
     """``get_many`` — one query, then presigned URLs, keyed by piece id."""
     assets = MediaAsset.objects.filter(
         piece_id__in=list(piece_ids), is_archived=False, confirmed_at__isnull=False
-    ).order_by("piece_id", "rank_order")
+    ).order_by("piece_id", "-is_catalogue_default", "rank_order")
     grouped = defaultdict(list)
     for asset in assets:
         bucket = grouped[asset.piece_id]
