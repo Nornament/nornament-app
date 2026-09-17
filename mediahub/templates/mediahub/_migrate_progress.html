@@ -32,13 +32,16 @@ anywhere — when the last one returns, they leave with the page.
     <progress value="{{ done }}" max="{{ total }}"></progress>
     <p class="dim">{{ done }} of {{ total }} ({{ pct }}%) — {{ copied }} copied,
        {{ skipped }} already there{% if failures %}, {{ failures|length }} failed{% endif %}.</p>
-    <form id="media-migrate-next">
+    <form id="media-migrate-next" method="post" action="{% url 'mediahub:migrate_run' %}">
       {% csrf_token %}
       {% for name, value in source.items %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
       <input type="hidden" name="after" value="{{ after }}">
       <input type="hidden" name="copied" value="{{ copied }}">
       <input type="hidden" name="skipped" value="{{ skipped }}">
       {% for line in failures %}<input type="hidden" name="failures" value="{{ line }}">{% endfor %}
+      {# htmx swaps this away before it is ever clicked; without htmx it is
+         how the run advances, one chunk per click. #}
+      <button class="btn primary" type="submit">Continue</button>
     </form>
     <div hx-post="{% url 'mediahub:migrate_run' %}"
          hx-include="#media-migrate-next"

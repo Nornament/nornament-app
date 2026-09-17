@@ -32,7 +32,10 @@ in the wrong place.
   {% if not keyed %}
     <div class="note">Nothing points at a bucket, so there is nothing to copy.</div>
   {% else %}
-  <form hx-post="{% url 'mediahub:migrate_run' %}" hx-target="#media-migrate" hx-swap="outerHTML">
+  {# method/action as well as hx-*: htmx is fetched at image build and the
+     Dockerfile tolerates that failing, so this screen cannot assume it. #}
+  <form method="post" action="{% url 'mediahub:migrate_run' %}"
+        hx-post="{% url 'mediahub:migrate_run' %}" hx-target="#media-migrate" hx-swap="outerHTML">
     {% csrf_token %}
     <div class="row" style="flex-wrap:wrap;gap:12px;margin-top:12px">
       <label>Endpoint

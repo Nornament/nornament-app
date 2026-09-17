@@ -257,9 +257,12 @@ def migrate_run(request):
             after = batch[-1].media_id
 
     done = min(tally["copied"] + tally["skipped"] + len(failures), total)
+    # htmx swaps a fragment in; a plain form post needs a whole page around it
     return render(
         request,
-        "mediahub/_migrate_progress.html",
+        "mediahub/_migrate_progress.html"
+        if request.headers.get("HX-Request")
+        else "mediahub/migrate_progress.html",
         {
             "source": source,
             "after": after,
