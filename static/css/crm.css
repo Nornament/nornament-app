@@ -14,7 +14,14 @@
 body{font-family:'Outfit','Helvetica Neue',Helvetica,'SF Pro Display',Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;letter-spacing:-0.01em}
 .app{display:flex;min-height:100vh}
 .sb{width:var(--sb);background:#FFFFFF;color:#787774;display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:100;overflow-y:auto;border-right:1px solid #E8E8E4}
-.main{margin-left:var(--sb);flex:1;min-height:100vh;background:var(--bg)}
+/* min-width:0 because a flex item's automatic minimum is its content's
+   min-content width: without it .main grew to the widest thing inside it — the
+   kanban board is 11 columns and 2212px on Orders — and pushed the whole page
+   sideways instead of letting .kanban-board's own overflow-x do the scrolling.
+   The sidebar is fixed and .ph is only vertically sticky, so that page-level
+   scroll slid the header out from over the board and left half the stages
+   unreachable. */
+.main{margin-left:var(--sb);flex:1;min-width:0;min-height:100vh;background:var(--bg)}
 .sbl{padding:22px 18px 18px;border-bottom:1px solid #E8E8E4;text-align:center}
 .sbn{flex:1;padding:10px 0;overflow-y:auto}
 .sb-sec{font-size:9px;font-weight:700;color:#BDBDB9;padding:14px 18px 5px;letter-spacing:2.5px;text-transform:uppercase;font-family:'Cinzel',serif}
@@ -367,8 +374,8 @@ a{text-decoration:none}
    The rest — dashboard, customer and friend detail, settings — are read-only
    tables that were widening the page instead of scrolling, which put a
    horizontal bar on the body and pushed the bottom nav off-centre. */
+.card:has(table),.sc:has(table){overflow-x:auto}
 @media(max-width:768px){
-  .card:has(table),.sc:has(table){overflow-x:auto}
   .ph{flex-wrap:wrap;gap:8px}
   .ph-t{min-width:0;overflow-wrap:anywhere}
   /* the page header's action cluster, which is the one .fl that reliably

@@ -336,3 +336,24 @@ def test_a_purchase_with_no_order_still_shows_no_photo(client, admin_user_, cust
     response = client.get(reverse("crm:customer_detail", args=[customer.pk]), {"tab": "Purchases"})
 
     assert response.context["sale_thumbs"] == {}
+
+
+def test_a_card_at_an_unknown_stage_offers_the_screen_that_can_fix_it(client, admin_user_, customer):
+    """Both arrows are dead on the ⚠ column — prev and next of a status that is
+    not on the ladder are both "". The card was visible and unmovable; it gets
+    the detail screen's status form instead of two disabled buttons."""
+    order = Order.objects.create(order_code="ORD-010", customer=customer, status="Sent to Karigar")
+    client.force_login(admin_user_)
+    body = client.get(reverse("crm:order_list"), {"view": "kanban"}).content.decode()
+    card = body[body.index("ORD-010"):]
+    card = card[:card.index("kanban-card") if "kanban-card" in card else len(card)]
+    assert "Set a stage" in card
+    assert reverse("crm:order_detail", args=[order.pk]) in card
+    # a multi-line {# #} is not a comment in Django — it leaks onto the card
+    assert "the ladder does not have" not in body
+
+
+def test_a_card_on_the_ladder_still_gets_its_arrows(client, admin_user_, order):
+    client.force_login(admin_user_)
+    body = client.get(reverse("crm:order_list"), {"view": "kanban"}).content.decode()
+    assert "mv-btn" in body and "Set a stage" not in body

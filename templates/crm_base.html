@@ -21,7 +21,7 @@ a larger app and has to be escapable.
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'css/crm.css' %}">
+  <link rel="stylesheet" href="{% static 'css/crm.css' %}{{ asset_v }}">
   <link rel="manifest" href="{% url 'crm:manifest' %}">
   <link rel="apple-touch-icon" href="{% static 'img/icon-192.png' %}">
   <script src="{% static 'vendor/htmx.min.js' %}" defer></script>

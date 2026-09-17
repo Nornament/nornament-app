@@ -25,6 +25,14 @@ mobile MobileStages view did and works the same with no drag library.{% endcomme
         </a>
         <div class="fl g8" style="padding:0 8px 8px">
           {% with back=status|prev_status:statuses forward=status|next_status:statuses %}
+          {% if not back and not forward %}
+          {% comment %}A stage the ladder does not have — the ⚠ column. Both
+          arrows would be dead, which leaves the card visible and unmovable;
+          the detail screen's status form is the thing that can fix it.
+          {% endcomment %}
+          <a class="btn btn-s btn-sm" style="flex:1;justify-content:center"
+             href="{% url spec.detail_url row.pk %}">Set a stage</a>
+          {% else %}
           <form method="post" action="{% url 'crm:pipeline_status' kind row.pk %}" style="flex:1">{% csrf_token %}
             <input type="hidden" name="status" value="{{ back }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">
             <button class="mv-btn" style="width:100%;height:32px" {% if not back %}disabled{% endif %} title="Back a stage">‹</button>
@@ -33,6 +41,7 @@ mobile MobileStages view did and works the same with no drag library.{% endcomme
             <input type="hidden" name="status" value="{{ forward }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">
             <button class="mv-btn" style="width:100%;height:32px" {% if not forward %}disabled{% endif %} title="On a stage">›</button>
           </form>
+          {% endif %}
           {% endwith %}
         </div>
       </div>
