@@ -16,9 +16,9 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
-# htmx and pdf.js are fetched here rather than committed: no third-party blob in the repo,
-# and still no build step. If the fetch fails the app degrades to page loads.
-RUN python manage.py vendor_assets || echo "vendored assets not fetched — full page loads, no invoice reader"
+# htmx is committed, so a build with no route to unpkg still ships a working UI.
+# pdf.js is still fetched; losing it costs the invoice reader and nothing else.
+RUN python manage.py vendor_assets || echo "pdf.js not fetched — no invoice reader, everything else unaffected"
 
 RUN chmod +x deploy/entrypoint.sh deploy/backup.sh
 RUN useradd --create-home --uid 10001 app && chown -R app /app

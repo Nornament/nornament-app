@@ -1,11 +1,12 @@
 """Fetch the front-end assets this app uses, so there is no build step.
 
-Nothing here is committed: the repo carries no third-party minified blob. Run
-before ``collectstatic``; ``deploy/Dockerfile`` does at image build time.
+Run before ``collectstatic``; ``deploy/Dockerfile`` does at image build time.
+A fetch that fails leaves whatever is already on disk alone.
 
-Every screen works without any of them. HTMX only saves a page reload. pdf.js
-only powers the "read this invoice" shortcut — the purchase form it fills in is
-the same form you can always type into by hand.
+pdf.js only powers the "read this invoice" shortcut — the purchase form it
+fills in is the same form you can always type into by hand. htmx used to be
+fetched here too and is now committed, because a silent miss degraded every
+screen at once.
 """
 import urllib.request
 from pathlib import Path
@@ -13,8 +14,11 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
+#: htmx is not here: it is committed. Every screen degrades to a page load
+#: without it, but a build that quietly failed to fetch it left the whole app
+#: in that state with nothing anywhere saying so, which is not a trade worth
+#: 50KB. pdf.js stays fetched — losing it costs one shortcut, loudly.
 ASSETS = {
-    "vendor/htmx.min.js": "https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js",
     "vendor/pdf.min.js": "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",
     "vendor/pdf.worker.min.js": "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js",
 }
