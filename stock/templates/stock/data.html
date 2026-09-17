@@ -39,6 +39,13 @@
   </form>
 </div>
 
+<div class="card">
+  <h3>Move the bucket</h3>
+  <p class="dim">Photos live in object storage, and the key never changes when the
+    bucket does — so moving providers or regions is a copy, not a re-link.</p>
+  <a class="btn" href="{% url 'mediahub:migrate' %}">Copy photos from another bucket →</a>
+</div>
+
 {% if wipe %}
 <div class="card">
   <h3>Wipe stock data</h3>

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Move the bucket · Nornament{% endblock %}
+{% block heading %}Move the bucket{% endblock %}
+{% block content %}
+{% comment %}
+Copies every object this database points at out of the old bucket and into the
+one this server is configured with. Keys are identical in both, so not a single
+MediaAsset row changes — the linkages are already right, only the objects are
+in the wrong place.
+{% endcomment %}
+
+<div class="card">
+  <h3>What is here</h3>
+  <table style="margin-top:12px">
+    <tbody>
+      <tr><td><b>{{ keyed }}</b> photo{{ keyed|pluralize }}</td>
+        <td class="dim">live in a bucket. These are what need copying.</td></tr>
+      <tr><td><b>{{ inline }}</b> photo{{ inline|pluralize }}</td>
+        <td class="dim">carry their bytes in the database and already work — nothing to do.</td></tr>
+    </tbody>
+  </table>
+  <p class="dim" style="margin-top:12px">
+    This server is pointed at <b class="mono">{{ bucket }}</b>
+    {% if endpoint %}at <span class="mono">{{ endpoint }}</span>{% endif %}.
+    Objects are copied <em>into</em> that. Nothing is written to the old bucket,
+    and nothing is deleted from it.
+  </p>
+</div>
+
+<div class="card" id="media-migrate">
+  <h3>The old bucket</h3>
+  {% if not keyed %}
+    <div class="note">Nothing points at a bucket, so there is nothing to copy.</div>
+  {% else %}
+  <form hx-post="{% url 'mediahub:migrate_run' %}" hx-target="#media-migrate" hx-swap="outerHTML">
+    {% csrf_token %}
+    <div class="row" style="flex-wrap:wrap;gap:12px;margin-top:12px">
+      <label>Endpoint
+        <input name="endpoint" required placeholder="https://eu2.contabostorage.com" size="34"></label>
+      <label>Bucket
+        <input name="bucket" required placeholder="nornamentbucket" size="20"></label>
+      <label>Region
+        <input name="region" value="auto" size="8"></label>
+    </div>
+    <div class="row" style="flex-wrap:wrap;gap:12px;margin-top:12px">
+      <label>Access key <input name="access_key" required size="30" autocomplete="off"></label>
+      <label>Secret key <input name="secret_key" required type="password" size="30" autocomplete="off"></label>
+    </div>
+    <p class="dim" style="margin-top:12px">
+      These are used for this run and nothing else — they are not saved to the
+      database, the settings or the session.
+    </p>
+    <button class="btn primary" type="submit" style="margin-top:8px">Copy {{ keyed }} photo{{ keyed|pluralize }}</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

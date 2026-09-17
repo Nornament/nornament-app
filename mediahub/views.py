@@ -10,12 +10,13 @@ import logging
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, permission_required
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from stock.enums import MediaKind
 from stock.models import Piece, Style
+from stock.views import tab_required
 from . import services, storage
 from .models import MediaAsset
 
@@ -182,3 +183,92 @@ def detach(request, media_id):
     asset.is_archived = True
     asset.save(update_fields=["is_archived"])
     return JsonResponse({"ok": True})
+
+
+# ── moving to a different bucket ─────────────────────────────────────────
+#: Objects per request. Small enough that a chunk never outlives a gateway
+#: timeout, big enough that several hundred objects is not several hundred
+#: round trips. ponytail: fixed size, make it adaptive if a chunk ever stalls.
+MIGRATE_CHUNK = 15
+
+
+def _keyed_assets():
+    """Every asset whose bytes live in a bucket rather than on its own row.
+
+    Two excludes rather than ``__in=["", None]``: SQL's ``IN (NULL)`` is never
+    true, so the tidier spelling silently keeps every keyless row and then
+    tries to copy an object called ``None``.
+    """
+    return MediaAsset.objects.exclude(storage_key__isnull=True).exclude(storage_key="").order_by("media_id")
+
+
+@login_required
+@tab_required("data")
+def migrate(request):
+    """What is in the bucket, and the form that fetches it from the old one."""
+    return render(
+        request,
+        "mediahub/migrate.html",
+        {
+            "keyed": _keyed_assets().count(),
+            "inline": MediaAsset.objects.exclude(inline_data=None).exclude(inline_data=b"").count(),
+            "bucket": settings.MEDIA_BUCKET,
+            "endpoint": settings.MEDIA_ENDPOINT_URL,
+        },
+    )
+
+
+@login_required
+@tab_required("data")
+@require_POST
+def migrate_run(request):
+    """One chunk of objects, then the bar that asks for the next.
+
+    The source credentials ride on the form through every chunk and are never
+    stored: no session row, no settings write, nothing on disk to remember to
+    shred afterwards. Keys are identical in both buckets, so no ``MediaAsset``
+    row is touched — this moves objects, never linkages.
+    """
+    field = lambda name: (request.POST.get(name) or "").strip()  # noqa: E731
+    source = {name: field(name) for name in ("endpoint", "bucket", "access_key", "secret_key", "region")}
+    after = int(field("after") or 0)
+    tally = {name: int(field(name) or 0) for name in ("copied", "skipped")}
+    failures = request.POST.getlist("failures")
+
+    total = _keyed_assets().count()
+    batch = list(_keyed_assets().filter(media_id__gt=after)[:MIGRATE_CHUNK])
+    error = None
+    if batch:
+        try:
+            client = storage.remote_client(
+                source["endpoint"], source["access_key"], source["secret_key"], source["region"]
+            )
+            copied, skipped, failed = storage.copy_into_bucket(
+                [asset.storage_key for asset in batch], client, source["bucket"]
+            )
+        except storage.StorageNotConfigured as problem:
+            error = f"This server's own bucket is not configured: {problem}"
+        except Exception as problem:  # noqa: BLE001 — bad credentials are the common case
+            error = f"Could not read the old bucket: {problem}"
+        else:
+            tally["copied"] += copied
+            tally["skipped"] += skipped
+            failures += [f"{key} — {why}" for key, why in failed]
+            after = batch[-1].media_id
+
+    done = min(tally["copied"] + tally["skipped"] + len(failures), total)
+    return render(
+        request,
+        "mediahub/_migrate_progress.html",
+        {
+            "source": source,
+            "after": after,
+            "total": total,
+            "done": done,
+            "pct": round(done * 100 / total) if total else 100,
+            "finished": error is not None or not batch,
+            "error": error,
+            "failures": failures[:50],
+            **tally,
+        },
+    )

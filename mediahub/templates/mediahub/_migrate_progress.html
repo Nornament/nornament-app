@@ -1,0 +1,49 @@
+{% comment %}
+One chunk's worth of result, and the trigger that asks for the next. The source
+credentials ride along as hidden fields so no chunk has to look them up
+anywhere — when the last one returns, they leave with the page.
+{% endcomment %}
+<div class="card" id="media-migrate">
+  {% if error %}
+    <h3>Stopped</h3>
+    <div class="note bad">{{ error }}</div>
+    <p class="dim">{{ copied }} copied and {{ skipped }} already present before it stopped.
+      Nothing was lost — fix the details and run it again, it picks up where it left off.</p>
+    <a class="btn" href="{% url 'mediahub:migrate' %}">Back to the form</a>
+
+  {% elif finished %}
+    <h3>Finished</h3>
+    <p><b>{{ copied }}</b> photo{{ copied|pluralize }} copied across,
+       <b>{{ skipped }}</b> already there.</p>
+    {% if failures %}
+      <div class="note bad"><b>{{ failures|length }} could not be copied.</b>
+        Every other object moved; these are the ones to look at.</div>
+      <ul class="dim mono" style="margin-top:8px">
+        {% for line in failures %}<li>{{ line }}</li>{% endfor %}
+      </ul>
+    {% else %}
+      <div class="note">Every object this database points at is now in the new bucket.
+        Open a record with a photo to confirm, then you can retire the old one.</div>
+    {% endif %}
+    <a class="btn" href="{% url 'mediahub:migrate' %}">Run it again</a>
+
+  {% else %}
+    <h3>Copying</h3>
+    <progress value="{{ done }}" max="{{ total }}"></progress>
+    <p class="dim">{{ done }} of {{ total }} ({{ pct }}%) — {{ copied }} copied,
+       {{ skipped }} already there{% if failures %}, {{ failures|length }} failed{% endif %}.</p>
+    <form id="media-migrate-next">
+      {% csrf_token %}
+      {% for name, value in source.items %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+      <input type="hidden" name="after" value="{{ after }}">
+      <input type="hidden" name="copied" value="{{ copied }}">
+      <input type="hidden" name="skipped" value="{{ skipped }}">
+      {% for line in failures %}<input type="hidden" name="failures" value="{{ line }}">{% endfor %}
+    </form>
+    <div hx-post="{% url 'mediahub:migrate_run' %}"
+         hx-include="#media-migrate-next"
+         hx-target="#media-migrate"
+         hx-swap="outerHTML"
+         hx-trigger="load delay:100ms"></div>
+  {% endif %}
+</div>

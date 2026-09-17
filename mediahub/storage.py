@@ -163,3 +163,60 @@ def delete_keys(keys, chunk=1000):
         )
         failed += [error.get("Key") for error in response.get("Errors", [])]
     return failed
+
+
+def remote_client(endpoint_url, access_key, secret_key, region="auto", addressing_style="path"):
+    """A client for some *other* bucket — the one being migrated away from.
+
+    Deliberately not cached, unlike :func:`client`: these credentials arrive on
+    a form, live for one request and are never written down anywhere.
+    """
+    import boto3
+    from botocore.config import Config
+
+    return boto3.client(
+        "s3",
+        endpoint_url=endpoint_url,
+        region_name=region or "auto",
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        config=Config(signature_version="s3v4", s3={"addressing_style": addressing_style or "path"}),
+    )
+
+
+def exists(key, s3=None, bucket=None):
+    """Is this object in the bucket? A miss is an answer here, not an error."""
+    from botocore.exceptions import ClientError
+
+    try:
+        (s3 or client()).head_object(Bucket=bucket or settings.MEDIA_BUCKET, Key=key)
+    except ClientError:
+        return False
+    return True
+
+
+def copy_into_bucket(keys, source, source_bucket):
+    """Pull each key out of ``source`` and into ours, keeping the key identical.
+
+    A GET then a PUT rather than a server-side copy: the two buckets are
+    different accounts in different regions, so there is no copy the
+    destination could perform on its own. An object already here is skipped,
+    which is what makes a re-run cheap and an interrupted run safe.
+
+    Returns ``(copied, skipped, failures)`` — one bad object never stops a run.
+    """
+    copied = skipped = 0
+    failures = []
+    for key in keys:
+        if exists(key):
+            skipped += 1
+            continue
+        try:
+            obj = source.get_object(Bucket=source_bucket, Key=key)
+            put_bytes(key, obj["Body"].read(), obj.get("ContentType") or guess_mime(key))
+            head(key)  # it moved only when this bucket agrees that it did
+        except Exception as error:  # noqa: BLE001 — a bad object is a finding, not a crash
+            failures.append((key, str(error)))
+            continue
+        copied += 1
+    return copied, skipped, failures
