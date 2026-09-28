@@ -8,9 +8,12 @@ import io
 import numpy as np
 import pytest
 from django.conf import settings
+from django.utils import timezone
 from PIL import Image
 
+from mediahub.models import MediaAsset
 from stock import identify
+from stock.enums import MediaKind
 
 
 def _jpeg(size=(640, 480), colour=(200, 160, 40), exif_orientation=None):
@@ -79,3 +82,70 @@ def test_the_real_model_knows_a_photo_from_a_different_one():
     near = float(same @ np.asarray(identify.embed(buffer.getvalue())))
     far = float(same @ np.asarray(identify.embed(other.getvalue())))
     assert near > far
+
+
+def _unit(*values):
+    vector = np.zeros(384, dtype=np.float32)
+    vector[: len(values)] = values
+    return (vector / np.linalg.norm(vector)).tolist()
+
+
+def _photo(piece, vector, *, kind=MediaKind.PHOTO, archived=False, confirmed=True):
+    return MediaAsset.objects.create(
+        media_ref=f"M{MediaAsset.objects.count() + 1:06d}",
+        piece=piece,
+        kind=kind,
+        storage_key=f"stock/piece/{piece.pk}/{MediaAsset.objects.count()}.webp",
+        file_name="p.webp",
+        mime_type="image/webp",
+        confirmed_at=timezone.now() if confirmed else None,
+        is_archived=archived,
+        embedding=vector,
+    )
+
+
+def _another_piece(piece, code):
+    from stock.models import Piece
+
+    return Piece.objects.create(
+        jewel_code=code, style=piece.style, metal_purity="18K", stock_state=piece.stock_state,
+        location=piece.location, current_bom_version=1,
+    )
+
+
+@pytest.mark.django_db
+def test_the_closest_piece_comes_first_with_one_card_per_piece(received_piece, admin_user_):
+    other = _another_piece(received_piece, "ER00739")
+    _photo(received_piece, _unit(1, 0.1))
+    _photo(received_piece, _unit(1, 0.05))  # a second, even closer angle
+    _photo(other, _unit(0.2, 1))
+
+    matches = identify.search(admin_user_, _unit(1, 0))
+
+    assert [m.piece_id for m in matches] == [received_piece.pk, other.pk]
+    assert matches[0].score > 0.99
+    assert matches[0].score > matches[1].score
+
+
+@pytest.mark.django_db
+def test_only_confirmed_live_piece_photos_are_candidates(received_piece, admin_user_):
+    _photo(received_piece, _unit(1), kind=MediaKind.CAD)
+    _photo(received_piece, _unit(1), archived=True)
+    _photo(received_piece, _unit(1), confirmed=False)
+    assert identify.search(admin_user_, _unit(1)) == []
+
+
+@pytest.mark.django_db
+def test_a_piece_the_user_cannot_see_is_never_returned(received_piece, sales_user, locations):
+    """The piece sits in MUM; a HO-only login must not learn it exists."""
+    _photo(received_piece, _unit(1))
+    sales_user.home_location = locations["HO"]
+    sales_user.save(update_fields=["home_location"])
+    assert identify.search(sales_user, _unit(1)) == []
+
+
+@pytest.mark.django_db
+def test_coverage_counts_pieces_with_an_embedded_photo(received_piece, admin_user_):
+    _another_piece(received_piece, "ER00739")
+    _photo(received_piece, _unit(1))
+    assert identify.coverage(admin_user_) == {"searchable": 1, "total": 2}

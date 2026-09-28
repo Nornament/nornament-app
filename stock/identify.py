@@ -11,6 +11,7 @@ The model runs through onnxruntime rather than torch: the VPS has 2 GB, and
 torch alone is bigger than everything else in the image put together.
 """
 import io
+from collections import namedtuple
 from functools import lru_cache
 
 import numpy as np
@@ -84,3 +85,57 @@ def embed(data):
         vector = outputs[names.index("last_hidden_state")][0, 0]  # the CLS token
     vector = vector / np.linalg.norm(vector)
     return vector.astype(float).tolist()
+
+
+Match = namedtuple("Match", "piece_id media_id score")
+
+
+def searchable_photos():
+    """The reference set: a piece's own photographs, and nothing else.
+
+    A CAD or render is a drawing, not what a phone sees; a style's media is
+    the design, not this physical piece; CRM media belongs to customers.
+    Scope is read from ``piece`` and ``kind`` — never from the key prefix.
+    """
+    from mediahub.models import MediaAsset
+
+    from .enums import MediaKind
+
+    return MediaAsset.objects.filter(
+        piece__isnull=False, kind=MediaKind.PHOTO, is_archived=False, confirmed_at__isnull=False
+    )
+
+
+def search(user, query, k=5):
+    """The ``k`` pieces whose best photo is closest to ``query``, best first.
+
+    Location scoping happens in the query, before anything is ranked, so a
+    piece on a shelf this login cannot see is never even scored.
+
+    ponytail: brute force over every visible photo; pgvector when this
+    passes ~50k photos.
+    """
+    from .models import Piece
+
+    rows = list(
+        searchable_photos()
+        .filter(embedding__isnull=False, piece__in=Piece.objects.visible_to(user))
+        .values_list("pk", "piece_id", "embedding")
+    )
+    if not rows:
+        return []
+    scores = np.asarray([row[2] for row in rows], dtype=np.float32) @ np.asarray(query, dtype=np.float32)
+    best = {}
+    for (media_id, piece_id, _), score in zip(rows, scores.tolist()):
+        if piece_id not in best or score > best[piece_id].score:
+            best[piece_id] = Match(piece_id, media_id, score)
+    return sorted(best.values(), key=lambda match: match.score, reverse=True)[:k]
+
+
+def coverage(user):
+    """How many of the pieces this login can see a photo could find."""
+    from .models import Piece
+
+    visible = Piece.objects.visible_to(user)
+    embedded = searchable_photos().filter(embedding__isnull=False).values("piece_id")
+    return {"searchable": visible.filter(pk__in=embedded).count(), "total": visible.count()}

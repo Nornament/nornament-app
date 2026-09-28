@@ -1,5 +1,6 @@
 """Media objects. Keys are unchanged from R2, so the rclone copy is the migration."""
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.utils import timezone
 
@@ -63,6 +64,9 @@ class MediaAsset(models.Model):
     confirmed_at = models.DateTimeField(
         null=True, blank=True, help_text="Set when the object is known to exist in the bucket. An unconfirmed row is a reservation."
     )
+    # DINOv2 vector of this photo, unit length, for "which piece is this?".
+    # Null until embedded — on upload, or by ``manage.py embed_media``.
+    embedding = ArrayField(models.FloatField(), null=True, blank=True, editable=False)
 
     class Meta:
         db_table = "media_asset"
