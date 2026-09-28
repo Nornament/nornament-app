@@ -37,3 +37,19 @@ def test_the_karigar_desk_opens_no_stock_tab():
     from accounts.capabilities import ROLE_TABS
 
     assert ROLE_TABS["KARIGAR"] == ()
+
+
+def test_the_karigar_desk_lands_on_the_shelf_and_is_kept_out_of_the_crm(client, karigar_user):
+    from django.urls import reverse
+
+    client.force_login(karigar_user)
+    assert client.get(reverse("stock:dashboard"))["Location"] == reverse("inventory:shelf")
+    assert client.get(reverse("crm:dashboard")).status_code == 403
+    assert client.get(reverse("crm:customer_list")).status_code == 403
+
+
+def test_graphic_still_opens_the_crm(client, graphic_user):
+    from django.urls import reverse
+
+    client.force_login(graphic_user)
+    assert client.get(reverse("crm:dashboard")).status_code == 200

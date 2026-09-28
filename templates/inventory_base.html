@@ -29,7 +29,7 @@ would fight on every page.
     {% include "inventory/_rail.html" %}
     <div class="rail-foot">
       <div class="who"><span class="avatar">{{ user.get_username|first|upper }}</span>{{ user.full_name|default:user.get_username }} · {{ role_name }}</div>
-      <a href="{% url 'stock:dashboard' %}">Stock</a> · <a href="{% url 'crm:dashboard' %}">CRM</a> ·
+      {% if role_code != "KARIGAR" %}<a href="{% url 'stock:dashboard' %}">Stock</a> · <a href="{% url 'crm:dashboard' %}">CRM</a> ·{% endif %}
       <form method="post" action="{% url 'accounts:logout' %}" class="inline">{% csrf_token %}<button class="linkish">Sign out</button></form>
     </div>
   </aside>

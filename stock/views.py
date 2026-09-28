@@ -114,6 +114,8 @@ def _visible_pieces(request):
 
 @login_required
 def dashboard(request):
+    if _role_code(request.user) == "KARIGAR":
+        return redirect("inventory:shelf")      # where login lands; the desk has no stock screens
     pieces = _visible_pieces(request)
     live = pieces.filter(stock_state__in=list(COUNTABLE_STATES))
     by_location = (
