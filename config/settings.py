@@ -200,6 +200,15 @@ MEDIA_DIRECT_UPLOAD = env_bool("MEDIA_DIRECT_UPLOAD", True)
 MEDIA_WEBP_QUALITY = int(env("MEDIA_WEBP_QUALITY", "82"))
 MEDIA_WEBP_ON_UPLOAD = env_bool("MEDIA_WEBP_ON_UPLOAD", True)
 
+# ── identify a piece by photo ────────────────────────────────────────────
+#: DINOv2-small, ONNX. The Dockerfile fetches it at a pinned revision and
+#: checksum; locally, see RUNBOOK "Photo search".
+IDENTIFY_MODEL_PATH = Path(env("IDENTIFY_MODEL_PATH", str(BASE_DIR / "models" / "dinov2-small.onnx")))
+#: below this cosine similarity the screen says "no confident match". 0.5 is
+#: a starting guess; set it from what real phone photos score.
+IDENTIFY_MIN_SCORE = float(env("IDENTIFY_MIN_SCORE", "0.5"))
+IDENTIFY_MAX_BYTES = 15 * 1024 * 1024
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
