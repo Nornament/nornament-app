@@ -1,10 +1,7 @@
 {% comment %}Same card as the Similar tab. The row is ``piece_row`` — already
 masked, so a SALES login's cards have no cost to leak.{% endcomment %}
 {% if error %}
-  {% comment %}error is one of a fixed set of developer-authored strings from
-  the view, never user input, so |safe here does not open an XSS hole — it
-  only stops Django from mangling the apostrophes in that copy.{% endcomment %}
-  <div class="card"><p>{{ error|safe }}</p></div>
+  <div class="card"><p>{{ error }}</p></div>
 {% elif not results %}
   <div class="card"><p>No piece photos to match against yet.</p></div>
 {% else %}

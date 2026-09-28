@@ -3,6 +3,7 @@
 Everything except one test runs on a fake embedder, so CI never needs the
 88 MB model. The one that needs it skips when the file is absent.
 """
+import html
 import io
 import json
 
@@ -298,7 +299,7 @@ def test_a_server_without_the_model_says_so(client, admin_user_, monkeypatch):
     client.force_login(admin_user_)
     response = client.post(reverse("stock:identify"), {"photo": _upload()})
     assert response.status_code == 503
-    assert "isn't set up on this server" in response.content.decode()
+    assert "isn't set up on this server" in html.unescape(response.content.decode())
 
 
 @pytest.mark.django_db
