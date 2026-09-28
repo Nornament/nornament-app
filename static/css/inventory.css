@@ -440,6 +440,7 @@ body[data-view="client"] span.cli{display:inline!important}
 /* ═══════════════════════ Django compat ═══════════════════════
    The prototype drew with <button onclick>; these are links and forms. */
 a.imgcard{display:block;text-decoration:none}
+a.rowlink{color:inherit;text-decoration:none}
 .catsw a,.catsw span{display:block;text-align:center;text-decoration:none;color:var(--muted);font-size:12px;
   font-weight:560;padding:7px 4px;border-radius:6px}
 .catsw a.on{background:var(--s1);color:#fff;box-shadow:0 1px 2px rgba(11,11,11,.18)}

@@ -1,11 +1,13 @@
 """The inventory screens. Thin: services write, rows mask, templates draw."""
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from . import rows, services
-from .models import CodePart
+from .models import Batch, BoxColour, CodePart
+
+BATCH_CAP = 40
 
 
 def _client(request):
@@ -46,3 +48,26 @@ def shelf(request):
     everything = _everything(request)
     return _page(request, "inventory/shelf.html", everything, tab="shelf",
                  totals=rows.summarise(everything), colours=rows.by_colour(everything))
+
+
+@login_required
+def colour(request, code):
+    box = get_object_or_404(BoxColour, pk=code)
+    everything = _everything(request)
+    batches = rows.by_batch([r for r in everything if r["box_colour"] == box.code], _labels())
+    shown = batches if request.GET.get("all") == "1" else batches[:BATCH_CAP]
+    return _page(request, "inventory/colour.html", everything, tab="shelf", box=box,
+                 batches=shown, batch_total=len(batches))
+
+
+@login_required
+def batch(request, pk):
+    batch = get_object_or_404(Batch.objects.select_related("box_colour"), pk=pk)
+    everything = _everything(request)
+    mine = [r for r in everything if r["batch_pk"] == batch.pk]
+    labels = _labels()
+    table = request.GET.get("view") == "table" and not _client(request)
+    return _page(request, "inventory/batch.html", everything, tab="shelf", batch=batch, box=batch.box_colour,
+                 pouches=mine, view="table" if table else "grid", decoder=rows.decoder(batch, labels),
+                 names=rows.by_batch(mine, labels)[0]["names"] if mine else "",
+                 money=bool(mine) and "pouch_value" in mine[0])
