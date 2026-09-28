@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     "crm",
     "mediahub",
     "etl",
+    "inventory",
 ]
 
 MIDDLEWARE = [
