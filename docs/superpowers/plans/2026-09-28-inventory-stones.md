@@ -15,7 +15,7 @@
 ## Global Constraints
 
 - Follow the surrounding style: docstrings say *why*; no type annotations except dataclass fields (which `@dataclass` needs).
-- All writes go through `inventory/services.py`. Views never write models directly.
+- Views never write models directly. Writes live in `inventory/services.py`, or in the importer's `commit()` (permission-gated, one transaction, logged — the IVY importer's precedent). Ruled during execution.
 - Masking is decided in one place: rows go through `stock.masking.mask()`. Templates test key presence (`{% if 'pouch_value' in row %}`), never capabilities, for anything money-shaped.
 - Reuse, do not duplicate: `stock.services.ServiceError`, `stock.services.require`, `stock.services.log`, `stock.models.Vendor`, `stock.models.ImportBatch`, `stock.views._store_workbook`, `stock.views._batch_workbook`, `mediahub.services.attach_uploads`, `crm.templatetags.crm_extras.inr`.
 - Terminology on screen: **Box colour → Batch (`SR01Y`) → Pouch (1, 2, 3)**. Source columns: `New Gati Code` = batch, `Batch No.` = pouch no.
