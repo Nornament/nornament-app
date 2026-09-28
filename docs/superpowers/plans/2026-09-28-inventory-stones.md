@@ -23,7 +23,7 @@
 - Items the prototype only names render padlocked (`🔒`, disabled), never as dead links.
 - New capabilities: `inv_masters` (used now), `inv_purchase`, `inv_job`, `inv_assort` (declared for parts 2–4). New group `KARIGAR`.
 - Client view is a session flag; in client mode the server never sends batch code, pouch no., carton, remarks, src, rates, values, supplier or data-quality flags. URLs address batches by pk and pouches by `NRN-` ref so no URL carries a batch code.
-- Tests live in `inventory/tests/`, start with `pytestmark = pytest.mark.django_db`, and use the real role-group fixtures from the root `conftest.py`.
+- Tests live in `inventory/tests/`; those that touch the database start with `pytestmark = pytest.mark.django_db` (pure-function tests do not), and use the real role-group fixtures from the root `conftest.py`.
 - Run tests from the worktree root as: `../nornament-app/.venv/bin/pytest <path> -v` (the worktree's `.env` is a symlink to the main checkout's; `.venv` is not linked because it is not gitignored).
 
 ## Deviations from the spec, decided while planning
@@ -36,6 +36,7 @@ These are recorded in the spec by Task 12.
 4. **A rate of zero is allowed**; only a negative rate is refused. The sheet may carry zero rates, and the prototype valued them at ₹0 rather than "cannot be valued".
 5. **The inventory masking walk lives in `inventory/tests/test_masking.py`** with its own every-screen-is-walked check, rather than widening the stock/CRM walk.
 6. **Client view does not show a list price** — the per-client price flag is deferred, so a client sees "Available — enquire for price".
+7. **Only database-touching tests carry `pytestmark = pytest.mark.django_db`.** Pure-function tests (`test_rules.py`, `test_import_parse.py`) do not. Ruled during execution.
 
 ## File Structure
 
@@ -3909,6 +3910,7 @@ In `docs/superpowers/specs/2026-09-28-inventory-stones-design.md`, add this sect
 - **URLs carry a batch's pk and a pouch's `NRN-` ref**, so no link in client view carries a batch code.
 - **The inventory's SALES walk is `inventory/tests/test_masking.py`,** with its own every-screen check.
 - **Client view shows no list price** until the per-client price flag exists.
+- **Only database-touching tests carry the `django_db` marker;** pure-function tests do not.
 - **Parity** is `inventory/tests/test_parity.py` (marked `golden`). It reads the prototype from beside the repo and skips when it is absent.
 ```
 
