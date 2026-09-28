@@ -32,6 +32,7 @@ class Item:
     existing: object = None
     held_pcs: int = None
     held_ct: object = None
+    held_rate: object = None
     recount: bool = False
 
 
@@ -65,17 +66,26 @@ def _suggest(items):
 
 
 def _match(items):
+    """The pouch each row already is: by batch + pouch no., else a numberless one from the same row.
+
+    The source-row fallback is what lets a reviewer number a pouch imported
+    without one: the row now carries a number the pouch does not, and without
+    the fallback it would open a second pouch. It must be the same batch too,
+    or a row inserted above it in the register would re-target it.
+    """
     keyed = {(p.batch.code, p.pouch_no): p for p in Pouch.objects.exclude(pouch_no=None).select_related("batch")}
-    unkeyed = {p.src: p for p in Pouch.objects.filter(pouch_no=None).exclude(src="")}
+    unkeyed = {p.src: p for p in Pouch.objects.filter(pouch_no=None).exclude(src="").select_related("batch")}
     for item in items:
         if not item.problem:
-            item.existing = keyed.get((item.batch, item.pouch_no)) if item.pouch_no else unkeyed.get(item.row.src)
+            hit = keyed.get((item.batch, item.pouch_no)) if item.pouch_no else None
+            loose = None if hit else unkeyed.get(item.row.src)
+            item.existing = hit or (loose if loose and loose.batch.code == item.batch else None)
     ids = [item.existing.pk for item in items if item.existing]
     held = {p.pk: p for p in services.stocked(Pouch.objects.filter(pk__in=ids))}
     for item in items:
         if item.existing:
             pouch = held[item.existing.pk]
-            item.held_pcs, item.held_ct = pouch.on_pcs, pouch.on_ct
+            item.held_pcs, item.held_ct, item.held_rate = pouch.on_pcs, pouch.on_ct, pouch.rate
             item.recount = (
                 (item.row.pcs is not None and item.row.pcs != (pouch.on_pcs or 0))
                 or (item.row.ct is not None and item.row.ct != (pouch.on_ct or 0))
@@ -174,26 +184,27 @@ def commit(items, user, import_batch=None):
     if blocked:
         raise ServiceError(f"{len(blocked)} rows still need a decision.")
     result = {"created": 0, "updated": 0, "recounted": 0, "skipped": 0}
-    cache, fresh = {}, []
+    # a re-import touches every row, so nothing here may cost a query per unchanged row
+    cache, fresh = Batch.objects.in_bulk(field_name="code"), []
     for item in items:
         if item.skip:
             result["skipped"] += 1
             continue
-        batch = _batch(item.batch, cache)
         if item.existing is None:
-            fresh.append((batch, _fields(item), item.row.pcs, item.row.ct, item.row.rate))
+            fresh.append((_batch(item.batch, cache), _fields(item), item.row.pcs, item.row.ct, item.row.rate))
             continue
         pouch = item.existing
-        for name, value in _fields(item).items():
-            setattr(pouch, name, value)
-        pouch.batch = batch
-        pouch.save()
+        fields = _fields(item)
+        changed = [name for name, value in fields.items() if getattr(pouch, name) != value]
+        for name in changed:
+            setattr(pouch, name, fields[name])
+        if changed:
+            pouch.save(update_fields=changed)
         result["updated"] += 1
         if item.recount:
             services.recount(user, pouch, item.row.pcs, item.row.ct, note=f"re-imported from {item.row.src}")
             result["recounted"] += 1
-        current = services.stocked(Pouch.objects.filter(pk=pouch.pk)).get().rate
-        if item.row.rate is not None and item.row.rate != current:
+        if item.row.rate is not None and item.row.rate != item.held_rate:
             services.add_price(user, pouch, PriceEntry.VALUATION, item.row.rate, timezone.localdate())
     result["created"] = len(services.open_pouches(user, fresh, import_batch=import_batch))
     log(user, "IMPORT", "inv_pouch", import_batch.pk if import_batch else "-", f"stones import {result}")

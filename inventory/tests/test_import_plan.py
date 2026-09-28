@@ -56,7 +56,7 @@ def test_commit_opens_every_decided_row(admin_user_):
 
 def test_reimport_updates_and_recounts(admin_user_):
     plan.commit(_items(_decided()), admin_user_)
-    from inventory.tests.fixtures_stones import SHEETS_DEFAULT, _row
+    from inventory.tests.fixtures_stones import _row
 
     changed = {"SL": [_row("SL01G", 1, "Green Onyx", "Green", 18, 13, 100)]}
     items = plan.analyse(stones.parse(build_workbook(changed)))
@@ -66,6 +66,37 @@ def test_reimport_updates_and_recounts(admin_user_):
     onyx = services.stocked(Pouch.objects.filter(batch__code="SL01G", pouch_no="1")).get()
     assert (onyx.on_pcs, onyx.on_ct) == (18, Decimal("13"))
     assert onyx.movements.filter(reason=Movement.Reason.RECOUNT_ADJUSTMENT).count() == 2
+
+
+def test_numbering_a_pouch_on_reimport_does_not_open_a_second(admin_user_):
+    plan.commit(_items(_decided()), admin_user_)
+    items = _items(_decided())
+    post = {f"pouch_no:{i.row.src}": "" for i in plan.attention(items)} | {"fill_suggested": "1", "skip:SL!6": "1"}
+    filled = plan.read_decisions(post, items, _decided())
+    before = Pouch.objects.count()
+    plan.commit(_items(filled), admin_user_)
+    assert Pouch.objects.count() == before
+    assert Pouch.objects.get(src="SL!5").pouch_no == "1"                  # Jade
+
+
+def test_a_numberless_pouch_is_not_taken_by_another_batch_on_its_row(admin_user_):
+    plan.commit(_items(_decided()), admin_user_)
+    from inventory.tests.fixtures_stones import _row
+
+    moved = {"SL": [_row("SL01G", 1, "Green Onyx", "Green", 20, 12.5, 100),
+                    _row("SL01G", 2, "Ruby Glass", "Red", None, 40, 50),
+                    _row("SL01G", 9, "Green Onyx", "Green", 5, 2, 100),
+                    _row("SL09G", None, "Moss Agate", "Green", 1, 1, 1)]}     # SL!5 is now another stone
+    item = _by_src(plan.analyse(stones.parse(build_workbook(moved))))["SL!5"]
+    assert item.existing is None
+
+
+def test_reimporting_an_unchanged_register_is_flat_in_queries(admin_user_, django_assert_max_num_queries):
+    plan.commit(_items(_decided()), admin_user_)
+    items = _items(_decided())
+    with django_assert_max_num_queries(20):
+        result = plan.commit(items, admin_user_)
+    assert result["updated"] == 5 and result["created"] == 0
 
 
 def test_fill_suggested_numbers_only_blank_ones():

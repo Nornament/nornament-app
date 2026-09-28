@@ -4,6 +4,7 @@ from django.urls import reverse
 from inventory import seed
 from inventory.models import BoxColour, CodePart, Pouch
 from inventory.tests.fixtures_stones import build_workbook
+from stock.models import ImportBatch
 
 pytestmark = pytest.mark.django_db
 
@@ -39,6 +40,10 @@ def test_upload_review_decide_commit(client, admin_user_, bucket):
             "pouch_no:SL!5": "", "batch:SL!5": ""}
     client.post(url, form)
     client.post(reverse("inventory:import_commit", args=[batch_id]))
+    assert Pouch.objects.count() == 5
+
+    client.post(reverse("inventory:import_commit", args=[batch_id]))           # a double-submit
+    assert ImportBatch.objects.get(pk=batch_id).status == ImportBatch.Status.DONE
     assert Pouch.objects.count() == 5
 
 

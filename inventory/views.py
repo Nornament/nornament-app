@@ -282,13 +282,16 @@ def import_review(request, batch_id):
 @require_POST
 def import_commit(request, batch_id):
     batch = get_object_or_404(ImportBatch, pk=batch_id, source="STONES")
-    if batch.status == ImportBatch.Status.DONE:
-        messages.error(request, "That import has already been committed.")
+    # claimed in one UPDATE, so a double-submit finds it taken rather than committing twice
+    claimable = [ImportBatch.Status.REVIEWING, ImportBatch.Status.FAILED]
+    if not ImportBatch.objects.filter(pk=batch.pk, status__in=claimable).update(status=ImportBatch.Status.COMMITTING):
+        messages.error(request, "That import has already been committed, or is being committed now.")
         return redirect("inventory:import_review", batch_id=batch.pk)
-    items = plan.analyse(stones.parse(_batch_workbook(batch)), batch.decisions)
     try:
+        items = plan.analyse(stones.parse(_batch_workbook(batch)), batch.decisions)
         result = plan.commit(items, request.user, import_batch=batch)
     except ServiceError as error:
+        batch.save(update_fields=["status"])        # back to what it was: rows still need deciding
         messages.error(request, error.messages[0])
         return redirect("inventory:import_review", batch_id=batch.pk)
     except Exception as error:  # the transaction has already rolled back
