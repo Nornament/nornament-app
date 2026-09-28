@@ -4,13 +4,18 @@ Everything except one test runs on a fake embedder, so CI never needs the
 88 MB model. The one that needs it skips when the file is absent.
 """
 import io
+import json
 
 import numpy as np
 import pytest
 from django.conf import settings
+from django.core.management import call_command
+from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
 
+from mediahub import storage
+from mediahub import views as media_views
 from mediahub.models import MediaAsset
 from stock import identify
 from stock.enums import MediaKind
@@ -150,3 +155,81 @@ def test_coverage_counts_pieces_with_an_embedded_photo(received_piece, admin_use
     _another_piece(received_piece, "ER00739")
     _photo(received_piece, _unit(1))
     assert identify.coverage(admin_user_) == {"searchable": 1, "total": 2}
+
+
+@pytest.fixture
+def fake_embed(monkeypatch):
+    """Every photo embeds to the same unit vector; what it was given is recorded."""
+    seen = []
+
+    def fake(data):
+        seen.append(data)
+        return _unit(1)
+
+    monkeypatch.setattr(identify, "embed", fake)
+    return seen
+
+
+@pytest.mark.django_db
+def test_embed_asset_skips_anything_that_is_not_a_piece_photo(received_piece, fake_embed):
+    cad = _photo(received_piece, None, kind=MediaKind.CAD)
+    assert identify.embed_asset(cad, b"bytes") is False
+    assert fake_embed == []
+
+
+@pytest.mark.django_db
+def test_embed_asset_fetches_bytes_when_it_is_not_given_them(received_piece, fake_embed, monkeypatch):
+    photo = _photo(received_piece, None)
+    monkeypatch.setattr(storage, "get_bytes", lambda key: b"from-bucket:" + key.encode())
+    assert identify.embed_asset(photo) is True
+    photo.refresh_from_db()
+    assert photo.embedding == pytest.approx(_unit(1))
+    assert fake_embed == [b"from-bucket:" + photo.storage_key.encode()]
+
+
+@pytest.mark.django_db
+def test_confirming_a_piece_photo_embeds_it(client, admin_user_, received_piece, fake_embed, monkeypatch, settings):
+    settings.MEDIA_WEBP_ON_UPLOAD = False
+    photo = _photo(received_piece, None, confirmed=False)
+    monkeypatch.setattr(storage, "head", lambda key: {"ContentLength": 10})
+    monkeypatch.setattr(storage, "get_bytes", lambda key: b"jpeg")
+    client.force_login(admin_user_)
+    response = client.post(
+        reverse("mediahub:confirm"), json.dumps({"media_id": photo.pk}), content_type="application/json"
+    )
+    assert response.status_code == 200
+    photo.refresh_from_db()
+    assert photo.embedding is not None
+
+
+@pytest.mark.django_db
+def test_an_embedding_failure_never_fails_the_upload(received_piece, monkeypatch):
+    photo = _photo(received_piece, None)
+
+    def boom(data):
+        raise identify.ModelMissing("no model")
+
+    monkeypatch.setattr(identify, "embed", boom)
+    media_views._embed(photo, b"jpeg")  # must not raise
+    photo.refresh_from_db()
+    assert photo.embedding is None
+
+
+@pytest.mark.django_db
+def test_the_backfill_dry_run_writes_nothing(received_piece, fake_embed):
+    photo = _photo(received_piece, None)
+    call_command("embed_media", "--dry-run")
+    photo.refresh_from_db()
+    assert photo.embedding is None
+    assert fake_embed == []
+
+
+@pytest.mark.django_db
+def test_the_backfill_fills_once_and_skips_on_the_second_pass(received_piece, fake_embed, monkeypatch):
+    photo = _photo(received_piece, None)
+    monkeypatch.setattr(storage, "get_bytes", lambda key: b"jpeg")
+    call_command("embed_media")
+    photo.refresh_from_db()
+    assert photo.embedding is not None
+    call_command("embed_media")
+    assert len(fake_embed) == 1

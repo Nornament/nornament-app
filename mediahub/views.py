@@ -100,6 +100,21 @@ def _shrink(asset, data=None):
         logger.exception("webp conversion failed for media %s", asset.pk)
 
 
+def _embed(asset, data=None):
+    """Make a new piece photo findable by "Identify piece".
+
+    Best effort, like ``_shrink``: the upload is already safe in the bucket, and
+    a photo that could not be embedded now is picked up by
+    ``manage.py embed_media`` later.
+    """
+    from stock import identify
+
+    try:
+        identify.embed_asset(asset, data)
+    except Exception:  # noqa: BLE001 — search is never worth losing an upload over
+        logger.exception("embedding failed for media %s", asset.pk)
+
+
 @login_required
 @require_POST
 def confirm(request):
@@ -118,6 +133,7 @@ def confirm(request):
     asset.confirmed_at = timezone.now()
     asset.save(update_fields=["bytes", "file_size_kb", "sha256", "confirmed_at"])
     _shrink(asset)
+    _embed(asset)
     return JsonResponse(
         {"ok": True, "media_id": asset.pk, "media_ref": asset.media_ref, "bytes": asset.bytes}
     )
@@ -142,6 +158,7 @@ def proxy_upload(request):
     asset.confirmed_at = timezone.now()
     asset.save(update_fields=["bytes", "file_size_kb", "sha256", "confirmed_at"])
     _shrink(asset, data)
+    _embed(asset, data)
     return JsonResponse({"ok": True, "media_id": asset.pk, "bytes": asset.bytes})
 
 

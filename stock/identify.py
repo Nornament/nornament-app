@@ -139,3 +139,20 @@ def coverage(user):
     visible = Piece.objects.visible_to(user)
     embedded = searchable_photos().filter(embedding__isnull=False).values("piece_id")
     return {"searchable": visible.filter(pk__in=embedded).count(), "total": visible.count()}
+
+
+def embed_asset(asset, data=None):
+    """Embed one media row in place. ``False`` when it is not a searchable photo.
+
+    ``data`` is the bytes when the caller already has them — the proxy upload
+    does; confirm and the backfill do not, and fetch from the bucket.
+    """
+    if not searchable_photos().filter(pk=asset.pk).exists():
+        return False
+    if data is None:
+        from mediahub import storage
+
+        data = storage.get_bytes(asset.storage_key)
+    asset.embedding = embed(data)
+    asset.save(update_fields=["embedding"])
+    return True
