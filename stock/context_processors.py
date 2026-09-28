@@ -31,6 +31,6 @@ def asset_version(request):
     """
     if not settings.DEBUG:
         return {"asset_v": ""}
-    sheets = [settings.BASE_DIR / "static" / "css" / name for name in ("app.css", "crm.css")]
+    sheets = [settings.BASE_DIR / "static" / "css" / name for name in ("app.css", "crm.css", "inventory.css")]
     stamps = [int(sheet.stat().st_mtime) for sheet in sheets if sheet.exists()]
     return {"asset_v": f"?v={max(stamps)}" if stamps else ""}

@@ -1,0 +1,88 @@
+{% load static %}<!doctype html>
+{% comment %}
+The inventory's shell — the prototype's own markup (Nornament_Inventory
+_head.html lines 446-534): the rail with the Stones/Diamonds switch, the top bar
+with the Internal / Client preview toggle, and the tab strip. It does not load
+app.css: both stylesheets define .card, .btn, .chip, .tabs and .nav, and they
+would fight on every page.
+{% endcomment %}
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Inventory{% endblock %} · Nornament</title>
+  <link rel="stylesheet" href="{% static 'css/inventory.css' %}{{ asset_v }}">
+  <script>document.documentElement.dataset.theme = localStorage.theme ??
+    (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : '');</script>
+</head>
+<body data-view="{% if client_view %}client{% else %}internal{% endif %}">
+{% include "_preloader.html" %}
+<div class="app">
+  <div class="navscrim" hidden></div>
+  <aside class="rail" id="sidenav">
+    <div class="brand"><div class="brand-mark"></div>
+      <div><div class="brand-name">Nornament</div><div class="brand-sub">Inventory</div></div></div>
+    <div class="catsw">
+      <a class="on" href="{% url 'inventory:shelf' %}">◆ Stones</a>
+      <span title="Coming soon">◇ Diamonds 🔒</span>
+    </div>
+    {% include "inventory/_rail.html" %}
+    <div class="rail-foot">
+      <div class="who"><span class="avatar">{{ user.get_username|first|upper }}</span>{{ user.full_name|default:user.get_username }} · {{ role_name }}</div>
+      <a href="{% url 'stock:dashboard' %}">Stock</a> · <a href="{% url 'crm:dashboard' %}">CRM</a> ·
+      <form method="post" action="{% url 'accounts:logout' %}" class="inline">{% csrf_token %}<button class="linkish">Sign out</button></form>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="top">
+      <button class="burger" type="button" aria-label="Show navigation" aria-controls="sidenav" aria-expanded="false">☰</button>
+      <div class="crumb">{% block crumb %}{% endblock %}</div>
+      <div class="spacer"></div>
+      <div class="search locked" title="Coming soon">Search batch, pouch, stone… 🔒</div>
+      <form class="vt" method="post" action="{% url 'inventory:set_view' %}">{% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button name="view" value="internal" class="{% if not client_view %}on{% endif %}">🔓 Internal</button>
+        <button name="view" value="client" class="{% if client_view %}on{% endif %}">👁 Client preview</button>
+      </form>
+      <button class="btn sm" type="button" title="Toggle light / dark"
+        onclick="const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'':'dark';localStorage.theme=r.dataset.theme">◐</button>
+    </div>
+
+    <div class="tabs">
+      <a class="{% if tab == 'shelf' %}on{% endif %}" href="{% url 'inventory:shelf' %}">Shelf</a>
+      {% if pouch_ref %}<a class="{% if tab == 'lot' %}on{% endif %}" href="{% url 'inventory:pouch' pouch_ref %}">Pouch detail</a>
+      {% else %}<button disabled>Pouch detail</button>{% endif %}
+      {% if not client_view %}
+        {% if pouch_ref %}<a class="{% if tab == 'tx' %}on{% endif %}" href="{% url 'inventory:movements' pouch_ref %}">Movements</a>
+        {% else %}<button disabled>Movements</button>{% endif %}
+        <button disabled title="Coming soon">Purchase 🔒</button>
+      {% endif %}
+      <button disabled title="Coming soon">Stock take 🔒</button>
+    </div>
+
+    <div class="wrap">
+      {% if messages %}<ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>{% endif %}
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</div>
+<script>
+/* The rail as a drawer below 860px — the same behaviour as base.html's. */
+(function () {
+  var burger = document.querySelector('.burger');
+  var scrim = document.querySelector('.navscrim');
+  if (!burger || !scrim) return;
+  function show(open) {
+    document.body.classList.toggle('navopen', open);
+    burger.setAttribute('aria-expanded', open);
+    scrim.hidden = !open;
+  }
+  burger.addEventListener('click', function () { show(!document.body.classList.contains('navopen')); });
+  scrim.addEventListener('click', function () { show(false); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') show(false); });
+  document.getElementById('sidenav').addEventListener('click', function (e) { if (e.target.closest('a')) show(false); });
+})();
+</script>
+</body>
+</html>
