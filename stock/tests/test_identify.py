@@ -117,7 +117,7 @@ def _another_piece(piece, code):
 def test_the_closest_piece_comes_first_with_one_card_per_piece(received_piece, admin_user_):
     other = _another_piece(received_piece, "ER00739")
     _photo(received_piece, _unit(1, 0.1))
-    _photo(received_piece, _unit(1, 0.05))  # a second, even closer angle
+    closer = _photo(received_piece, _unit(1, 0.05))  # a second, even closer angle
     _photo(other, _unit(0.2, 1))
 
     matches = identify.search(admin_user_, _unit(1, 0))
@@ -125,6 +125,7 @@ def test_the_closest_piece_comes_first_with_one_card_per_piece(received_piece, a
     assert [m.piece_id for m in matches] == [received_piece.pk, other.pk]
     assert matches[0].score > 0.99
     assert matches[0].score > matches[1].score
+    assert matches[0].media_id == closer.pk
 
 
 @pytest.mark.django_db
