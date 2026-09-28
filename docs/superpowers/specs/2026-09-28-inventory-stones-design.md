@@ -27,7 +27,7 @@ Batch       code unique (SR01Y) · box_colour FK · family · cls · seq   ← p
 Pouch       ref unique, immutable (NRN-000001, assigned at creation)
             batch FK · pouch_no (text, nullable) · carton (Box No)
             category · stone_name · colour · shape · cut · quality     ← raw text, as typed
-            size_text · size_kind (lw|dia|multi|free|none) · length_mm · width_mm
+            size_text
             countable · remarks · src ("SP!104") · import_batch FK
             treatment · origin · purchase_date · supplier → stock.Vendor
             UNIQUE(batch, pouch_no) WHERE pouch_no IS NOT NULL
@@ -132,7 +132,7 @@ markup. The stock and CRM sidebars gain an "Inventory" link; this rail links bac
 ## Errors
 
 Service rules raise `ServiceError`, shown as a message: missing capability, duplicate batch +
-pouch no., negative balance, rate ≤ 0. A blocked import cannot commit; commit is one transaction.
+pouch no., negative balance, negative rate. A blocked import cannot commit; commit is one transaction.
 Photo uploads sit outside the transaction, as in the stock app.
 
 ## Testing
@@ -150,3 +150,16 @@ Photo uploads sit outside the transaction, as in the stock app.
 - Client view — no batch code, carton, remarks, rate or `src` string in any client-mode response.
 - Parity — a fixture rebuilt from the prototype's embedded data reproduces 2,916 pouches,
   ₹1,72,49,719 and 127 misfiled.
+
+## Changed while planning
+
+- **No `inv_stones` tab.** Every role opens the stone shelf, so a `ROLE_TABS` entry would gate nothing and would make the stock sidebar read "11 of 10 tabs". Views are `login_required`; writes are gated by capability in the service.
+- **Misfiled follows the prototype exactly:** only a box whose label starts with `?` is exempt. BY is unconfirmed but labelled, so it is judged (that is how the prototype gets 127).
+- **Size is parsed from `size_text` when read.** `size_kind`, `length_mm` and `width_mm` are not stored; nothing in part 1 queries them.
+- **A zero rate is allowed;** only a negative one is refused. The prototype valued zero-rate pouches at ₹0 rather than as unvalued.
+- **URLs carry a batch's pk and a pouch's `NRN-` ref**, so no link in client view carries a batch code.
+- **The inventory's SALES walk is `inventory/tests/test_masking.py`,** with its own every-screen check.
+- **Client view shows no list price** until the per-client price flag exists.
+- **Only database-touching tests carry the `django_db` marker;** pure-function tests do not.
+- **The importer's `commit()` may write models directly** (permission-gated, one transaction, logged), as the IVY importer does; views never write models.
+- **Parity** is `inventory/tests/test_parity.py` (marked `golden`). It reads the prototype from beside the repo and skips when it is absent.
