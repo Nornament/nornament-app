@@ -11,6 +11,10 @@ from inventory.tests.conftest import SUPPLIER, VALUE
 
 pytestmark = pytest.mark.django_db
 
+#: shelf/box-colour total: onyx (98,987.5) + ruby (40 ct × ₹50 = 2,000), rounded.
+#: Both pouches share box colour G, so this is also the only colour's total.
+TOTAL_VALUE = "1,00,988"
+
 SCREENS = [
     ("inventory:shelf", {}, ""),
     ("inventory:colour", {"code": "G"}, "?all=1"),
@@ -46,7 +50,7 @@ def test_no_cost_or_supplier_reaches_a_login_without_the_right(client, shelf, re
         response = client.get(_url(name, kwargs, query, shelf))
         assert response.status_code == 200, f"{name} returned {response.status_code}"
         body = response.content.decode()
-        for secret in (VALUE, "7,919", SUPPLIER):
+        for secret in (VALUE, "7,919", SUPPLIER, TOTAL_VALUE):
             assert secret not in body, f"{name}{query} leaked {secret!r} to {fixture}"
 
 
@@ -54,6 +58,8 @@ def test_accounts_does_see_them(client, accounts_user, shelf):
     client.force_login(accounts_user)
     body = client.get(_url("inventory:pouch", {"ref": "onyx"}, "", shelf)).content.decode()
     assert VALUE in body and "7,919" in body and SUPPLIER in body
+    shelf_body = client.get(_url("inventory:shelf", {}, "", shelf)).content.decode()
+    assert TOTAL_VALUE in shelf_body, "accounts should see the shelf's stock-value total"
 
 
 def test_the_writes_refuse_a_sales_login(client, sales_user, shelf):
@@ -61,6 +67,9 @@ def test_the_writes_refuse_a_sales_login(client, sales_user, shelf):
     ref = shelf["onyx"].ref
     for name in ("inventory:pouch_save", "inventory:pouch_price", "inventory:pouch_photos"):
         assert client.post(reverse(name, args=[ref]), {"kind": "list", "rate": "1"}).status_code == 403, name
+    #: whole screen gated on inv_masters; the permission check runs before the
+    #: batch lookup, so a nonexistent batch_id still gets 403, not 404.
+    assert client.get(reverse("inventory:import_review", args=[1])).status_code == 403
 
 
 def test_every_inventory_screen_is_walked():
