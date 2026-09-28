@@ -3,6 +3,7 @@
 {% block crumb %}Shelf &nbsp;›&nbsp; {{ box.label }}{% endblock %}
 {% block content %}
 <div class="shelfbar"><h1>{{ box.label }} — {{ batch_total }} batches</h1></div>
+{% include "inventory/_totals.html" %}
 <div class="bcrumb"><a href="{% url 'inventory:shelf' %}">All box colours</a> <span>›</span> <b>{{ box.label }} · {{ box.code }}</b></div>
 
 <div class="cardgrid">

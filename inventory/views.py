@@ -70,8 +70,7 @@ def set_view(request):
 @login_required
 def shelf(request):
     everything = _everything(request)
-    return _page(request, "inventory/shelf.html", everything, tab="shelf",
-                 totals=rows.summarise(everything), colours=rows.by_colour(everything))
+    return _page(request, "inventory/shelf.html", everything, tab="shelf", colours=rows.by_colour(everything))
 
 
 @login_required

@@ -15,6 +15,7 @@ def test_size_kinds():
     assert rules.parse_size("6") == ("dia", "6 mm", Decimal("6"), None)
     assert rules.parse_size("2,3,4,") == ("multi", "2, 3, 4 mm", Decimal("2"), None)
     assert rules.parse_size("14*9.5, 6") == ("multi", "14 x 9.5, 6 mm", Decimal("14"), Decimal("9.5"))
+    assert rules.parse_size("13*6*14") == ("multi", "13 x 6 x 14 mm", Decimal("13"), Decimal("6"))
     assert rules.parse_size("Free Far") == ("free", "Free Far", None, None)
     assert rules.parse_size("") == ("none", "", None, None)
     assert rules.parse_size(None) == ("none", "", None, None)

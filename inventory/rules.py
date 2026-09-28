@@ -27,7 +27,9 @@ def parse_size(text):
     """The ``Size Length * Width`` cell, in millimetres: (kind, display, length, width).
 
     Displays keep the digits as typed. The prototype printed parsed floats on
-    multi-size cells, which is how "14" became "14.0".
+    multi-size cells, which is how "14" became "14.0". A length × width ×
+    height (``13*6*14``) is measured, so it is not "no size": the prototype
+    counted it as multi too, but displayed it as a bare " mm".
     """
     value = (text or "").strip().rstrip(",*").strip()
     if not value:
@@ -41,15 +43,13 @@ def parse_size(text):
     if _NUMERIC.match(value):
         parts = []
         for piece in (p.strip() for p in value.split(",") if p.strip()):
-            lw, dia = _LW.match(piece), _DIA.match(piece)
-            if lw:
-                parts.append((lw.group(1), lw.group(2)))
-            elif dia:
-                parts.append((dia.group(1), None))
+            dims = [d.strip() for d in piece.split("*")]
+            if all(_DIA.match(d) for d in dims):
+                parts.append(dims)
         if parts:
-            display = ", ".join(f"{a} x {b}" if b else a for a, b in parts) + " mm"
-            length, width = parts[0]
-            return ("multi", display, Decimal(length), Decimal(width) if width else None)
+            display = ", ".join(" x ".join(dims) for dims in parts) + " mm"
+            length, *rest = parts[0]
+            return ("multi", display, Decimal(length), Decimal(rest[0]) if rest else None)
     return ("free", value, None, None)
 
 

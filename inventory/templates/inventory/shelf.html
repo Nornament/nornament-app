@@ -4,19 +4,7 @@
 {% block content %}
 <div class="shelfbar"><h1>Shelf — by box colour</h1></div>
 
-{% if not client_view %}
-<div class="totstrip">
-  {% if 'value' in totals %}<div class="tot heroTot"><div class="l">Stock value</div><div class="v">{{ totals.value|rupees }}</div><div class="f">weight in carats × rate</div></div>{% endif %}
-  <div class="tot"><div class="l">Total weight</div><div class="v">{{ totals.ct|ct }} ct</div><div class="f">{{ totals.ct|kg }} kg</div></div>
-  <div class="tot"><div class="l">Pouches</div><div class="v">{{ totals.pouches|grouped }}</div><div class="f">{{ totals.batches|grouped }} batches · {{ colours|length }} box colours</div></div>
-  {% if 'unpriced' in totals %}<div class="tot"><div class="l">Not yet valued</div><div class="v">{{ totals.unpriced|grouped }}</div><div class="f">no weight or no rate</div></div>{% endif %}
-</div>
-{% if totals.no_pouch_no or totals.no_size %}
-<div class="banner warn"><div class="banner-ic">!</div><div>
-  <h4>{{ totals.no_pouch_no|grouped }} pouches have no pouch number, and {{ totals.no_size|grouped }} have no size in mm</h4>
-  <p>Batch + pouch number keys {{ totals.keyed|grouped }} of {{ totals.pouches|grouped }} pouches.</p></div></div>
-{% endif %}
-{% endif %}
+{% include "inventory/_totals.html" %}
 
 <div class="bcrumb"><b>All box colours</b></div>
 <div class="colgrid2">

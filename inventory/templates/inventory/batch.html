@@ -10,6 +10,7 @@
     <a class="{% if view == 'table' %}on{% endif %}" href="?view=table">▤ Table</a>
   </div>{% endif %}
 </div>
+{% include "inventory/_totals.html" %}
 <div class="bcrumb"><a href="{% url 'inventory:shelf' %}">All box colours</a> <span>›</span>
   <a href="{% url 'inventory:colour' box.code %}">{{ box.label }} · {{ box.code }}</a>
   {% if not client_view %}<span>›</span> <b class="mono">{{ batch.code }}</b>{% endif %}</div>

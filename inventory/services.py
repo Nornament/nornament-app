@@ -40,9 +40,11 @@ def stocked(queryset=None):
         .values("rate")[:1]
     )
     queryset = Pouch.objects.all() if queryset is None else queryset
+    # ordered here, not by Meta: the aggregate drops Meta.ordering, and every
+    # screen groups in arrival order, so batches by code and pouches as imported
     return queryset.select_related("batch__box_colour", "supplier").annotate(
         on_pcs=Sum(_signed("pcs")), on_ct=Sum(_signed("ct")), rate=Subquery(latest)
-    )
+    ).order_by("batch__code", "pk")
 
 
 def value_of(pouch):

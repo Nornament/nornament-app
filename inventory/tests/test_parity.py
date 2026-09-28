@@ -77,3 +77,4 @@ def test_the_shelf_matches_the_prototype(admin_user_):
     assert abs(totals["ct"] - Decimal("1056315.1")) < Decimal("0.5")
     assert abs(totals["value"] - Decimal("17249719")) <= 10
     assert totals["unpriced"] == 48
+    assert totals["no_size"] == 838

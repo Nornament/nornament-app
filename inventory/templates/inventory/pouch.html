@@ -7,10 +7,10 @@
     <div class="k1">{% if client_view %}{{ row.ref }}{% else %}{{ row.batch_code }} · {{ row.pouch_no|default:"?" }}{% endif %}</div>
     <div class="k2">{{ row.stone_name|default:"Unidentified" }} · {{ row.shape|default:"—" }} · {{ row.cut|default:"—" }} · {{ row.colour|default:"—" }}{% if row.quality %} · {{ row.quality }}{% endif %}</div>
     <div class="meta">
+      {% if in_stock %}<span class="chip good"><span class="dot"></span>In stock</span>{% else %}<span class="chip"><span class="dot" style="background:var(--muted)"></span>Out of stock</span>{% endif %}
       {% if client_view %}
         <span class="chip">Available — enquire for price</span>
       {% else %}
-        {% if in_stock %}<span class="chip good"><span class="dot"></span>In stock</span>{% else %}<span class="chip"><span class="dot" style="background:var(--muted)"></span>Out of stock</span>{% endif %}
         <span class="chip">▤ Box {{ row.carton|default:"—" }}</span>
         <span class="chip">◈ Batch {{ row.batch_code }}</span>
         <span class="chip"><span class="dot" style="background:{{ row.box_swatch }}"></span>{{ row.box_label }} box</span>

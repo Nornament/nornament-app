@@ -41,6 +41,7 @@ def test_a_client_sees_the_reference_and_can_enquire(client, admin_user_, shelf)
     _client_mode(client, admin_user_)
     body = client.get(reverse("inventory:pouch", args=[shelf["onyx"].ref])).content.decode()
     assert shelf["onyx"].ref in body and "enquire for price" in body and "✉ Enquire" in body
+    assert "In stock" in body
 
 
 def test_the_enquiry_arrives_carrying_the_reference(client, admin_user_, shelf):

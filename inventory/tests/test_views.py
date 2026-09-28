@@ -1,7 +1,6 @@
 import pytest
 from django.urls import reverse
 
-from inventory.tests.conftest import VALUE
 
 pytestmark = pytest.mark.django_db
 
@@ -54,3 +53,25 @@ def test_show_all_lifts_the_forty_batch_cap(client, admin_user_, shelf):
     capped = client.get(reverse("inventory:colour", args=["G"])).content.decode()
     assert "Show all 42 batches" in capped
     assert "Show all" not in client.get(reverse("inventory:colour", args=["G"]), {"all": "1"}).content.decode()
+
+
+def test_the_totals_and_gap_banner_sit_on_every_shelf_level(client, admin_user_, shelf):
+    client.force_login(admin_user_)
+    for url in (reverse("inventory:colour", args=["G"]), reverse("inventory:batch", args=[shelf["batch"].pk])):
+        body = client.get(url).content.decode()
+        assert "Stock value" in body and "1,00,988" in body and "have no size in mm" in body, url
+    client.post(reverse("inventory:set_view"), {"view": "client"})
+    assert "Stock value" not in client.get(reverse("inventory:colour", args=["G"])).content.decode()
+
+
+def test_batches_and_pouches_come_in_code_then_import_order(client, admin_user_, shelf):
+    from inventory import services
+    from inventory.models import Batch
+
+    for code in ("SL09G", "SL07G", "SL05G", "SL03G"):
+        batch = Batch.objects.create(code=code, box_colour_id="G", family="S", cls="L", seq=code[2:4])
+        services.open_pouch(admin_user_, batch, {"pouch_no": "1", "stone_name": "Jade"}, pcs=1, ct=1, rate=1)
+    client.force_login(admin_user_)
+    body = client.get(reverse("inventory:colour", args=["G"])).content.decode()
+    positions = [body.index(code) for code in ("SL01G", "SL03G", "SL05G", "SL07G", "SL09G")]
+    assert positions == sorted(positions)
