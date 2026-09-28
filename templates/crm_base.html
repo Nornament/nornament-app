@@ -59,6 +59,7 @@ a larger app and has to be escapable.
       <div class="sb-sec">Stock</div>
       <a class="ni" href="{% url 'stock:dashboard' %}"><span class="ni-i">▦</span><span>Stock app</span></a>
       <a class="ni" href="{% url 'stock:piece_list' %}"><span class="ni-i">◈</span><span>Pieces</span></a>
+      <a class="ni" href="{% url 'inventory:shelf' %}"><span class="ni-i">◆</span><span>Stones</span></a>
 
       <div class="sb-sec">Admin</div>
       {% url 'crm:settings' as u %}<a class="ni{% if request.path == u %} on{% endif %}" href="{{ u }}"><span class="ni-i">⚙️</span><span>Settings</span></a>
