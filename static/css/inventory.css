@@ -445,6 +445,8 @@ a.rowlink{color:inherit;text-decoration:none}
   font-weight:560;padding:7px 4px;border-radius:6px}
 .catsw a.on{background:var(--s1);color:#fff;box-shadow:0 1px 2px rgba(11,11,11,.18)}
 .catsw span{opacity:.55;cursor:not-allowed}
+.catsw a,.catsw span{white-space:nowrap}
+.catsw .lock{display:inline;padding:0;font-size:9px}
 .tabs a,.tabs button{background:none;border:0;color:var(--muted);font-size:13px;padding:11px 14px;cursor:pointer;
   border-bottom:2px solid transparent;margin-bottom:-1px;text-decoration:none}
 .tabs a:hover{color:var(--ink2)}
@@ -507,7 +509,14 @@ select.chip{appearance:none;cursor:pointer;font:inherit;font-size:11px}
   .nav a,.nav .locked{padding:11px 18px}
   .top{padding:10px 14px;gap:9px;flex-wrap:wrap}
   .search{display:none}
-  .tabs{position:static;overflow-x:auto;padding:0 10px}
+  .tabs{position:static;overflow-x:auto;white-space:nowrap;padding:0 10px}
+  .tabs>*{flex:none}
+  /* nothing may force the page wider than the phone: the tiles shrink, the hero takes a row */
+  .totstrip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tot.heroTot{grid-column:1/-1}
+  .tot .v{font-size:19px;overflow-wrap:anywhere}
+  .dec-strip{flex-wrap:wrap}
+  .dec-arrow{display:none}
   .wrap{padding:16px 14px 48px}
   .head-act{margin-left:0;flex-wrap:wrap}
   .kpis{grid-template-columns:1fr 1fr}
