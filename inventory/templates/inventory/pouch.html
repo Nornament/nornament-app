@@ -67,8 +67,8 @@
         {% if not photos and not client_view %}<span class="chip warn" style="margin-left:auto"><span class="dot"></span>Placeholder</span>{% endif %}</div>
       <div class="card-b">
         <div class="ph" style="background:linear-gradient(160deg,#fbfaf7,{{ row.colour_hex }}2a)">
-          {% if photos %}<img class="photo" src="{% url 'mediahub:media' photos.0.pk %}" alt="{{ row.stone_name }}">{% else %}{% silhouette row.shape row.colour_hex %}{% endif %}</div>
-        {% if photos|length > 1 %}<div class="thumbs">{% for p in photos %}<a href="{% url 'mediahub:media' p.pk %}" target="_blank"><img src="{% url 'mediahub:media' p.pk %}" alt=""></a>{% endfor %}</div>{% endif %}
+          {% if photos %}<img class="photo" src="{% url 'inventory:photo' photos.0.pk %}" alt="{{ row.stone_name }}">{% else %}{% silhouette row.shape row.colour_hex %}{% endif %}</div>
+        {% if photos|length > 1 %}<div class="thumbs">{% for p in photos %}<a href="{% url 'inventory:photo' p.pk %}" target="_blank"><img src="{% url 'inventory:photo' p.pk %}" alt=""></a>{% endfor %}</div>{% endif %}
         {% if caps.inv_masters and not client_view %}
         <form method="post" enctype="multipart/form-data" action="{% url 'inventory:pouch_photos' row.ref %}">{% csrf_token %}
           <label class="drop upload"><b>Drop photos here</b>Filed as <span class="mono">{{ row.batch_code }}-{{ row.pouch_no|default:"X" }}-01.jpg</span>

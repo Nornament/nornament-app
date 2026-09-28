@@ -53,3 +53,20 @@ def test_internal_again_brings_everything_back(client, admin_user_, shelf):
     _client_mode(client, admin_user_)
     client.post(reverse("inventory:set_view"), {"view": "internal"})
     assert "SL01G" in client.get(reverse("inventory:pouch", args=[shelf["onyx"].ref])).content.decode()
+
+
+def test_a_photo_reaches_a_client_named_by_its_reference(client, admin_user_, shelf, monkeypatch):
+    from mediahub import storage
+    from mediahub.models import MediaAsset
+    from stock.enums import MediaKind
+
+    asset = MediaAsset.objects.create(
+        media_ref="M-PHOTO-1", kind=MediaKind.PHOTO, storage_key="crm/pouch/1/abc.jpg", file_name="SL01G-1-01.jpg",
+        mime_type="image/jpeg", scope="pouch", scope_id=str(shelf["onyx"].pk),
+    )
+    monkeypatch.setattr(storage, "presign_get", lambda key, mime, name: f"https://bucket.example/{key}?name={name}")
+    _client_mode(client, admin_user_)
+    assert f'src="{reverse("inventory:photo", args=[asset.pk])}"' in client.get(
+        reverse("inventory:pouch", args=[shelf["onyx"].ref])).content.decode()
+    location = client.get(reverse("inventory:photo", args=[asset.pk]))["Location"]
+    assert "SL01G" not in location and f"name={shelf['onyx'].ref}.jpg" in location

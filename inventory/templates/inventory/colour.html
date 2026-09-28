@@ -9,7 +9,7 @@
 {% for b in batches %}
   <a class="imgcard" href="{% url 'inventory:batch' b.pk %}">
     <div class="tile" style="background:linear-gradient(160deg,#fbfaf7,{{ b.hex }}22)">
-      {% if b.photo_id %}<img class="photo" src="{% url 'mediahub:media' b.photo_id %}" alt="" loading="lazy">{% else %}{% silhouette b.shape b.hex %}{% endif %}
+      {% if b.photo_id %}<img class="photo" src="{% url 'inventory:photo' b.photo_id %}" alt="" loading="lazy">{% else %}{% silhouette b.shape b.hex %}{% endif %}
       {% if b.code %}<span class="badge">{{ b.code }}</span>{% endif %}
       <span class="badge rt">{{ b.pouches }} pouch{{ b.pouches|pluralize:"es" }}</span>
       {% if not client_view and not b.photo_id %}<span class="nophoto">no photo yet</span>{% endif %}

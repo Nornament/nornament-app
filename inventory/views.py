@@ -5,6 +5,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -12,6 +13,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from accounts.capabilities import INV_MASTERS
+from mediahub import storage
 from mediahub.models import MediaAsset
 from mediahub.services import attach_uploads
 from stock.enums import MediaKind
@@ -192,7 +194,7 @@ def pouch_photos(request, ref):
     obj = get_object_or_404(Pouch.objects.select_related("batch"), ref=ref)
     require(request.user, INV_MASTERS, "Only a role that edits inventory records can add photos.")
     uploads = request.FILES.getlist("photos")
-    start = MediaAsset.objects.filter(scope="pouch", scope_id=str(obj.pk)).count()
+    start = MediaAsset.objects.filter(scope="pouch", scope_id=str(obj.pk), kind=MediaKind.PHOTO).count()
     for number, upload in enumerate(uploads, start=start + 1):
         extension = os.path.splitext(upload.name)[1].lower() or ".jpg"
         upload.name = f"{obj.batch.code}-{obj.pouch_no or 'X'}-{number:02d}{extension}"
@@ -202,6 +204,24 @@ def pouch_photos(request, ref):
     if refused:
         messages.error(request, f"Not added: {', '.join(refused)}")
     return redirect("inventory:pouch", ref=ref)
+
+
+@login_required
+def photo(request, media_id):
+    """A pouch photo, saved as its ``NRN-`` reference.
+
+    Photos are filed as ``SL01G-1-01.jpg``, and mediahub hands the bucket that
+    name as the download name, so every ``<img>`` would carry the batch code a
+    client must not see.
+    """
+    asset = get_object_or_404(MediaAsset, pk=media_id, scope="pouch", is_archived=False)
+    pouch = get_object_or_404(Pouch, pk=asset.scope_id)
+    extension = os.path.splitext(asset.file_name or "")[1].lower() or ".jpg"
+    try:
+        url = storage.presign_get(asset.storage_key, asset.mime_type, f"{pouch.ref}{extension}")
+    except storage.StorageNotConfigured:
+        return JsonResponse({"error": "media storage is not configured"}, status=503)
+    return redirect(url)
 
 
 @login_required

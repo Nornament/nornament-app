@@ -17,4 +17,5 @@ urlpatterns = [
     path("pouches/<str:ref>/price/", views.pouch_price, name="pouch_price"),
     path("pouches/<str:ref>/photos/", views.pouch_photos, name="pouch_photos"),
     path("pouches/<str:ref>/movements/", views.movements, name="movements"),
+    path("photos/<int:media_id>/", views.photo, name="photo"),
 ]

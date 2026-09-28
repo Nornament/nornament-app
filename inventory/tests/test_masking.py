@@ -24,9 +24,10 @@ SCREENS = [
     ("inventory:movements", {"ref": "onyx"}, ""),
 ]
 
-#: POST-only, or gated whole on inv_masters and asserted to 403 below
+#: POST-only, a redirect to the bucket (test_client_view checks its name), or
+#: gated whole on inv_masters and asserted to 403 below
 EXEMPT = {
-    "inventory:set_view", "inventory:pouch_save", "inventory:pouch_price", "inventory:pouch_photos",
+    "inventory:set_view", "inventory:pouch_save", "inventory:pouch_price", "inventory:pouch_photos", "inventory:photo",
     "inventory:import_home", "inventory:import_review", "inventory:import_commit",
 }
 
