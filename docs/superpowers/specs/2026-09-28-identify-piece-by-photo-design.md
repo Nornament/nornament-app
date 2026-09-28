@@ -81,8 +81,10 @@ one migration. `null` means "not embedded yet".
 ## Keeping embeddings current
 
 - **On upload:** `mediahub/views.py` already calls `_shrink(asset, data)`
-  after `confirm` and `proxy_upload`. `attach_uploads` only creates CRM
-  media, so it needs no hook; bulk importers are covered by the backfill.
+  after `confirm` and `proxy_upload`. `attach_uploads` is also how the IVY
+  stock importer attaches piece photos; that path (and `import_device_backup`)
+  is covered by the backfill rather than a hook, so a bulk import is never
+  slowed by ~0.3 s of model time per image.
   Next to each, call `_embed(asset, data)` —
   only for `kind=PHOTO` with a `piece` — fetching bytes with
   `storage.get_bytes` when they are not already in hand. It runs after the

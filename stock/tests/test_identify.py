@@ -315,3 +315,32 @@ def test_htmx_gets_just_the_results(client, admin_user_, received_piece, fake_em
 def test_a_login_without_the_stock_tab_is_refused(client, graphic_user):
     client.force_login(graphic_user)
     assert client.get(reverse("stock:identify")).status_code == 403
+
+
+def test_a_decompression_bomb_is_refused_like_any_unreadable_file(monkeypatch):
+    # anything over twice MAX_IMAGE_PIXELS raises DecompressionBombError on open
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 1000)
+    with pytest.raises(identify.NotAnImage):
+        identify.preprocess(_jpeg())
+
+
+@pytest.mark.django_db
+def test_confidence_is_judged_on_the_first_card_shown(client, admin_user_, received_piece, locations, monkeypatch):
+    """A strong match on a piece this login cannot see must not vouch for a weak one it can."""
+    hidden = _another_piece(received_piece, "ER00739")
+    hidden_photo = _photo(hidden, _unit(1))
+    shown_photo = _photo(received_piece, _unit(1))
+    admin_user_.is_superuser = False
+    admin_user_.home_location = locations["MUM"]
+    admin_user_.save(update_fields=["is_superuser", "home_location"])
+    hidden.location = locations["HO"]
+    hidden.save(update_fields=["location"])
+    monkeypatch.setattr(identify, "embed", lambda data: _unit(1))
+    monkeypatch.setattr(identify, "search", lambda user, query: [
+        identify.Match(hidden.pk, hidden_photo.pk, 0.99),
+        identify.Match(received_piece.pk, shown_photo.pk, 0.3),
+    ])
+    client.force_login(admin_user_)
+    body = client.post(reverse("stock:identify"), {"photo": _upload()}).content.decode()
+    assert "ER00739" not in body
+    assert "No confident match" in body

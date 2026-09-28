@@ -40,7 +40,8 @@ def preprocess(data):
         # lets the decoder skip straight to a smaller scale. No-op for PNG/WebP.
         image.draft("RGB", (_SHORT_EDGE * 2, _SHORT_EDGE * 2))
         image = ImageOps.exif_transpose(image).convert("RGB")
-    except (UnidentifiedImageError, OSError) as error:
+    # a bomb is a PNG that decodes to gigapixels: refuse it like any unreadable file
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as error:
         raise NotAnImage(str(error)) from error
 
     width, height = image.size

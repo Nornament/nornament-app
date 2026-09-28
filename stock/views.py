@@ -1468,8 +1468,11 @@ def identify_view(request):
             context["error"] = "Photo search isn't set up on this server."
             status = 503
         else:
-            context["results"] = _identify_results(request, matches)
-            context["confident"] = bool(matches) and matches[0].score >= settings.IDENTIFY_MIN_SCORE
+            results = _identify_results(request, matches)
+            # judged on the first card shown, not the first match: a piece
+            # that moved out of sight between search and render is dropped
+            context["results"] = results
+            context["confident"] = bool(results) and results[0]["score"] >= settings.IDENTIFY_MIN_SCORE
 
     template = "stock/_identify_results.html" if request.headers.get("HX-Request") else "stock/identify.html"
     return render(request, template, context, status=status)
@@ -1485,6 +1488,7 @@ def _identify_results(request, matches):
             "piece": pieces[match.piece_id],
             "row": piece_row(request.user, pieces[match.piece_id]),
             "thumb": urls.get(match.media_id),
+            "score": match.score,
             "percent": round(max(match.score, 0) * 100),
         }
         for match in matches

@@ -4,7 +4,9 @@
 {% comment %}One control: the rear camera. On a desktop the same input is a file
 picker. The form works as a plain POST; htmx only saves the page reload. The
 before-swap line is because htmx 2 will not swap a 4xx/5xx by default, and
-the error message is exactly what the person needs to see.{% endcomment %}
+the error message is exactly what the person needs to see — but only the two
+statuses this view means (400, 503); a CSRF page or a proxy's 500 is not a
+result card.{% endcomment %}
 <div class="card" style="max-width:560px;margin:0 auto">
   <h3>Identify piece</h3>
   <p class="hint">Photograph the piece on a plain surface, filling the frame.
@@ -12,7 +14,7 @@ the error message is exactly what the person needs to see.{% endcomment %}
   <form method="post" enctype="multipart/form-data" action="{% url 'stock:identify' %}"
         hx-post="{% url 'stock:identify' %}" hx-encoding="multipart/form-data"
         hx-target="#identify-results" hx-trigger="change" hx-indicator="#identify-busy"
-        hx-on::before-swap="if (event.detail.xhr.status >= 400) { event.detail.shouldSwap = true; event.detail.isError = false }">
+        hx-on::before-swap="if ([400, 503].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false }">
     {% csrf_token %}
     <label class="btn" style="position:relative;display:block;text-align:center;padding:18px;font-size:16px;cursor:pointer">
       📷 Take a photo
