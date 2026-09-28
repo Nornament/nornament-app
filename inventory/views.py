@@ -1,9 +1,10 @@
 """The inventory screens. Thin: services write, rows mask, templates draw."""
 import os
+from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, permission_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -15,13 +16,20 @@ from mediahub.models import MediaAsset
 from mediahub.services import attach_uploads
 from stock.enums import MediaKind
 from stock.masking import allowed, mask
-from stock.models import Vendor
+from stock.models import ImportBatch, Vendor
 from stock.services import ServiceError, require
+from stock.views import _batch_workbook, _store_workbook
 
 from . import rows, services
-from .models import ORIGINS, TREATMENTS, Batch, BoxColour, CodePart, Pouch, PriceEntry
+from .importers import plan, stones
+from .models import ORIGINS, TREATMENTS, Batch, BoxColour, CodePart, Movement, Pouch, PriceEntry
 
 BATCH_CAP = 40
+
+#: the prototype's chip colours per reason
+REASON_TONE = {"Memo In": "good", "Job Work In": "good", "Memo Out": "info", "Job Work Out": "warn",
+               "Recount Adjustment": "info"}
+PERIODS = [("", "All time"), ("12", "Last 12 months"), ("3", "Last 3 months")]
 
 
 def _client(request):
@@ -194,3 +202,102 @@ def pouch_photos(request, ref):
     if refused:
         messages.error(request, f"Not added: {', '.join(refused)}")
     return redirect("inventory:pouch", ref=ref)
+
+
+@login_required
+def movements(request, ref):
+    if _client(request):
+        return redirect("inventory:pouch", ref=ref)
+    obj = get_object_or_404(Pouch, ref=ref)
+    everything = _everything(request)
+    row = next(r for r in everything if r["pk"] == obj.pk)
+    ledger, pcs, ct = [], 0, 0
+    for move in obj.movements.select_related("counterparty", "recorded_by").order_by("occurred_at", "pk"):
+        sign = 1 if move.direction == Movement.IN else -1
+        pcs += sign * (move.pcs or 0)
+        ct += sign * (move.ct or 0)
+        ledger.append(mask(request.user, {
+            "when": move.occurred_at, "reason": move.reason, "tone": REASON_TONE.get(move.reason, ""),
+            "note": move.note, "dir": move.direction, "pcs": move.pcs, "ct": move.ct,
+            "vendor_name": move.counterparty.name if move.counterparty_id else "",
+            "ref": move.challan_no or move.ref, "bal_pcs": pcs, "bal_ct": ct,
+            "by": (move.recorded_by.full_name or move.recorded_by.get_username()) if move.recorded_by_id else "system",
+        }))
+    total = len(ledger)
+    reason, months = request.GET.get("reason", ""), request.GET.get("months", "")
+    if reason:
+        ledger = [m for m in ledger if m["reason"] == reason]
+    if months.isdigit():
+        since = timezone.now() - timedelta(days=31 * int(months))
+        ledger = [m for m in ledger if m["when"] >= since]
+    held = services.stocked(Pouch.objects.filter(pk=obj.pk)).get()
+    return _page(request, "inventory/movements.html", everything, tab="tx", pouch_ref=obj.ref, row=row,
+                 ledger=list(reversed(ledger)), ledger_total=total, reason=reason, months=months,
+                 reasons=Movement.Reason.choices, periods=PERIODS,
+                 in_stock=bool((held.on_ct or 0) > 0 or (held.on_pcs or 0) > 0))
+
+
+@login_required
+@permission_required(INV_MASTERS, raise_exception=True)
+def import_home(request):
+    if request.method == "POST":
+        upload = request.FILES.get("workbook")
+        if upload is None:
+            messages.error(request, "Choose a workbook first.")
+            return redirect("inventory:import_home")
+        problems = stones.header_problems(upload)
+        if problems:
+            messages.error(request, f"That is not the stones register. {problems[0]}")
+            return redirect("inventory:import_home")
+        upload.seek(0)
+        try:
+            asset = _store_workbook(upload, request.user)
+        except Exception as error:
+            messages.error(request, f"Could not store the file. {error}")
+            return redirect("inventory:import_home")
+        batch = ImportBatch.objects.create(media=asset, source="STONES", created_by=request.user,
+                                           status=ImportBatch.Status.REVIEWING)
+        return redirect("inventory:import_review", batch_id=batch.pk)
+    recent = ImportBatch.objects.filter(source="STONES").select_related("media")[:10]
+    return _page(request, "inventory/import_home.html", _everything(request), tab="import", recent=recent)
+
+
+@login_required
+@permission_required(INV_MASTERS, raise_exception=True)
+def import_review(request, batch_id):
+    batch = get_object_or_404(ImportBatch, pk=batch_id, source="STONES")
+    parsed = stones.parse(_batch_workbook(batch))
+    items = plan.analyse(parsed, batch.decisions)
+    if request.method == "POST" and batch.status == ImportBatch.Status.REVIEWING:
+        batch.decisions = plan.read_decisions(request.POST, items, batch.decisions)
+        batch.save(update_fields=["decisions"])
+        return redirect("inventory:import_review", batch_id=batch.pk)
+    return _page(request, "inventory/import_review.html", _everything(request), tab="import", batch=batch,
+                 counts=plan.counts(items), attention=plan.attention(items),
+                 recounts=[i for i in items if i.recount and not i.skip])
+
+
+@login_required
+@permission_required(INV_MASTERS, raise_exception=True)
+@require_POST
+def import_commit(request, batch_id):
+    batch = get_object_or_404(ImportBatch, pk=batch_id, source="STONES")
+    if batch.status == ImportBatch.Status.DONE:
+        messages.error(request, "That import has already been committed.")
+        return redirect("inventory:import_review", batch_id=batch.pk)
+    items = plan.analyse(stones.parse(_batch_workbook(batch)), batch.decisions)
+    try:
+        result = plan.commit(items, request.user, import_batch=batch)
+    except ServiceError as error:
+        messages.error(request, error.messages[0])
+        return redirect("inventory:import_review", batch_id=batch.pk)
+    except Exception as error:  # the transaction has already rolled back
+        batch.status, batch.result = ImportBatch.Status.FAILED, {"error": str(error)}
+        batch.save(update_fields=["status", "result"])
+        messages.error(request, f"Import failed, nothing was written. {error}")
+        return redirect("inventory:import_review", batch_id=batch.pk)
+    batch.status, batch.result, batch.finished_at = ImportBatch.Status.DONE, result, timezone.now()
+    batch.save(update_fields=["status", "result", "finished_at"])
+    messages.success(request, f"Imported: {result['created']} new, {result['updated']} updated, "
+                              f"{result['recounted']} recounted, {result['skipped']} skipped.")
+    return redirect("inventory:shelf")
