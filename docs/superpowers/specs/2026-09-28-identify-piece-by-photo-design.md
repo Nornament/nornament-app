@@ -81,8 +81,9 @@ one migration. `null` means "not embedded yet".
 ## Keeping embeddings current
 
 - **On upload:** `mediahub/views.py` already calls `_shrink(asset, data)`
-  after `confirm` and `proxy_upload`, and `mediahub/services.attach_uploads`
-  writes the bytes directly. Next to each, call `_embed(asset, data)` —
+  after `confirm` and `proxy_upload`. `attach_uploads` only creates CRM
+  media, so it needs no hook; bulk importers are covered by the backfill.
+  Next to each, call `_embed(asset, data)` —
   only for `kind=PHOTO` with a `piece` — fetching bytes with
   `storage.get_bytes` when they are not already in hand. It runs after the
   WebP re-encode, and it is best-effort: an exception is logged and the upload

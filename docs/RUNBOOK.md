@@ -228,6 +228,25 @@ in two steps. Changing a rate reprices every live sale price and every quote
 immediately; frozen BOM costs do not move, which is the difference between
 "what it did cost" and "what it would cost today".
 
+### Photo search ("Identify piece")
+
+Stock → Identify piece takes a phone photo and ranks our pieces by their own
+photos. Only pieces with a confirmed `PHOTO` can be found.
+
+- **After deploying it the first time, and after any bulk import:**
+  `python manage.py embed_media` (`--dry-run` counts, `--limit N` stops early).
+  Re-runnable; it skips photos that already have a vector. New uploads are
+  embedded when they are confirmed.
+- **Tuning:** `IDENTIFY_MIN_SCORE` (default 0.5) is where the screen starts
+  saying "No confident match". Set it between what real matches and
+  non-catalogue pieces score.
+- **Local dev:** the model is not in git.
+  `mkdir -p models && curl -L -o models/dinov2-small.onnx https://huggingface.co/onnx-community/dinov2-small/resolve/8b1f705a3a7f6f062f6bdd21986c1583d3ef105d/onnx/model.onnx`
+  Without it the screen answers "isn't set up on this server" and the tests
+  that need it skip.
+- **Memory:** each gunicorn worker loads the model (~200 MB) the first time
+  it serves a search.
+
 ---
 
 ## When something breaks
