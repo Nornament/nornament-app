@@ -1,0 +1,33 @@
+{% comment %}Same card as the Similar tab. The row is ``piece_row`` — already
+masked, so a SALES login's cards have no cost to leak.{% endcomment %}
+{% if error %}
+  {% comment %}error is one of a fixed set of developer-authored strings from
+  the view, never user input, so |safe here does not open an XSS hole — it
+  only stops Django from mangling the apostrophes in that copy.{% endcomment %}
+  <div class="card"><p>{{ error|safe }}</p></div>
+{% elif not results %}
+  <div class="card"><p>No piece photos to match against yet.</p></div>
+{% else %}
+    {% if not confident %}<div class="card"><p><strong>No confident match.</strong>
+      These are the closest, but check the code on the piece.</p></div>{% endif %}
+    <div class="simgrid">
+      {% for entry in results %}
+      <article class="dcard">
+        <a href="{% url 'stock:piece_detail' entry.piece.jewel_code %}">
+          {% if entry.thumb %}<img class="jart sq" src="{{ entry.thumb }}" alt="{{ entry.piece.jewel_code }}">{% endif %}</a>
+        <div class="m">
+          <div style="display:flex;justify-content:space-between;gap:6px">
+            <a style="font-family:var(--mono);font-size:12.5px;font-weight:600"
+               href="{% url 'stock:piece_detail' entry.piece.jewel_code %}">{{ entry.piece.jewel_code }}</a>
+            <span class="chip c-neutral" style="font-size:10.5px">{{ entry.percent }}%</span>
+          </div>
+          <div style="font-size:12px;color:var(--muted)">{{ entry.row.design_name|default:entry.row.style_code }}</div>
+          <div style="margin-top:7px;display:flex;justify-content:space-between;align-items:center;gap:6px">
+            {% if caps.view_sale %}<span style="font-family:var(--mono);font-size:12.5px;font-weight:600">₹{{ entry.row.sale_price|default_if_none:0|floatformat:0 }}</span>{% else %}<span></span>{% endif %}
+            <span class="chip c-neutral" style="font-size:10.5px">{{ entry.row.stock_state_display }} · {{ entry.row.location|default:"—" }}</span>
+          </div>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+{% endif %}

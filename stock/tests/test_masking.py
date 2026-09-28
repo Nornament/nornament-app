@@ -92,6 +92,7 @@ CRM_REPAIR_COST = Decimal("13579")
 SALES_SCREENS = [
     ("stock:dashboard", {}),
     ("stock:piece_list", {}),
+    ("stock:identify", {}),
     ("stock:piece_detail", {"jewel_code": "ER00738"}),
     ("stock:piece_scenarios", {"jewel_code": "ER00738"}),
     ("stock:rate_list", {}),

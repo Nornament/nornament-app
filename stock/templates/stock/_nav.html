@@ -8,6 +8,9 @@ disappearing, so nobody has to guess why a colleague sees more screens.{% endcom
 {% url 'stock:piece_list' as u %}
 {% if 'stock' in tabs %}<a href="{{ u }}" {% if nav == 'stock' %}aria-current="page"{% endif %}><span class="ico">◈</span>Stock</a>
 {% else %}<button disabled><span class="ico">◈</span>Stock<span class="lockicon">🔒</span></button>{% endif %}
+{% url 'stock:identify' as u %}
+{% if 'stock' in tabs %}<a href="{{ u }}" {% if nav == 'identify' %}aria-current="page"{% endif %}><span class="ico">⌕</span>Identify piece</a>
+{% else %}<button disabled><span class="ico">⌕</span>Identify piece<span class="lockicon">🔒</span></button>{% endif %}
 {% url 'stock:count_list' as u %}
 {% if 'count' in tabs %}<a href="{{ u }}" {% if nav == 'count' %}aria-current="page"{% endif %}><span class="ico">☑</span>Stock Count</a>
 {% else %}<button disabled><span class="ico">☑</span>Stock Count<span class="lockicon">🔒</span></button>{% endif %}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Identify piece · Nornament{% endblock %}
+{% block content %}
+{% comment %}One control: the rear camera. On a desktop the same input is a file
+picker. The form works as a plain POST; htmx only saves the page reload. The
+before-swap line is because htmx 2 will not swap a 4xx/5xx by default, and
+the error message is exactly what the person needs to see.{% endcomment %}
+<div class="card" style="max-width:560px;margin:0 auto">
+  <h3>Identify piece</h3>
+  <p class="hint">Photograph the piece on a plain surface, filling the frame.
+    {{ searchable }} of {{ total }} pieces have a photo to match against.</p>
+  <form method="post" enctype="multipart/form-data" action="{% url 'stock:identify' %}"
+        hx-post="{% url 'stock:identify' %}" hx-encoding="multipart/form-data"
+        hx-target="#identify-results" hx-trigger="change" hx-indicator="#identify-busy"
+        hx-on::before-swap="if (event.detail.xhr.status >= 400) { event.detail.shouldSwap = true; event.detail.isError = false }">
+    {% csrf_token %}
+    <label class="btn" style="position:relative;display:block;text-align:center;padding:18px;font-size:16px;cursor:pointer">
+      📷 Take a photo
+      <input type="file" name="photo" accept="image/*" capture="environment" required
+             style="position:absolute;width:1px;height:1px;opacity:0">
+    </label>
+    <noscript><button class="btn" style="margin-top:10px;width:100%">Search</button></noscript>
+  </form>
+  <p id="identify-busy" class="htmx-indicator hint" style="text-align:center">Matching…</p>
+</div>
+<div id="identify-results" style="max-width:960px;margin:16px auto 0">
+  {% if request.method == "POST" %}{% include "stock/_identify_results.html" %}{% endif %}
+</div>
+{% endblock %}

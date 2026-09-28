@@ -10,6 +10,7 @@ returning the same partials the full page renders.
 import csv
 import datetime
 import io
+import logging
 import re
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
@@ -17,6 +18,7 @@ from functools import wraps
 from types import SimpleNamespace
 from urllib.parse import urlencode
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -39,7 +41,7 @@ from crm.models import Customer
 from mediahub import services as media_services
 from mediahub.models import MediaAsset
 
-from . import services
+from . import identify, services
 from .enums import (
     BomChangeReason,
     COUNTABLE_STATES,
@@ -100,6 +102,8 @@ from .models import (
 )
 
 PAGE_SIZE = 50
+
+logger = logging.getLogger(__name__)
 
 
 def _visible_pieces(request):
@@ -1434,6 +1438,58 @@ def tab_required(tab):
         return wrapped
 
     return decorator
+
+
+@login_required
+@tab_required("stock")
+def identify_view(request):
+    """Point a phone at an untagged piece; see which of ours it is.
+
+    The photo is embedded in memory and dropped — it is a question, not a
+    record, and a shelf of test shots in the bucket is nobody's idea of media.
+    """
+    context = {"nav": "identify", **identify.coverage(request.user)}
+    if request.method != "POST":
+        return render(request, "stock/identify.html", context)
+
+    status = 200
+    photo = request.FILES.get("photo")
+    if photo is None or photo.size > settings.IDENTIFY_MAX_BYTES:
+        context["error"] = "Take a photo of the piece — up to 15 MB."
+        status = 400
+    else:
+        try:
+            matches = identify.search(request.user, identify.embed(photo.read()))
+        except identify.NotAnImage:
+            context["error"] = "That file isn't a photo this can read. Try the camera again, or a JPEG."
+            status = 400
+        except identify.ModelMissing:
+            logger.exception("photo search asked for on a server without the model")
+            context["error"] = "Photo search isn't set up on this server."
+            status = 503
+        else:
+            context["results"] = _identify_results(request, matches)
+            context["confident"] = bool(matches) and matches[0].score >= settings.IDENTIFY_MIN_SCORE
+
+    template = "stock/_identify_results.html" if request.headers.get("HX-Request") else "stock/identify.html"
+    return render(request, template, context, status=status)
+
+
+def _identify_results(request, matches):
+    """Cards in match order: the masked row, the photo that matched, a percent."""
+    pieces = _visible_pieces(request).in_bulk([match.piece_id for match in matches])
+    photos = MediaAsset.objects.in_bulk([match.media_id for match in matches])
+    urls = media_services.urls_for(photos.values())
+    return [
+        {
+            "piece": pieces[match.piece_id],
+            "row": piece_row(request.user, pieces[match.piece_id]),
+            "thumb": urls.get(match.media_id),
+            "percent": round(max(match.score, 0) * 100),
+        }
+        for match in matches
+        if match.piece_id in pieces
+    ]
 
 
 @login_required

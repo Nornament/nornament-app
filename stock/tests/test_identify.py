@@ -9,6 +9,7 @@ import json
 import numpy as np
 import pytest
 from django.conf import settings
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.urls import reverse
 from django.utils import timezone
@@ -233,3 +234,83 @@ def test_the_backfill_fills_once_and_skips_on_the_second_pass(received_piece, fa
     assert photo.embedding is not None
     call_command("embed_media")
     assert len(fake_embed) == 1
+
+
+def _upload(data=b"jpeg", name="shot.jpg"):
+    return SimpleUploadedFile(name, data, content_type="image/jpeg")
+
+
+@pytest.mark.django_db
+def test_the_screen_opens_the_rear_camera_and_says_what_is_searchable(client, sales_user, received_piece):
+    _photo(received_piece, _unit(1))
+    client.force_login(sales_user)
+    body = client.get(reverse("stock:identify")).content.decode()
+    assert 'capture="environment"' in body
+    assert "1 of 1" in body
+
+
+@pytest.mark.django_db
+def test_a_photo_finds_the_piece_and_shows_no_cost_to_sales(client, sales_user, received_piece, fake_embed, monkeypatch):
+    _photo(received_piece, _unit(1))
+    monkeypatch.setattr(storage, "presign_get", lambda *args, **kwargs: "https://bucket.example/p.webp")
+    client.force_login(sales_user)
+    response = client.post(reverse("stock:identify"), {"photo": _upload()})
+    body = response.content.decode()
+    assert response.status_code == 200
+    assert "ER00738" in body
+    assert "No confident match" not in body
+    cost = received_piece.current_bom().total_cost_price
+    assert f"{cost:,.0f}" not in body and f"{cost:.0f}" not in body
+
+
+@pytest.mark.django_db
+def test_a_weak_best_match_is_shown_but_flagged(client, admin_user_, received_piece, monkeypatch, settings):
+    settings.IDENTIFY_MIN_SCORE = 0.9
+    _photo(received_piece, _unit(1, 1))  # cosine ~0.71 with the query
+    monkeypatch.setattr(identify, "embed", lambda data: _unit(1))
+    client.force_login(admin_user_)
+    body = client.post(reverse("stock:identify"), {"photo": _upload()}).content.decode()
+    assert "No confident match" in body
+    assert "ER00738" in body
+
+
+@pytest.mark.django_db
+def test_a_file_that_is_not_a_photo_is_a_400(client, admin_user_):
+    client.force_login(admin_user_)
+    response = client.post(reverse("stock:identify"), {"photo": _upload(b"%PDF-1.7", "x.pdf")})
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_no_photo_or_too_big_is_a_400(client, admin_user_, settings):
+    client.force_login(admin_user_)
+    assert client.post(reverse("stock:identify"), {}).status_code == 400
+    settings.IDENTIFY_MAX_BYTES = 3
+    assert client.post(reverse("stock:identify"), {"photo": _upload(b"four")}).status_code == 400
+
+
+@pytest.mark.django_db
+def test_a_server_without_the_model_says_so(client, admin_user_, monkeypatch):
+    def missing(data):
+        raise identify.ModelMissing("no model")
+
+    monkeypatch.setattr(identify, "embed", missing)
+    client.force_login(admin_user_)
+    response = client.post(reverse("stock:identify"), {"photo": _upload()})
+    assert response.status_code == 503
+    assert "isn't set up on this server" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_htmx_gets_just_the_results(client, admin_user_, received_piece, fake_embed):
+    _photo(received_piece, _unit(1))
+    client.force_login(admin_user_)
+    body = client.post(reverse("stock:identify"), {"photo": _upload()}, HTTP_HX_REQUEST="true").content.decode()
+    assert "<html" not in body
+    assert "ER00738" in body
+
+
+@pytest.mark.django_db
+def test_a_login_without_the_stock_tab_is_refused(client, graphic_user):
+    client.force_login(graphic_user)
+    assert client.get(reverse("stock:identify")).status_code == 403

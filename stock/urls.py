@@ -7,6 +7,7 @@ app_name = "stock"
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
     # ── stock ────────────────────────────────────────────────────────────
+    path("identify/", views.identify_view, name="identify"),
     path("pieces/", views.piece_list, name="piece_list"),
     path("pieces/rows/", views.piece_rows, name="piece_rows"),
     path("pieces/new/", views.piece_form, name="piece_new"),
