@@ -2,6 +2,7 @@
 from decimal import Decimal
 
 from django import template
+from django.utils.html import escape
 from django.utils.safestring import mark_safe
 
 from crm.templatetags import crm_extras
@@ -38,6 +39,6 @@ def kg(value):
 
 @register.simple_tag
 def silhouette(shape, hex_colour):
-    # the shape only picks a branch in rules.shape_svg and the colour comes from
-    # its own table, so nothing the owner typed reaches the markup
-    return mark_safe(rules.shape_svg(shape, hex_colour))
+    # the shape only picks a branch in rules.shape_svg; the colour is escaped
+    # because this tag cannot know every caller passes one from its own table
+    return mark_safe(rules.shape_svg(shape, escape(hex_colour)))

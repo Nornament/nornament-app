@@ -64,3 +64,17 @@ def test_photos_are_filed_under_the_pouch(client, accounts_user, shelf, monkeypa
     client.post(_url("inventory:pouch_photos", shelf["onyx"]), {"photos": [photo]})
     asset = MediaAsset.objects.get(scope="pouch", scope_id=str(shelf["onyx"].pk))
     assert asset.file_name == "SL01G-1-01.jpg"
+
+
+@pytest.mark.parametrize("rate", ["NaN", "Infinity", "-Infinity", "sNaN", "12345678901", "abc"])
+def test_a_rate_that_is_not_a_rate_is_refused_not_a_500(client, accounts_user, shelf, rate):
+    client.force_login(accounts_user)
+    response = client.post(_url("inventory:pouch_price", shelf["onyx"]),
+                           {"kind": PriceEntry.LIST, "rate": rate, "effective_from": "2026-09-28"})
+    assert response.status_code == 302
+    assert not shelf["onyx"].prices.filter(kind=PriceEntry.LIST).exists()
+
+
+def test_a_supplier_that_is_not_an_id_is_not_a_500(client, accounts_user, shelf):
+    client.force_login(accounts_user)
+    assert client.post(_url("inventory:pouch_save", shelf["onyx"]), {"supplier": "abc"}).status_code == 302

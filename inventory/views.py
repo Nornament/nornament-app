@@ -159,7 +159,8 @@ def pouch_save(request, ref):
             messages.error(request, "That purchase date does not read as a date.")
             return redirect("inventory:pouch", ref=ref)
     if "supplier" in request.POST:
-        changes["supplier"] = Vendor.objects.filter(pk=request.POST.get("supplier") or 0).first()
+        raw = request.POST.get("supplier") or ""
+        changes["supplier"] = Vendor.objects.filter(pk=raw).first() if raw.isdigit() else None
     try:
         services.save_details(request.user, obj, **changes)
         messages.success(request, "Saved.")
@@ -175,7 +176,10 @@ def pouch_price(request, ref):
     try:
         rate = Decimal(request.POST.get("rate") or "")
     except InvalidOperation:
-        messages.error(request, "The rate has to be a number.")
+        rate = None
+    # the column holds ten digits before the point; NaN and Infinity parse but are not rates
+    if rate is None or not rate.is_finite() or abs(rate) >= 10 ** 10:
+        messages.error(request, "The rate has to be a number, at most ten digits before the point.")
         return redirect("inventory:pouch", ref=ref)
     when = parse_date(request.POST.get("effective_from") or "") or timezone.localdate()
     try:

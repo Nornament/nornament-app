@@ -106,8 +106,8 @@ markup. The stock and CRM sidebars gain an "Inventory" link; this rail links bac
   date), **Drop photos here** (existing presigned upload, filed as `{batch}-{pouchNo|X}-01.jpg`),
   **⇄ Movements**. **⤴ Split pouch** padlocked until part 2.
 - Treatment and origin options: `vocab.py`'s `TREATMENT` list and the prototype's origin list.
-- Nav counts are live: box colours, batches, pouches, boxes, misfiled, no pouch no., unreadable
-  code, missing photos, no size in mm.
+- Nav counts are live: box colours, batches, pouches, boxes, misfiled, no pouch no., missing
+  photos, no size in mm.
 - Formats: `₹` + whole rupees in Indian grouping; carats to 2 dp; kg = ct × 0.2 / 1000.
 - Prose stripped. The gap banner keeps its facts only; functional warnings stay ("Cannot be
   valued", "Colour mismatch — check filing", the mismatch line on the batch-code card).
@@ -160,6 +160,7 @@ Photo uploads sit outside the transaction, as in the stock app.
 - **URLs carry a batch's pk and a pouch's `NRN-` ref**, so no link in client view carries a batch code.
 - **The inventory's SALES walk is `inventory/tests/test_masking.py`,** with its own every-screen check.
 - **Client view shows no list price** until the per-client price flag exists.
+- **Client view keeps the box-colour label and code** (the crumb, `/colours/<code>/`), because the colour is how a client browses.
 - **Only database-touching tests carry the `django_db` marker;** pure-function tests do not.
 - **The importer's `commit()` may write models directly** (permission-gated, one transaction, logged), as the IVY importer does; views never write models.
 - **Parity** is `inventory/tests/test_parity.py` (marked `golden`). It reads the prototype from beside the repo and skips when it is absent.

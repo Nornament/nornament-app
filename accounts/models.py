@@ -98,7 +98,7 @@ class User(AbstractUser):
 
 
 def sync_role_groups():
-    """Create the five role groups and give each its capabilities.
+    """Create the role groups and give each its capabilities.
 
     Idempotent: run from a data migration, from ``load_legacy`` and from tests.
     """

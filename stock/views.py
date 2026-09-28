@@ -2276,6 +2276,10 @@ CAPABILITY_MATRIX = [
     ("adjust_stock", "Backfill & reverse sales", "Record old sales and reverse entries"),
     ("edit_bom", "Edit the BOM", "Fork a correction version"),
     ("melt", "Melt", "Destroy a piece. Irreversible."),
+    ("inv_masters", "Edit inventory records", "Stones: import, pouch details, prices, photos"),
+    ("inv_purchase", "Record purchases", "Stones bought in"),
+    ("inv_job", "Job cards", "Issue to and receive from karigars"),
+    ("inv_assort", "Assort", "Split and merge pouches"),
 ]
 
 
