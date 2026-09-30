@@ -71,9 +71,9 @@
     {% if can.purchase %}<button class="btn sm pri" disabled title="Coming soon">＋ Purchase 🔒</button>{% endif %}</div>
   <div style="overflow:auto;max-height:620px"><table class="pt">
     <thead><tr><th>Category</th><th>Shape</th><th>Colour</th><th>Clarity</th><th>Size</th><th>Batch</th><th class="r">Carats</th>
-      {% if money %}<th class="r">Cost / ct</th><th class="r">Cost value</th>{% endif %}
-      {% if sale_money %}<th class="r">Sale / ct</th><th class="r">Sale value</th>{% endif %}
-      {% if margin_money %}<th class="r">Margin</th>{% endif %}
+      {% if 'cost_rate' in money %}<th class="r">Cost / ct</th><th class="r">Cost value</th>{% endif %}
+      {% if 'sale_rate' in money %}<th class="r">Sale / ct</th><th class="r">Sale value</th>{% endif %}
+      {% if 'margin' in money %}<th class="r">Margin</th>{% endif %}
       <th>Item code</th><th>Read</th></tr></thead>
     <tbody>{% for r in rows %}<tr>
       <td>{{ r.category }}</td><td>{{ r.shape }}</td>
@@ -82,11 +82,11 @@
       <td class="mono">{{ r.band }}<div class="hint">{{ r.size_text }}</div></td>
       <td class="mono" style="font-size:11px">{% if r.batch %}{{ r.batch }}{% else %}<span class="chip crit"><span class="dot"></span>none</span>{% endif %}</td>
       <td class="r"><b>{{ r.ct|ct }}</b></td>
-      {% if money %}<td class="r">{% if r.cost_rate is not None %}{{ r.cost_rate|rupees }}{% else %}<span class="hint">not set</span>{% endif %}</td>
+      {% if 'cost_rate' in money %}<td class="r">{% if r.cost_rate is not None %}{{ r.cost_rate|rupees }}{% else %}<span class="hint">not set</span>{% endif %}</td>
         <td class="r">{{ r.cost_amount|rupees }}</td>{% endif %}
-      {% if sale_money %}<td class="r">{% if r.sale_rate is not None %}{{ r.sale_rate|rupees }}{% else %}<span class="hint">not set</span>{% endif %}</td>
+      {% if 'sale_rate' in money %}<td class="r">{% if r.sale_rate is not None %}{{ r.sale_rate|rupees }}{% else %}<span class="hint">not set</span>{% endif %}</td>
         <td class="r"><b>{{ r.sale_amount|rupees }}</b></td>{% endif %}
-      {% if margin_money %}<td class="r">{% if r.margin is not None %}{{ r.margin|floatformat:0 }}%{% else %}—{% endif %}</td>{% endif %}
+      {% if 'margin' in money %}<td class="r">{% if r.margin is not None %}{{ r.margin|floatformat:0 }}%{% else %}—{% endif %}</td>{% endif %}
       <td class="mono" style="font-size:11px">{{ r.item_code }}</td>
       <td>{% if r.confirmed %}<span class="chip good"><span class="dot"></span>clean</span>{% else %}<span class="chip warn"><span class="dot"></span>{{ r.note|default:"check" }}</span>{% endif %}</td>
     </tr>{% endfor %}</tbody></table></div>

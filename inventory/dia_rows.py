@@ -54,6 +54,6 @@ def rail_counts():
     by_kind = defaultdict(int)
     for kind in DiamondTerm.objects.values_list("kind", flat=True):
         by_kind[kind] += 1
-    return {"lines": DiamondLine.objects.count(), "codes": DiamondCode.objects.count(),
+    return {"lines": dia_services.stocked_lines().exclude(on_ct=0).count(), "codes": DiamondCode.objects.count(),
             "categories": by_kind["category"], "shapes": by_kind["shape"], "colours": by_kind["colour"],
             "clarities": by_kind["clarity"], "bands": by_kind["band"]}
