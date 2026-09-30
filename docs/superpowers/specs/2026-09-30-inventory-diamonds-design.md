@@ -112,3 +112,13 @@ Service rules raise `ServiceError`, shown as a message: missing right; a blocked
 ## Dependency
 
 `DIAMOND 31.xlsx` is not available. Decision (2026-09-30): build the parse step to the layout `build_dia.py` documents, test it against a workbook rebuilt from the prototype's embedded diamond data, and correct the parse step when the real file arrives. If the real layout differs, only `inventory/importers/diamonds.py`'s parse and its fixture change.
+
+## Changed while planning
+
+- **Category belongs to the line.** The prototype takes each line's category from column A of its row, so `DiamondLine.category` holds it; `DiamondCode` holds shape, colour and clarity.
+- **A line can carry a shape override** (`DiamondLine.shape_override`): when a code names no shape and the size is a carat band with a shape prefix (`TR 0.20-0.24`), the shape comes from the size, as in the prototype.
+- **Carat-band size prefixes read the IVY way too:** `PR` = Pear, `PC` = Princess.
+- **A single leftover ladder letter is a colour grade** (`DTBG` → colour G, `SOMG` → Marquise G), as the prototype read it, but the code stays unconfirmed.
+- **Setting a rate needs both `view_cost` and `view_sale`**, because one rate row carries both.
+- **The band list is seeded with `?`** for a size that fits no band.
+- **Diamond parity** is `inventory/tests/test_dia_parity.py` (marked `golden`): the prototype's `const DD` rebuilt in file order and imported must give 348 lines, 673.90 ct, 270 batches, 84 codes and the prototype's category and band totals.
