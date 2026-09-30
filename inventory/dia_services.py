@@ -46,16 +46,25 @@ def stocked_lines(queryset=None):
 
 
 def rate_table():
-    """The current rate per (code, size): later effective dates, then later rows, win."""
+    """The current rate per (code, size), per field: later effective dates, then later rows,
+    win, but only for the field a row actually sets — a cost-only row never hides an earlier
+    sale rate."""
     table = {}
     for rate in DiamondRate.objects.order_by("effective_from", "pk"):
-        table[(rate.code_id, rate.size_text)] = rate
+        entry = table.setdefault((rate.code_id, rate.size_text), {"cost": None, "sale": None})
+        if rate.cost_rate is not None:
+            entry["cost"] = rate.cost_rate
+        if rate.sale_rate is not None:
+            entry["sale"] = rate.sale_rate
     return table
 
 
 def price(line, rates):
-    rate = rates.get((line.code_id, line.size_text)) or rates.get((line.code_id, ""))
-    return (rate.cost_rate, rate.sale_rate) if rate else (None, None)
+    exact = rates.get((line.code_id, line.size_text), {})
+    any_size = rates.get((line.code_id, ""), {})
+    cost = exact.get("cost") if exact.get("cost") is not None else any_size.get("cost")
+    sale = exact.get("sale") if exact.get("sale") is not None else any_size.get("sale")
+    return cost, sale
 
 
 def term(kind, value):
@@ -74,20 +83,22 @@ def open_lines(user, specs, import_batch=None):
     """New lines, each with an Opening Balance of its carats."""
     require(user, INV_MASTERS, "Only a role that edits inventory records can add stock.")
     number, now, by = _last_ref_number(), timezone.now(), _by(user)
-    lines, weights = [], []
+    lines, weights, pieces = [], [], []
     for spec in specs:
         spec = dict(spec)
         ct = spec.pop("ct")
+        pcs = spec.pop("pcs", None)
         if ct is not None and ct < 0:
             raise ServiceError("A weight cannot be negative.")
         number += 1
         lines.append(DiamondLine(ref=f"NRD-{number:06d}", import_batch=import_batch, **spec))
         weights.append(ct)
+        pieces.append(pcs)
     DiamondLine.objects.bulk_create(lines)
     Movement.objects.bulk_create([
         Movement(diamond=line, reason=Movement.Reason.OPENING_BALANCE, direction=Movement.IN,
-                 ct=ct, occurred_at=now, recorded_by=by, ref=line.src)
-        for line, ct in zip(lines, weights)
+                 pcs=pcs, ct=ct, occurred_at=now, recorded_by=by, ref=line.src)
+        for line, ct, pcs in zip(lines, weights, pieces)
     ])
     if lines:
         log(user, "INSERT", "inv_dia_line", f"{lines[0].ref}..{lines[-1].ref}", f"{len(lines)} diamond lines opened")

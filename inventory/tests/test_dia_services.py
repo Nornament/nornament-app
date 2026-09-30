@@ -4,8 +4,8 @@ from decimal import Decimal
 import pytest
 from django.core.exceptions import PermissionDenied
 
-from inventory import dia_rows, dia_services
-from inventory.models import DiamondRate, DiamondTerm, Movement
+from inventory import dia_rows, dia_seed, dia_services
+from inventory.models import DiamondCode, DiamondRate, DiamondTerm, Movement
 from stock.services import ServiceError
 
 pytestmark = pytest.mark.django_db
@@ -118,3 +118,12 @@ def test_suppliers_have_unique_codes(diamonds, admin_user_):
 def test_rail_counts(diamonds):
     counts = dia_rows.rail_counts()
     assert counts["lines"] == 3 and counts["categories"] == 5 and counts["shapes"] >= 3
+
+
+def test_a_cost_only_rate_does_not_hide_an_earlier_sale_rate(admin_user_):
+    dia_seed.load(DiamondTerm)
+    code = DiamondCode.objects.create(item_code="DREF VVS VS")
+    dia_services.set_rate(admin_user_, code, "+5", None, "50000", None)
+    DiamondRate.objects.create(code=code, size_text="+5", cost_rate=Decimal("35000"))
+    rates = dia_services.rate_table()
+    assert rates[("DREF VVS VS", "+5")] == {"cost": Decimal("35000"), "sale": Decimal("50000")}

@@ -11,6 +11,7 @@
   <div class="tot"><div class="l">Blocked</div><div class="v">{{ counts.blocked }}</div><div class="f">need a decision before commit</div></div>
   <div class="tot"><div class="l">New item codes</div><div class="v">{{ counts.codes }}</div><div class="f">created as reviewed below</div></div>
   <div class="tot"><div class="l">Recounts</div><div class="v">{{ counts.recount }}</div><div class="f">{{ counts.missing }} lines not in this file</div></div>
+  {% if counts.empty %}<div class="tot"><div class="l">Empty</div><div class="v">{{ counts.empty }}</div><div class="f">at 0 ct, nothing to open</div></div>{% endif %}
 </div>
 
 {% if batch.status == 'DONE' %}

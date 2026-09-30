@@ -31,7 +31,7 @@ def test_upload_review_commit(client, admin_user_, bucket):
     assert "DMLC SI I" in body                                    # a new code waiting for review
     batch_id = int(review["Location"].rstrip("/").split("/")[-1])
     client.post(reverse("inventory:dia_import_commit", args=[batch_id]))
-    assert DiamondLine.objects.count() == 11
+    assert DiamondLine.objects.count() == 10                       # the fixture's one 0 ct row opens nothing
     again = client.post(reverse("inventory:dia_import_commit", args=[batch_id]), follow=True)
     assert "already been committed" in again.content.decode()
 

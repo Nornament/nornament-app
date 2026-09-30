@@ -55,7 +55,7 @@ def settings_page(request):
         code_lines[line.code_id] = code_lines.get(line.code_id, 0) + 1
     rates = [mask(request.user, {"code": r.code_id, "size_text": r.size_text, "cost_rate": r.cost_rate,
                                  "sale_rate": r.sale_rate, "effective_from": r.effective_from})
-             for r in dia_services.rate_table().values()]
+             for r in DiamondRate.objects.all()]
     purchases = {}
     for vendor_id in Movement.objects.filter(reason=Movement.Reason.PURCHASE).values_list("counterparty_id", flat=True):
         purchases[vendor_id] = purchases.get(vendor_id, 0) + 1

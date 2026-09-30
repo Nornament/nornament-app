@@ -1,12 +1,13 @@
 from decimal import Decimal
 
 import pytest
+from django.contrib.auth.models import Permission
 from django.core.exceptions import PermissionDenied
 
 from inventory import dia_seed, dia_services
 from inventory.importers import dia_plan, diamonds
-from inventory.models import DiamondCode, DiamondLine, DiamondTerm
-from inventory.tests.fixtures_diamonds import PLAN_ROWS, fancy_workbook
+from inventory.models import DiamondCode, DiamondLine, DiamondRate, DiamondTerm, Movement
+from inventory.tests.fixtures_diamonds import PLAN_ROWS, build_workbook, fancy_workbook
 from stock.services import ServiceError
 
 pytestmark = pytest.mark.django_db
@@ -81,3 +82,67 @@ def test_an_ambiguous_row_blocks_until_decided(admin_user_):
 def test_sales_cannot_import(sales_user):
     with pytest.raises(PermissionDenied):
         dia_plan.commit(_plan(), sales_user)
+
+
+def _file_plan(decisions=None):
+    return dia_plan.analyse(diamonds.parse(build_workbook()), decisions)
+
+
+def test_a_code_takes_the_files_columns_and_is_confirmed_when_they_agree():
+    codes = {c.item_code: c for c in _file_plan().codes}
+    marquise = codes["DMIJ VVS VS"]
+    assert (marquise.shape, marquise.colour, marquise.clarity, marquise.confirmed) == ("Marquise", "I-J", "VVS-VS", True)
+    fancy = codes["DFY"]
+    assert (fancy.shape, fancy.colour, fancy.clarity, fancy.confirmed) == ("Mix", "Fancy Yellow", "", True)
+
+
+def test_a_column_that_disagrees_with_the_code_leaves_it_unconfirmed():
+    rows = [[None, "Marquise", "DMMN VVS VS", "MN", "VS-SI", "4.0*2.5", 4, 0.61, 26000, 15860]]
+    code = dia_plan.analyse(diamonds.parse(fancy_workbook(rows))).codes[0]
+    assert (code.clarity, code.confirmed) == ("VS-SI", False) and "clarity" in code.note
+
+
+def test_two_rows_of_one_code_that_disagree_leave_it_unconfirmed():
+    rows = [[None, "Pear", "DPRGH VVS VS", "GH", "VVS VS", "2.8*1.5", 10, 1.34, 37800, 50652],
+            [None, "Oval", "DPRGH VVS VS", "GH", "VVS VS", "3.0*2.0", 1, 0.20, 37800, 7560]]
+    code = dia_plan.analyse(diamonds.parse(fancy_workbook(rows))).codes[0]
+    assert (code.shape, code.confirmed) == ("Pear", False) and "Oval" in code.note
+
+
+def test_zero_rows_open_nothing_and_pieces_open_with_the_carats(admin_user_):
+    plan = _file_plan()
+    assert plan.counts()["empty"] == 1 and plan.counts()["blocked"] == 0
+    result = dia_plan.commit(plan, admin_user_)
+    assert result["created"] == 10
+    assert not DiamondLine.objects.filter(src="Round_RW!4").exists()
+    opening = Movement.objects.get(diamond__src="FANCY FINAL!3")
+    assert (opening.pcs, opening.ct) == (6, Decimal("0.31"))
+    marquise = DiamondLine.objects.get(src="FANCY FINAL!3")
+    assert (marquise.band.value, marquise.ct_lo, marquise.ct_hi) == ("carat band", Decimal("0.100"), Decimal("0.150"))
+
+
+def test_a_held_line_that_comes_back_at_zero_is_recounted_to_zero(admin_user_):
+    dia_plan.commit(_plan(), admin_user_)
+    changed = [list(r) for r in PLAN_ROWS]
+    changed[1][7] = 0
+    plan = _plan(changed)
+    assert plan.counts()["recount"] == 1
+    dia_plan.commit(plan, admin_user_)
+    assert dia_services.stocked_lines().get(src="FANCY FINAL!3").on_ct == Decimal("0")
+
+
+def test_commit_saves_each_lines_cost_to_the_rate_card_once(admin_user_):
+    dia_plan.commit(_file_plan(), admin_user_)
+    rates = dia_services.rate_table()
+    assert rates[("DMIJ VVS VS", "2.3*1.3 - 3.5*2.3")]["cost"] == Decimal("32200")
+    assert rates[("DRMN VVS VS", "0-1")]["cost"] == Decimal("20000")
+    before = DiamondRate.objects.count()
+    result = dia_plan.commit(_file_plan(), admin_user_)                # the same file again
+    assert result["rates"] == 0 and DiamondRate.objects.count() == before
+
+
+def test_a_login_that_cannot_see_cost_imports_stock_without_prices(production_user):
+    production_user.user_permissions.add(Permission.objects.get(codename="inv_masters"))
+    production_user = type(production_user).objects.get(pk=production_user.pk)       # fresh permission cache
+    result = dia_plan.commit(_file_plan(), production_user)
+    assert result["created"] == 10 and result["prices_skipped"] and not DiamondRate.objects.exists()

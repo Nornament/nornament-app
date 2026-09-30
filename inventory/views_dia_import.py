@@ -85,4 +85,6 @@ def import_commit(request, batch_id):
     messages.success(request, f"Imported: {result['created']} new, {result['updated']} updated, "
                               f"{result['recounted']} recounted, {result['zeroed']} set to zero, "
                               f"{result['codes']} new codes.")
+    if result["prices_skipped"]:
+        messages.warning(request, "The stock was imported without prices: your role cannot see costs.")
     return redirect("inventory:diamonds")

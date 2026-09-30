@@ -11,11 +11,11 @@ from dataclasses import dataclass, field
 
 from django.db import transaction
 
-from accounts.capabilities import INV_MASTERS
+from accounts.capabilities import INV_MASTERS, VIEW_COST
 from stock.services import ServiceError, log, require
 
 from .. import dia_rules, dia_services
-from ..models import DiamondCode, DiamondLine, DiamondTerm
+from ..models import DiamondCode, DiamondLine, DiamondRate, DiamondTerm
 
 
 @dataclass
@@ -37,6 +37,7 @@ class Item:
     candidates: list = field(default_factory=list)
     held_ct: object = None
     recount: bool = False
+    empty: bool = False
 
 
 @dataclass
@@ -55,6 +56,7 @@ class Plan:
             "recount": sum(1 for i in live if i.recount),
             "codes": len(self.codes), "missing": len(self.missing),
             "zero": sum(1 for _, action in self.missing if action == "zero"),
+            "empty": sum(1 for i in self.items if i.empty),
         }
 
 
@@ -64,17 +66,39 @@ def _key(batch_no, item_code, size_text):
 
 def _codes(rows, decisions):
     known = set(DiamondCode.objects.values_list("item_code", flat=True))
-    proposals = {}
+    groups = {}
     for row in rows:
-        if row.item_code in known or row.item_code in proposals:
-            continue
-        decoded = dia_rules.decode(row.item_code)
-        choice = decisions.get(f"code:{row.item_code}") or {}
-        proposals[row.item_code] = NewCode(
-            item_code=row.item_code, note=decoded.note,
-            shape=choice.get("shape", decoded.shape), colour=choice.get("colour", decoded.colour),
-            clarity=choice.get("clarity", decoded.clarity),
-            confirmed=choice["confirmed"] if "confirmed" in choice else decoded.confirmed,
+        if row.item_code not in known:
+            groups.setdefault(row.item_code, []).append(row)
+
+    proposals = {}
+    for item_code, code_rows in groups.items():
+        decoded = dia_rules.decode(item_code)
+        choice = decisions.get(f"code:{item_code}") or {}
+        notes, values, blank_field = [], {}, False
+        for attr in ("shape", "colour", "clarity"):
+            file_values = [getattr(r, attr) for r in code_rows]
+            first_value, decoded_value = file_values[0], getattr(decoded, attr)
+            chosen = first_value or decoded_value
+            values[attr] = chosen
+            others = [v for v in file_values if v and v != chosen]
+            if others:
+                notes.append(f"rows disagree on {attr}: {chosen} / {others[0]}")
+            if not first_value:
+                blank_field = True
+            elif (decoded_value and not decoded_value.startswith("?") and decoded.shape != "Fancy Colour"
+                  and not decoded.note and first_value != decoded_value):
+                notes.append(f"{attr}: file says {first_value}, code reads {decoded_value}")
+        if blank_field and decoded.note:
+            notes.append(decoded.note)
+        note = "; ".join(notes)
+        confirmed = (not note and bool(values["shape"]) and bool(values["colour"])
+                     and (bool(values["clarity"]) or values["colour"].startswith("Fancy")))
+        proposals[item_code] = NewCode(
+            item_code=item_code, note=note,
+            shape=choice.get("shape", values["shape"]), colour=choice.get("colour", values["colour"]),
+            clarity=choice.get("clarity", values["clarity"]),
+            confirmed=choice["confirmed"] if "confirmed" in choice else confirmed,
         )
     return list(proposals.values())
 
@@ -93,6 +117,8 @@ def analyse(rows, decisions=None):
     items, taken = [], {}
     for row in rows:
         item = Item(row=row)
+        if not row.item_code:
+            item.problem = "No item code"
         choice = decisions.get(f"row:{row.src}") or {}
         candidates = by_key.get(_key(row.batch_no, row.item_code, row.size_text), [])
         if choice.get("action") == "skip":
@@ -115,6 +141,8 @@ def analyse(rows, decisions=None):
                 item.existing, item.action = None, "new"
             else:
                 taken[item.existing.pk] = row.src
+        if row.ct == 0 and item.existing is None and item.problem is None and item.action != "skip":
+            item.action, item.empty = "skip", True
         items.append(item)
 
     held = {line.pk: line.on_ct for line in dia_services.stocked_lines(
@@ -166,14 +194,14 @@ def commit(plan, user, import_batch=None):
             colour=_term(DiamondTerm.COLOUR, code.colour), clarity=_term(DiamondTerm.CLARITY, code.clarity),
             confirmed=code.confirmed, note=code.note,
         )
-    result = {"created": 0, "updated": 0, "recounted": 0, "zeroed": 0, "skipped": 0, "codes": len(plan.codes)}
+    result = {"created": 0, "updated": 0, "recounted": 0, "zeroed": 0, "skipped": 0, "empty": 0, "codes": len(plan.codes)}
     fresh = []
     for item in plan.items:
         row = item.row
         if item.action == "skip":
-            result["skipped"] += 1
+            result["empty" if item.empty else "skipped"] += 1
             continue
-        sized = dia_rules.size_band(row.size_text)
+        sized = dia_rules.size_band(row.band_text or row.size_text)
         code = DiamondCode.objects.get(pk=row.item_code)
         fields = {
             "category": dia_services.term(DiamondTerm.CATEGORY, row.category),
@@ -183,7 +211,7 @@ def commit(plan, user, import_batch=None):
             "shape_override": _term(DiamondTerm.SHAPE, sized.shape) if sized.shape and code.shape_id is None else None,
         }
         if item.existing is None:
-            fresh.append({"code": code, "ct": row.ct, **fields})
+            fresh.append({"code": code, "ct": row.ct, "pcs": row.pcs, **fields})
             continue
         line = item.existing
         changed = [name for name, value in fields.items() if getattr(line, name) != value]
@@ -199,5 +227,21 @@ def commit(plan, user, import_batch=None):
     for line, action in plan.missing:
         if action == "zero" and dia_services.recount_line(user, line, 0, note="not in the re-imported register"):
             result["zeroed"] += 1
+
+    live = [i for i in plan.items if i.action != "skip"]
+    can_cost = user.has_perm(VIEW_COST)
+    result["prices_skipped"] = not can_cost and any(i.row.rate is not None for i in live)
+    result["rates"] = 0
+    if can_cost:
+        rates = dia_services.rate_table()
+        priced = {}
+        for item in live:
+            if item.row.rate is not None:
+                priced[(item.row.item_code, item.row.size_text)] = item.row.rate     # last row of a key wins
+        for (item_code, size_text), rate in priced.items():
+            if rates.get((item_code, size_text), {}).get("cost") != rate:
+                DiamondRate.objects.create(code_id=item_code, size_text=size_text, cost_rate=rate, set_by=user)
+                result["rates"] += 1
+
     log(user, "IMPORT", "inv_dia_line", import_batch.pk if import_batch else "-", f"diamond import {result}")
     return result
