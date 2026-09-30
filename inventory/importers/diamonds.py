@@ -11,6 +11,8 @@ from decimal import Decimal
 
 from openpyxl import load_workbook
 
+from .. import dia_rules
+
 SHEETS = ("FANCY FINAL", "Round_LB_LC", "Round_RW")
 
 CATEGORY_NAMES = {"Diamond": "Natural Diamond", "HPHT Diamond": "HPHT Lab Grown", "Lab Grown": "Lab Grown (CVD?)",
@@ -133,8 +135,9 @@ def parse(fileobj):
             raw_colour, raw_clarity = _text(cell("colour")), _text(cell("clarity"))
             fancy = raw_clarity.lower() == "fancy"
             item_code = _text(cell("item_code"))
-            if "item_code" not in where:                # Round_RW: RW1 EF VVS VS is DREF VVS VS
-                item_code = f"DR{raw_colour.upper()} {raw_clarity}".strip()
+            if "item_code" not in where:                # Round_RW: RW1 EF VVS VS is DREF VVS-VS
+                item_code = f"DR{raw_colour.upper()} {raw_clarity}"
+            item_code = dia_rules.canonical_code(item_code)
             category = _text(cell("category"))
             money = {field: _number(cell(field)) for field in ("rate", "amount", "price") if field in where}
             rows.append(Row(

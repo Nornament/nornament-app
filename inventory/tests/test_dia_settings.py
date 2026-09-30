@@ -4,6 +4,7 @@ from django.urls import reverse
 
 from inventory.models import DiamondRate, DiamondTerm
 from inventory.tests.conftest import DIA_COST, DIA_SUPPLIER
+from inventory.tests.fixtures_diamonds import ivy_workbook
 
 pytestmark = pytest.mark.django_db
 
@@ -75,3 +76,14 @@ def test_suppliers_stay_hidden_from_an_editor_without_view_vendor(client, sales_
     assert response.status_code == 403
     from stock.models import Vendor
     assert not Vendor.objects.filter(code="BHA").exists()
+
+
+def test_rates_load_from_an_ivy_export_upload(client, accounts_user, diamonds):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    client.force_login(accounts_user)
+    book = ivy_workbook([("DRFGH VS SI", "+2", 15000, 19000), ("DXYZ VVS VS", "+2", 1, 1)])
+    response = client.post(reverse("inventory:dia_rates_ivy"),
+                           {"workbook": SimpleUploadedFile("ivy.xlsx", book.getvalue())}, follow=True)
+    assert "1 rates loaded; 1 codes in the export are not diamond lines here." in response.content.decode()
+    assert DiamondRate.objects.filter(code_id="DRFGH VS-SI", size_text="+2", cost_rate=15000).exists()

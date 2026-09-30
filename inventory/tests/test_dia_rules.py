@@ -70,3 +70,11 @@ def test_a_carat_band_carries_its_range_and_shape():
 @pytest.mark.parametrize("size", ["+0", "+00", "+000", "+0000"])
 def test_an_all_zero_sieve_is_below_two(size):
     assert dia_rules.size_band(size).band == "-2"
+
+
+def test_an_item_code_is_written_one_way():
+    assert dia_rules.canonical_code("DRFGH  VVS VS ") == "DRFGH VVS-VS"
+    assert dia_rules.canonical_code("DMLC SI I") == "DMLC SI-I"
+    assert dia_rules.canonical_code("DRGH SI I1") == "DRGH SI-I1"
+    assert dia_rules.canonical_code("DRKL VS-SI") == "DRKL VS-SI"
+    assert dia_rules.canonical_code("FPL") == "FPL"

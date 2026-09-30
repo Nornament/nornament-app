@@ -17,6 +17,7 @@ from accounts.capabilities import INV_MASTERS, VIEW_COST, VIEW_SALE, VIEW_VENDOR
 from stock.models import Vendor
 from stock.services import ServiceError, log, require
 
+from .dia_rules import canonical_code
 from .models import DiamondCode, DiamondLine, DiamondRate, DiamondTerm, Movement
 
 #: the prototype's seven rights, as the permissions they are
@@ -218,7 +219,7 @@ def load_ivy_rates(user, fileobj):
     found, unknown = {}, set()
     for values in sheet.iter_rows(min_row=IVY_HEADER_ROW + 1, values_only=True):
         values = list(values) + [None] * 40
-        code = str(values[IVY_CODE] or "").strip()
+        code = canonical_code(str(values[IVY_CODE] or ""))
         if not code or values[IVY_COST] is None and values[IVY_SALE] is None:
             continue
         if code not in codes:

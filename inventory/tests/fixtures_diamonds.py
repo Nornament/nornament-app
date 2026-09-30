@@ -10,6 +10,8 @@ import io
 
 from openpyxl import Workbook
 
+from inventory import dia_services
+
 FANCY_HEADER = ["Code", "Shape", "Gati Code", "Colour", "Clarity", "Seive/Size", "Pieces", "Weight", "Rate", "Amount",
                 "REMARKS"]
 FANCY_ROWS = [
@@ -77,4 +79,24 @@ def fancy_workbook(rows=None):
     sheet.append(FANCY_HEADER + ["Category"])
     for row in PLAN_ROWS if rows is None else rows:
         sheet.append([None if cell == "" else cell for cell in row])
+    return _save(workbook)
+
+
+def ivy_workbook(rows):
+    """The IVY export's shape: two title rows, the header on row 3, the diamond band's columns by position.
+    ``rows`` are (item code, size, cost, sale)."""
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["Karigar export"])
+    sheet.append([])
+    width = dia_services.IVY_SALE + 5
+    header = [""] * width
+    header[dia_services.IVY_CODE], header[dia_services.IVY_SIZE] = "Item Code", "Size"
+    header[dia_services.IVY_COST], header[dia_services.IVY_SALE] = "Rate", "Rate"
+    sheet.append(header)
+    for code, size, cost, sale in rows:
+        row = [None] * width
+        row[dia_services.IVY_CODE], row[dia_services.IVY_SIZE] = code, size
+        row[dia_services.IVY_COST], row[dia_services.IVY_SALE] = cost, sale
+        sheet.append(row)
     return _save(workbook)

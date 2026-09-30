@@ -90,7 +90,7 @@ def _file_plan(decisions=None):
 
 def test_a_code_takes_the_files_columns_and_is_confirmed_when_they_agree():
     codes = {c.item_code: c for c in _file_plan().codes}
-    marquise = codes["DMIJ VVS VS"]
+    marquise = codes["DMIJ VVS-VS"]
     assert (marquise.shape, marquise.colour, marquise.clarity, marquise.confirmed) == ("Marquise", "I-J", "VVS-VS", True)
     fancy = codes["DFY"]
     assert (fancy.shape, fancy.colour, fancy.clarity, fancy.confirmed) == ("Mix", "Fancy Yellow", "", True)
@@ -134,8 +134,8 @@ def test_a_held_line_that_comes_back_at_zero_is_recounted_to_zero(admin_user_):
 def test_commit_saves_each_lines_cost_to_the_rate_card_once(admin_user_):
     dia_plan.commit(_file_plan(), admin_user_)
     rates = dia_services.rate_table()
-    assert rates[("DMIJ VVS VS", "2.3*1.3 - 3.5*2.3")]["cost"] == Decimal("32200")
-    assert rates[("DRMN VVS VS", "0-1")]["cost"] == Decimal("20000")
+    assert rates[("DMIJ VVS-VS", "2.3*1.3 - 3.5*2.3")]["cost"] == Decimal("32200")
+    assert rates[("DRMN VVS-VS", "0-1")]["cost"] == Decimal("20000")
     before = DiamondRate.objects.count()
     result = dia_plan.commit(_file_plan(), admin_user_)                # the same file again
     assert result["rates"] == 0 and DiamondRate.objects.count() == before

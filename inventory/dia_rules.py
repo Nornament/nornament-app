@@ -26,6 +26,14 @@ FANCY = {"Y": "Fancy Yellow", "P": "Fancy Pink", "O": "Fancy Orange", "G": "Fanc
 COLOURS = [("FGH", "F-G-H"), ("EF", "E-F"), ("GH", "G-H"), ("IJ", "I-J"), ("KL", "K-L"), ("MN", "M-N"),
            ("LC", "K-L"), ("LB", "M-N")]
 
+#: "VVS VS" and "VVS-VS" are one clarity; the file and the IVY export write both
+CLARITY_PAIR = re.compile(r" (VVS|VS|SI)[ -](VS|SI|I1|I)$")
+
+
+def canonical_code(item_code):
+    """One spelling per item code: spaces squashed, the clarity pair hyphenated."""
+    return CLARITY_PAIR.sub(r" \1-\2", re.sub(r"\s+", " ", item_code or "").strip())
+
 
 @dataclass
 class Decoded:

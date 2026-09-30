@@ -33,9 +33,9 @@ def test_columns_are_mapped_onto_the_master_lists():
     rows = _rows()
     marquise = rows["FANCY FINAL!3"]
     assert (marquise.item_code, marquise.shape, marquise.colour, marquise.clarity, marquise.pcs, marquise.rate) == (
-        "DMIJ VVS VS", "Marquise", "I-J", "VVS-VS", 6, Decimal("32200"))
+        "DMIJ VVS-VS", "Marquise", "I-J", "VVS-VS", 6, Decimal("32200"))
     lc = rows["FANCY FINAL!4"]
-    assert (lc.item_code, lc.colour, lc.clarity) == ("DMLC SI I", "K-L", "SI-I")
+    assert (lc.item_code, lc.colour, lc.clarity) == ("DMLC SI-I", "K-L", "SI-I")
     taper = rows["FANCY FINAL!5"]
     assert (taper.shape, taper.size_text, taper.pcs) == ("Tapered Baguette", "-2BG", None)
     fancy = rows["FANCY FINAL!6"]
@@ -47,13 +47,13 @@ def test_the_round_sheets():
     rows = _rows()
     lb, bare, lc = rows["Round_LB_LC!2"], rows["Round_LB_LC!3"], rows["Round_LB_LC!7"]
     assert (lb.batch_no, lb.item_code, lb.size_text, lb.colour, lb.rate) == (
-        "LB1.01", "DRMN VVS VS", "0-1", "M-N", Decimal("20000"))        # the swapped headers do not fool it
+        "LB1.01", "DRMN VVS-VS", "0-1", "M-N", Decimal("20000"))        # the swapped headers do not fool it
     assert bare.size_text == "+10"
     assert (lc.batch_no, lc.size_text, lc.clarity, lc.colour) == ("LC3.1", "+1", "VS-SI", "K-L")
     rw, zero = rows["Round_RW!2"], rows["Round_RW!4"]
     assert (rw.item_code, rw.batch_no, rw.size_text, rw.colour, rw.rate) == (
-        "DREF VVS VS", "RW1", "+0000", "E-F", Decimal("42000"))
-    assert (zero.item_code, zero.ct, zero.rate) == ("DRGH VVS VS", Decimal("0.00"), Decimal("31500"))
+        "DREF VVS-VS", "RW1", "+0000", "E-F", Decimal("42000"))
+    assert (zero.item_code, zero.ct, zero.rate) == ("DRGH VVS-VS", Decimal("0.00"), Decimal("31500"))
 
 
 def test_a_workbook_that_is_not_the_register_is_refused():

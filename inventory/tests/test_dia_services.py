@@ -6,6 +6,7 @@ from django.core.exceptions import PermissionDenied
 
 from inventory import dia_rows, dia_seed, dia_services
 from inventory.models import DiamondCode, DiamondRate, DiamondTerm, Movement
+from inventory.tests.fixtures_diamonds import ivy_workbook
 from stock.services import ServiceError
 
 pytestmark = pytest.mark.django_db
@@ -77,24 +78,8 @@ def test_a_rate_needs_both_money_rights(diamonds, sales_user):
 
 
 def test_rates_load_from_the_ivy_export(diamonds, admin_user_):
-    import io
-    from openpyxl import Workbook
-
-    book = Workbook()
-    sheet = book.active
-    sheet.append(["Karigar export"])
-    sheet.append([])
-    header = [""] * 40
-    header[20], header[26], header[32], header[33] = "Item Code", "Size", "Cost Rate", "Sale Rate"
-    sheet.append(header)
-    for code, size, cost, sale in (("DPCEF VVS-VS", "+2", 21000, 27500), ("DZZZ", "+2", 1, 1)):
-        row = [None] * 40
-        row[20], row[26], row[32], row[33] = code, size, cost, sale
-        sheet.append(row)
-    buffer = io.BytesIO()
-    book.save(buffer)
-    buffer.seek(0)
-    assert dia_services.load_ivy_rates(admin_user_, buffer) == {"loaded": 1, "unknown": 1}
+    book = ivy_workbook([("DPCEF  VVS VS", "+2", 21000, 27500), ("DZZZ", "+2", 1, 1)])   # the export's own spelling
+    assert dia_services.load_ivy_rates(admin_user_, book) == {"loaded": 1, "unknown": 1}
     assert dia_services.price(_line(diamonds["princess"].pk), dia_services.rate_table()) == (Decimal("21000"), Decimal("27500"))
 
 
