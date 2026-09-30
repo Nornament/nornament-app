@@ -13,7 +13,7 @@ from decimal import Decimal
 from .dia_seed import COLOUR_LADDER
 
 #: clarity suffix after a space; spaces inside become hyphens
-CLARITIES = ["VVS-VS", "VVS VS", "VS-SI", "VS SI", "SI-I", "SI I", "I1-I2", "VVS1", "VVS2", "VS1", "VS2"]
+CLARITIES = ["VVS-VS", "VVS VS", "VS-SI", "VS SI", "SI-I1", "SI I1", "SI-I", "SI I", "I1-I2", "VVS1", "VVS2", "VS1", "VS2"]
 #: origin prefix; the line's category comes from its sheet column, so this is only stripped
 ORIGINS = ["HPHT", "LG", "SO", "FP", "D"]
 #: longest first — RSC before R, OVL before OV

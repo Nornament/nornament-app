@@ -14,7 +14,8 @@ CLARITY_LADDER = ["FL", "IF", "VVS1", "VVS2", "VS1", "VS2", "SI1", "SI2", "SI3",
 COLOUR_RANGES = {"D-E-F": "D E F", "E-F": "E F", "F-G-H": "F G H", "G-H": "G H",
                  "I-J": "I J", "K-L": "K L", "M-N": "M N"}
 CLARITY_RANGES = {"VVS-VS": "VVS1 VVS2 VS1 VS2", "VS-SI": "VS1 VS2 SI1 SI2",
-                  "SI-I": "SI1 SI2 SI3 I1", "I1-I2": "I1 I2"}
+                  "SI-I": "SI1 SI2 SI3 I1", "I1-I2": "I1 I2",
+                  "SI-I1": "SI1 SI2 I1"}                           # the owner, 2026-09-30
 
 FANCY = ["Fancy Yellow", "Fancy Pink", "Fancy Orange", "Fancy Green",
          "Fancy Blue", "Fancy Brown", "Fancy Black", "Fancy Grey"]

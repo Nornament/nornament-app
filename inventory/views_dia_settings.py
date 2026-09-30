@@ -19,13 +19,16 @@ from stock.masking import mask
 from stock.models import Vendor
 from stock.services import ServiceError, require
 
-from . import dia_rows, dia_services
+from . import dia_rows, dia_seed, dia_services
 from .models import DiamondCode, DiamondRate, DiamondTerm, Movement
 from .views_diamonds import dia_page
 
 CARD_TITLES = [(DiamondTerm.CATEGORY, "Categories"), (DiamondTerm.SHAPE, "Shapes"),
                (DiamondTerm.COLOUR, "Colour grades"), (DiamondTerm.CLARITY, "Clarity grades"),
                (DiamondTerm.BAND, "Size bands")]
+
+
+LADDERS = {DiamondTerm.COLOUR: dia_seed.COLOUR_LADDER, DiamondTerm.CLARITY: dia_seed.CLARITY_LADDER}
 
 
 def _back(anchor):
@@ -67,7 +70,7 @@ def settings_page(request):
         rates=sorted(rates, key=lambda r: (r["code"], r["size_text"])),
         can_rate=request.user.has_perm(VIEW_COST) and request.user.has_perm(VIEW_SALE),
         expansions=[t for t in DiamondTerm.objects.filter(kind__in=[DiamondTerm.COLOUR, DiamondTerm.CLARITY])
-                    if t.expands_to or t.value.startswith("?")],
+                    if t.value not in LADDERS[t.kind] and not t.value.startswith("Fancy")],
         supplier_card=mask(request.user, {"vendor_name": True}),
         suppliers=[mask(request.user, {"pk": v.pk, "vendor_code": v.code, "vendor_name": v.name, "city": v.city,
                                        "terms": v.terms, "purchases": purchases.get(v.pk, 0)})

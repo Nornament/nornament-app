@@ -87,3 +87,14 @@ def test_rates_load_from_an_ivy_export_upload(client, accounts_user, diamonds):
                            {"workbook": SimpleUploadedFile("ivy.xlsx", book.getvalue())}, follow=True)
     assert "1 rates loaded; 1 codes in the export are not diamond lines here." in response.content.decode()
     assert DiamondRate.objects.filter(code_id="DRFGH VS-SI", size_text="+2", cost_rate=15000).exists()
+
+
+def test_the_expansion_card_lists_every_range_and_nothing_else(client, accounts_user, diamonds):
+    DiamondTerm.objects.create(kind="colour", value="LB")                # a range someone added, not yet expanded
+    client.force_login(accounts_user)
+    body = client.get(reverse("inventory:dia_settings")).content.decode()
+    card = body[body.index('id="expansion"'):]
+    for value in ("LB", "F-G-H", "SI-I1", "VS-SI"):
+        assert f"<b>{value}</b>" in card, value
+    for value in ("D", "VVS1", "Fancy Yellow"):
+        assert f"<b>{value}</b>" not in card, value

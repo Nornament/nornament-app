@@ -112,3 +112,33 @@ def test_a_cost_only_rate_does_not_hide_an_earlier_sale_rate(admin_user_):
     DiamondRate.objects.create(code=code, size_text="+5", cost_rate=Decimal("35000"))
     rates = dia_services.rate_table()
     assert rates[("DREF VVS VS", "+5")] == {"cost": Decimal("35000"), "sale": Decimal("50000")}
+
+
+def test_si_i1_covers_si1_si2_and_i1(diamonds):
+    assert DiamondTerm.objects.get(kind="clarity", value="SI-I1").grades() == ["SI1", "SI2", "I1"]
+
+
+def test_the_migration_fills_a_blank_si_i1():
+    import importlib
+
+    from django.apps import apps
+
+    DiamondTerm.objects.update_or_create(kind="clarity", value="SI-I1", defaults={"expands_to": ""})
+    importlib.import_module("inventory.migrations.0005_clarity_si_i1").add_si_i1(apps, None)
+    assert DiamondTerm.objects.get(kind="clarity", value="SI-I1").expands_to == "SI1 SI2 I1"
+
+
+def test_a_range_cannot_be_left_expanding_to_nothing(diamonds, admin_user_):
+    with pytest.raises(ServiceError):
+        dia_services.set_expansion(admin_user_, DiamondTerm.objects.get(kind="clarity", value="SI-I"), "  ")
+    unresolved = DiamondTerm.objects.create(kind="colour", value="? Q")
+    dia_services.set_expansion(admin_user_, unresolved, "")
+
+
+def test_a_grade_named_in_a_range_is_in_use_and_renames_through_it(diamonds, admin_user_):
+    si3 = DiamondTerm.objects.get(kind="clarity", value="SI3")          # on no code, but inside SI-I
+    with pytest.raises(ServiceError):
+        dia_services.delete_term(admin_user_, si3)
+    dia_services.rename_term(admin_user_, DiamondTerm.objects.get(kind="clarity", value="I1"), "I-1")
+    assert DiamondTerm.objects.get(kind="clarity", value="SI-I").expands_to == "SI1 SI2 SI3 I-1"
+    assert DiamondTerm.objects.get(kind="clarity", value="I1-I2").expands_to == "I-1 I2"

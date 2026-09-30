@@ -78,3 +78,9 @@ def test_an_item_code_is_written_one_way():
     assert dia_rules.canonical_code("DRGH SI I1") == "DRGH SI-I1"
     assert dia_rules.canonical_code("DRKL VS-SI") == "DRKL VS-SI"
     assert dia_rules.canonical_code("FPL") == "FPL"
+
+
+@pytest.mark.parametrize("code", ["DRGH SI-I1", "DRGH SI I1"])
+def test_si_i1_is_a_clarity(code):
+    decoded = decode(code)
+    assert (decoded.shape, decoded.colour, decoded.clarity, decoded.note) == ("Round", "G-H", "SI-I1", "")

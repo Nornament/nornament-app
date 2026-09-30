@@ -122,6 +122,9 @@ def recount_line(user, line, ct, note=""):
 
 
 def _in_use(t):
+    ranges = DiamondTerm.objects.filter(kind=t.kind).exclude(pk=t.pk).exclude(expands_to="")
+    if any(t.value in other.expands_to.split() for other in ranges):
+        return True
     if t.kind == DiamondTerm.CATEGORY:
         return DiamondLine.objects.filter(category=t).exists()
     if t.kind == DiamondTerm.BAND:
@@ -153,6 +156,11 @@ def rename_term(user, t, value):
         raise ServiceError(f"{value} is already on the list.")
     old, t.value = t.value, value
     t.save(update_fields=["value"])
+    for other in DiamondTerm.objects.filter(kind=t.kind).exclude(expands_to=""):
+        grades = other.expands_to.split()
+        if old in grades:
+            other.expands_to = " ".join(value if g == old else g for g in grades)
+            other.save(update_fields=["expands_to"])
     log(user, "UPDATE", "inv_dia_term", t.pk, f"{t.kind}: {old} → {value}")
 
 
@@ -167,6 +175,8 @@ def delete_term(user, t):
 def set_expansion(user, t, grades_text):
     require(user, INV_MASTERS, "Only a role that edits settings can change an expansion.")
     grades = (grades_text or "").split()
+    if not grades and not t.value.startswith("?"):
+        raise ServiceError(f"{t.value} has to expand to at least one grade.")
     known = set(DiamondTerm.objects.filter(kind=t.kind, expands_to="").values_list("value", flat=True))
     unknown = [g for g in grades if g not in known]
     if unknown:
