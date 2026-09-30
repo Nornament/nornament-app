@@ -149,3 +149,6 @@ The owner supplied `Dia_Stock_Nitesh.xlsx` in place of `DIAMOND 31.xlsx`. It is 
 - **Lines at 0 ct leave Search**: the table, "n of m lines" and the rail count leave them out.
 - **"Missing" is scoped to the file's sheets**: a line is offered for recount to zero only when its source sheet is one of the sheets in the file being imported.
 - **Still in the "?" band** after the per-stone rule: 50 of the real file's 281 lines (378.45 ct), which have no readable size and no pieces; 33 lines were banded per stone.
+- **A re-import moves a line's carat range only to another range** (a per-stone reading replaces a per-stone reading); it never adds or removes one, so band and range always agree.
+- **A rate dated in the future waits for its day**: the rate card and prices use only rows effective today or earlier.
+- **A row that only "skip" can clear** (no item code, rate out of range) is offered only skip on the review page, and keeps its own problem even when its key is also ambiguous.

@@ -30,7 +30,9 @@ def test_price_by_exact_size_then_any_size_then_not_set(diamonds, admin_user_):
 
 
 def test_the_latest_rate_wins(diamonds, admin_user_):
-    dia_services.set_rate(admin_user_, diamonds["round"].code, "+6-12", Decimal("1"), Decimal("2"), date(2030, 1, 1))
+    from django.utils import timezone
+
+    dia_services.set_rate(admin_user_, diamonds["round"].code, "+6-12", Decimal("1"), Decimal("2"), timezone.localdate())
     assert dia_services.price(_line(diamonds["round"].pk), dia_services.rate_table()) == (Decimal("1"), Decimal("2"))
     assert DiamondRate.objects.count() == 2
 
@@ -148,3 +150,11 @@ def test_an_ivy_cost_that_is_not_a_number_is_refused(diamonds, admin_user_):
     with pytest.raises(ServiceError):
         dia_services.load_ivy_rates(admin_user_, ivy_workbook([("DPCEF VVS VS", "+2", "on request", 27500)]))
     assert not DiamondRate.objects.filter(code_id="DPCEF VVS-VS").exists()
+
+
+def test_a_rate_dated_in_the_future_waits_for_its_day(admin_user_):
+    dia_seed.load(DiamondTerm)
+    code = DiamondCode.objects.create(item_code="DREF VVS-VS")
+    dia_services.set_rate(admin_user_, code, "+5", "35000", "50000", None)
+    dia_services.set_rate(admin_user_, code, "+5", "99000", "99000", date(2999, 1, 1))
+    assert dia_services.rate_table()[("DREF VVS-VS", "+5")] == {"cost": Decimal("35000"), "sale": Decimal("50000")}

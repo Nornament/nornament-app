@@ -48,10 +48,10 @@ def stocked_lines(queryset=None):
 
 def rate_table():
     """The current rate per (code, size), per field: later effective dates, then later rows,
-    win, but only for the field a row actually sets — a cost-only row never hides an earlier
+    win (a rate dated in the future waits for its day), but only for the field a row actually sets — a cost-only row never hides an earlier
     sale rate."""
     table = {}
-    for rate in DiamondRate.objects.order_by("effective_from", "pk"):
+    for rate in DiamondRate.objects.filter(effective_from__lte=timezone.localdate()).order_by("effective_from", "pk"):
         entry = table.setdefault((rate.code_id, rate.size_text), {"cost": None, "sale": None})
         if rate.cost_rate is not None:
             entry["cost"] = rate.cost_rate

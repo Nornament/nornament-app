@@ -80,3 +80,17 @@ def test_a_blocked_row_stays_blocked_until_someone_chooses(client, admin_user_, 
     batch = ImportBatch.objects.get(source="DIAMONDS")
     assert "code:DPCEF VVS-VS" in batch.decisions and "row:FANCY FINAL!4" not in batch.decisions
     assert dia_plan.analyse(diamonds.parse(fancy_workbook(shifted)), batch.decisions).counts()["blocked"] == 2
+
+
+def test_a_row_only_skip_can_clear_offers_only_skip(client, admin_user_, monkeypatch):
+    from mediahub import storage
+
+    dia_seed.load(DiamondTerm)
+    book = fancy_workbook([[None, "Marquise", "DMIJ VVS VS", "IJ", "VVS VS", "2.3*1.3", 6, 0.31, -32200, -9982]]).getvalue()
+    monkeypatch.setattr(storage, "put_bytes", lambda key, data, mime: None)
+    monkeypatch.setattr(storage, "get_bytes", lambda key: book)
+    client.force_login(admin_user_)
+    upload = SimpleUploadedFile("Dia_Stock.xlsx", book,
+                                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    body = client.get(client.post(reverse("inventory:dia_import_home"), {"workbook": upload})["Location"]).content.decode()
+    assert "Rate out of range" in body and 'value="skip"' in body and 'value="map"' not in body

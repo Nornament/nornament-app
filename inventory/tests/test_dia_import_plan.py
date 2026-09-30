@@ -196,3 +196,20 @@ def test_a_later_row_that_differs_from_the_code_says_file_against_code():
             [None, "Oval", "DPRGH VVS VS", "GH", "VVS VS", "3.0*2.0", 1, 0.20, 37800, 7560]]
     code = dia_plan.analyse(diamonds.parse(fancy_workbook(rows))).codes[0]
     assert "shape: file says Oval, code reads Pear" in code.note and "disagree" not in code.note
+
+
+def test_a_reimport_moves_a_range_only_to_another_range(admin_user_):
+    row = [None, "Emerald", "DEMREF VVS VS", "EF", "VVS VS", "2.7*2.1", 2, 0.14, 42000, 5880, None, "Diamond"]
+    dia_plan.commit(_plan([row]), admin_user_)
+    line = DiamondLine.objects.get()
+    assert (line.band.value, line.ct_lo) == ("carat band", Decimal("0.070"))
+    no_pieces = list(row)
+    no_pieces[6] = None
+    dia_plan.commit(_plan([no_pieces]), admin_user_)
+    line.refresh_from_db()
+    assert (line.band.value, line.ct_lo, line.ct_hi) == ("carat band", Decimal("0.070"), Decimal("0.070"))
+    one_piece = list(row)
+    one_piece[6] = 1
+    dia_plan.commit(_plan([one_piece]), admin_user_)
+    line.refresh_from_db()
+    assert (line.ct_lo, line.ct_hi) == (Decimal("0.140"), Decimal("0.140"))

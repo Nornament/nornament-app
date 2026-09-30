@@ -38,6 +38,7 @@ class Item:
     existing: object = None
     problem: str = None
     candidates: list = field(default_factory=list)
+    only_skip: bool = False
     held_ct: object = None
     recount: bool = False
     empty: bool = False
@@ -138,6 +139,7 @@ def analyse(rows, decisions=None):
             item.problem = "No item code"
         elif not _rate_ok(row.rate):
             item.problem = "Rate out of range"
+        item.only_skip = item.problem is not None
         choice = decisions.get(f"row:{row.src}") or {}
         candidates = by_key.get(_key(row.batch_no, row.item_code, row.size_text), [])
         if choice.get("action") == "skip":
@@ -151,11 +153,11 @@ def analyse(rows, decisions=None):
         elif candidates and by_src.get(row.src) in candidates:
             item.action, item.existing = "update", by_src[row.src]
         elif candidates:
-            item.problem = f"{len(candidates)} lines share this batch, code and size"
+            item.problem = item.problem or f"{len(candidates)} lines share this batch, code and size"
             item.candidates = candidates
         if item.existing is not None:
             if item.existing.pk in taken:
-                item.problem = f"{item.existing.ref} is already matched to {taken[item.existing.pk]}"
+                item.problem = item.problem or f"{item.existing.ref} is already matched to {taken[item.existing.pk]}"
                 item.candidates = candidates or [item.existing]
                 item.existing, item.action = None, "new"
             else:
@@ -243,6 +245,8 @@ def commit(plan, user, import_batch=None):
             })
             continue
         line = item.existing
+        if sized.ct_lo is None or line.ct_lo is None:
+            del fields["ct_lo"], fields["ct_hi"]     # a range only moves to another range; the band never moves
         changed = [name for name, value in fields.items() if getattr(line, name) != value]
         for name in changed:
             setattr(line, name, fields[name])

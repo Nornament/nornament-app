@@ -72,6 +72,7 @@ def test_suppliers_stay_hidden_from_an_editor_without_view_vendor(client, sales_
     client.force_login(sales_user)
     body = client.get(reverse("inventory:dia_settings")).content.decode()
     assert "Item codes" in body and DIA_SUPPLIER not in body and 'id="suppliers"' not in body
+    assert 'name="cost_rate"' not in body and DIA_COST not in body          # nor any cost, on the rate card or off it
     response = client.post(reverse("inventory:dia_supplier_save"), {"code": "BHA", "name": "Bhansali Diamonds"})
     assert response.status_code == 403
     from stock.models import Vendor
