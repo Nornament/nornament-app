@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views, views_dia_settings, views_diamonds
+from . import views, views_dia_import, views_dia_settings, views_diamonds
 
 app_name = "inventory"
 
@@ -29,5 +29,7 @@ urlpatterns = [
     path("diamonds/settings/rates/ivy/", views_dia_settings.rates_ivy, name="dia_rates_ivy"),
     path("diamonds/settings/suppliers/", views_dia_settings.supplier_save, name="dia_supplier_save"),
     path("diamonds/settings/rights/", views_dia_settings.right_toggle, name="dia_right_toggle"),
-    path("diamonds/import/", views_diamonds.search, name="dia_import_home"),           # replaced in Task 10
+    path("diamonds/import/", views_dia_import.import_home, name="dia_import_home"),
+    path("diamonds/import/<int:batch_id>/", views_dia_import.import_review, name="dia_import_review"),
+    path("diamonds/import/<int:batch_id>/commit/", views_dia_import.import_commit, name="dia_import_commit"),
 ]

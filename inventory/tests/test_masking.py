@@ -29,13 +29,12 @@ SCREENS = [
 EXEMPT = {
     "inventory:set_view", "inventory:pouch_save", "inventory:pouch_price", "inventory:pouch_photos", "inventory:photo",
     "inventory:import_home", "inventory:import_review", "inventory:import_commit",
-    #: the diamond side: its own masking walk is test_dia_search_view.py;
-    #: dia_settings/dia_import_home are placeholders (both alias `search`)
-    #: until Tasks 9 and 10 replace them with real views.
+    #: the diamond side, until Task 11 walks it (search masking: test_dia_search_view.py)
     "inventory:diamonds", "inventory:dia_settings", "inventory:dia_import_home",
     "inventory:dia_term_add", "inventory:dia_term_rename", "inventory:dia_term_delete", "inventory:dia_expansion",
     "inventory:dia_code_save", "inventory:dia_rate_save", "inventory:dia_rates_ivy", "inventory:dia_supplier_save",
     "inventory:dia_right_toggle",
+    "inventory:dia_import_review", "inventory:dia_import_commit",
 }
 
 
