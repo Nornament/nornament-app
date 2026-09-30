@@ -137,3 +137,15 @@ The owner supplied `Dia_Stock_Nitesh.xlsx` in place of `DIAMOND 31.xlsx`. It is 
 - **Rate lookup, per field.** Cost and sale each resolve to the latest row that sets them (exact size, then any size), so a cost-only row never hides an earlier sale rate.
 - **Real-file check.** `inventory/tests/test_dia_real_file.py` imports `Dia_Stock_Nitesh.xlsx` from beside the repo (skipped if absent): 320 rows read, 281 lines opened (39 zero-carat rows open nothing), 546.96 ct, nothing blocked, and a cost value of ₹1,47,98,794 give or take ₹10 (the file's own sheet totals).
 - **Parity** still runs: the prototype's `const DD`, rebuilt as a `FANCY FINAL` sheet with the Category column and the columns it has, must still give 348 lines, 673.90 ct, 270 batches, 84 codes and the same category and band totals.
+
+## Changed in the final review (2026-09-30)
+
+- **SI-I1** (owner): "SI I1" is a clarity range covering SI1, SI2 and I1; seeded, added by migration `0005` where missing or blank, and read from item codes (`DRGH SI I1` → clarity SI-I1, no note).
+- **Per-stone band** (owner): a new line whose size fits no band but which has pieces and carats is a carat band at its weight per stone (ct ÷ pieces, 3 decimals, as both ends). Parity is unchanged; the prototype has no pieces.
+- **Settings owns category, band and shape once a line is open.** A re-import updates only batch, size text, source row and the carat range. Known limit: a *new* line still takes the file's text, so a renamed term's old name comes back for new lines.
+- **Canonical item codes.** Spaces are squashed and the clarity pair is hyphenated (`VVS VS` → `VVS-VS`, `SI I` → `SI-I`, `SI I1` → `SI-I1`) when the register is read and when the IVY export is matched, so the export's rates find their codes. Still 84 codes in parity and 73 in the real file.
+- **Suppliers need `view_vendor`.** The Suppliers card is shown and saved only for a role that may see vendors; it edits `stock.Vendor`, part 1's supplier store.
+- **Rate card** shows the current cost and sale per code and size (the same per-field lookup as pricing), each with an inline edit that posts a new dated rate.
+- **Lines at 0 ct leave Search**: the table, "n of m lines" and the rail count leave them out.
+- **"Missing" is scoped to the file's sheets**: a line is offered for recount to zero only when its source sheet is one of the sheets in the file being imported.
+- **Still in the "?" band** after the per-stone rule: 50 of the real file's 281 lines (378.45 ct), which have no readable size and no pieces; 33 lines were banded per stone.
