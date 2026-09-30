@@ -1,5 +1,5 @@
 import pytest
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import Group, Permission
 from django.urls import reverse
 
 from inventory.models import DiamondRate, DiamondTerm
@@ -64,3 +64,14 @@ def test_suppliers_can_be_added(client, accounts_user, diamonds):
     client.post(reverse("inventory:dia_supplier_save"), {"code": "bha", "name": "Bhansali Diamonds", "city": "Surat", "terms": "30 days"})
     from stock.models import Vendor
     assert Vendor.objects.get(code="BHA").terms == "30 days"
+
+
+def test_suppliers_stay_hidden_from_an_editor_without_view_vendor(client, sales_user, diamonds):
+    sales_user.user_permissions.add(Permission.objects.get(codename="inv_masters"))
+    client.force_login(sales_user)
+    body = client.get(reverse("inventory:dia_settings")).content.decode()
+    assert "Item codes" in body and DIA_SUPPLIER not in body and 'id="suppliers"' not in body
+    response = client.post(reverse("inventory:dia_supplier_save"), {"code": "BHA", "name": "Bhansali Diamonds"})
+    assert response.status_code == 403
+    from stock.models import Vendor
+    assert not Vendor.objects.filter(code="BHA").exists()

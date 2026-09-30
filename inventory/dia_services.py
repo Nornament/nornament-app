@@ -13,7 +13,7 @@ from django.db.models import Case, DecimalField, F, Sum, When
 from django.utils import timezone
 from openpyxl import load_workbook
 
-from accounts.capabilities import INV_MASTERS, VIEW_COST, VIEW_SALE
+from accounts.capabilities import INV_MASTERS, VIEW_COST, VIEW_SALE, VIEW_VENDOR
 from stock.models import Vendor
 from stock.services import ServiceError, log, require
 
@@ -238,6 +238,7 @@ def load_ivy_rates(user, fileobj):
 
 def save_supplier(user, vendor, code, name, city, terms):
     require(user, INV_MASTERS, "Only a role that edits settings can change suppliers.")
+    require(user, VIEW_VENDOR, "A supplier you may not see is not yours to change.")
     code, name = (code or "").strip().upper(), (name or "").strip()
     if not code or not name:
         raise ServiceError("A supplier needs a code and a name.")

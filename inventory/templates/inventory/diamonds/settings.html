@@ -29,6 +29,7 @@
     </tr>{% endfor %}</tbody></table></div>
 </div>
 
+{% if 'vendor_name' in supplier_card %}
 <div class="card" id="suppliers" style="margin-bottom:14px">
   <div class="card-h"><span class="card-t">Suppliers</span><span class="spacer"></span>
     <details class="inline"><summary class="btn sm pri">＋ Add supplier</summary>
@@ -40,19 +41,20 @@
         <button class="btn pri">Save</button></form></details></div>
   <div class="card-b"><table class="pt">
     <thead><tr><th>Supplier</th><th>City</th><th>Terms</th><th class="r">Purchases</th><th>Actions</th></tr></thead>
-    <tbody>{% for v, n in suppliers %}<tr>
-      <td><b>{{ v.name }}</b> <span class="hint mono">{{ v.code }}</span></td><td>{{ v.city|default:"—" }}</td><td>{{ v.terms|default:"—" }}</td>
-      <td class="r">{{ n }}</td>
+    <tbody>{% for v in suppliers %}<tr>
+      <td><b>{{ v.vendor_name }}</b> <span class="hint mono">{{ v.vendor_code }}</span></td><td>{{ v.city|default:"—" }}</td><td>{{ v.terms|default:"—" }}</td>
+      <td class="r">{{ v.purchases }}</td>
       <td><details><summary class="btn sm gho">Edit</summary>
         <form method="post" action="{% url 'inventory:dia_supplier_save' %}" class="ctrow" style="margin-top:6px">{% csrf_token %}
           <input type="hidden" name="pk" value="{{ v.pk }}">
-          <input class="inp mono" name="code" value="{{ v.code }}" style="width:90px" required>
-          <input class="inp" name="name" value="{{ v.name }}" style="width:170px" required>
+          <input class="inp mono" name="code" value="{{ v.vendor_code }}" style="width:90px" required>
+          <input class="inp" name="name" value="{{ v.vendor_name }}" style="width:170px" required>
           <input class="inp" name="city" value="{{ v.city|default:'' }}" style="width:110px">
           <input class="inp" name="terms" value="{{ v.terms }}" style="width:100px">
           <button class="btn pri">Save</button></form></details></td>
     </tr>{% empty %}<tr><td colspan="5" class="hint">No suppliers yet.</td></tr>{% endfor %}</tbody></table></div>
 </div>
+{% endif %}
 
 {% for kind, title, items in cards %}
 <div class="card" id="{{ kind }}" style="margin-bottom:14px">

@@ -68,7 +68,10 @@ def settings_page(request):
         can_rate=request.user.has_perm(VIEW_COST) and request.user.has_perm(VIEW_SALE),
         expansions=[t for t in DiamondTerm.objects.filter(kind__in=[DiamondTerm.COLOUR, DiamondTerm.CLARITY])
                     if t.expands_to or t.value.startswith("?")],
-        suppliers=[(v, purchases.get(v.pk, 0)) for v in Vendor.objects.filter(is_active=True).order_by("name")],
+        supplier_card=mask(request.user, {"vendor_name": True}),
+        suppliers=[mask(request.user, {"pk": v.pk, "vendor_code": v.code, "vendor_name": v.name, "city": v.city,
+                                       "terms": v.terms, "purchases": purchases.get(v.pk, 0)})
+                   for v in Vendor.objects.filter(is_active=True).order_by("name")],
         rights=dia_services.RIGHTS, matrix=_rights_matrix(request.user), is_admin=request.user.is_admin(),
         today=date.today(),
     )
