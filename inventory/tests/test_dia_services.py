@@ -142,3 +142,9 @@ def test_a_grade_named_in_a_range_is_in_use_and_renames_through_it(diamonds, adm
     dia_services.rename_term(admin_user_, DiamondTerm.objects.get(kind="clarity", value="I1"), "I-1")
     assert DiamondTerm.objects.get(kind="clarity", value="SI-I").expands_to == "SI1 SI2 SI3 I-1"
     assert DiamondTerm.objects.get(kind="clarity", value="I1-I2").expands_to == "I-1 I2"
+
+
+def test_an_ivy_cost_that_is_not_a_number_is_refused(diamonds, admin_user_):
+    with pytest.raises(ServiceError):
+        dia_services.load_ivy_rates(admin_user_, ivy_workbook([("DPCEF VVS VS", "+2", "on request", 27500)]))
+    assert not DiamondRate.objects.filter(code_id="DPCEF VVS-VS").exists()

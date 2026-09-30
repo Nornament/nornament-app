@@ -4,7 +4,7 @@ Carats on hand are the sum of a line's movements (the stones' rule). Price is
 the inventory's own rate card — the latest rate for the line's item code and
 size, else for the code at any size — never the stock app's chart.
 """
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.models import Group, Permission
 from django.core.exceptions import PermissionDenied
@@ -200,7 +200,10 @@ def save_code(user, code, shape, colour, clarity, confirmed, note):
 def _rate(value):
     if value is None:
         return None
-    value = Decimal(value)
+    try:
+        value = Decimal(value)
+    except (InvalidOperation, TypeError, ValueError):
+        raise ServiceError("A rate has to be a number from 0 up to ten digits.")
     if not value.is_finite() or value < 0 or abs(value) >= 10 ** 10:
         raise ServiceError("A rate has to be a number from 0 up to ten digits.")
     return value
@@ -224,7 +227,10 @@ def load_ivy_rates(user, fileobj):
     require(user, INV_MASTERS, "Only a role that edits settings can load rates.")
     require(user, VIEW_COST, "A cost you may not see is not yours to set.")
     require(user, VIEW_SALE, "A sale price you may not see is not yours to set.")
-    sheet = load_workbook(fileobj, read_only=True, data_only=True).active
+    try:
+        sheet = load_workbook(fileobj, read_only=True, data_only=True).active
+    except Exception:
+        raise ServiceError("That is not an Excel workbook.")
     codes = set(DiamondCode.objects.values_list("item_code", flat=True))
     found, unknown = {}, set()
     for values in sheet.iter_rows(min_row=IVY_HEADER_ROW + 1, values_only=True):

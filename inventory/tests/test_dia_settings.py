@@ -98,3 +98,31 @@ def test_the_expansion_card_lists_every_range_and_nothing_else(client, accounts_
         assert f"<b>{value}</b>" in card, value
     for value in ("D", "VVS1", "Fancy Yellow"):
         assert f"<b>{value}</b>" not in card, value
+
+
+@pytest.mark.parametrize("day", ["2026-02-30", "next week"])
+def test_a_bad_rate_date_is_a_message_on_the_rate_card(client, accounts_user, diamonds, day):
+    client.force_login(accounts_user)
+    response = client.post(reverse("inventory:dia_rate_save"), {"code": "DPCEF VVS-VS", "cost_rate": "1",
+                                                                "sale_rate": "2", "effective_from": day})
+    assert response.status_code == 302 and response["Location"].endswith("#rates")
+    assert "is not a date" in client.get(response["Location"]).content.decode()
+    assert not DiamondRate.objects.filter(code_id="DPCEF VVS-VS").exists()
+
+
+def test_an_ivy_upload_that_is_not_a_workbook_is_a_message(client, accounts_user, diamonds):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    client.force_login(accounts_user)
+    response = client.post(reverse("inventory:dia_rates_ivy"), {"workbook": SimpleUploadedFile("ivy.xlsx", b"not a zip")})
+    assert response.status_code == 302 and response["Location"].endswith("#rates")
+    assert "not an Excel workbook" in client.get(response["Location"]).content.decode()
+
+
+def test_a_refused_write_goes_back_to_its_own_card(client, accounts_user, diamonds):
+    client.force_login(accounts_user)
+    round_shape = DiamondTerm.objects.get(kind="shape", value="Round")
+    response = client.post(reverse("inventory:dia_term_rename", args=[round_shape.pk]), {"value": "Princess"})
+    assert response["Location"].endswith("#shape")
+    response = client.post(reverse("inventory:dia_term_add"), {"kind": "colour", "value": "D"})
+    assert response["Location"].endswith("#colour")

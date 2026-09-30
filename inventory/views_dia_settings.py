@@ -80,35 +80,44 @@ def settings_page(request):
     )
 
 
-def _guarded(view):
-    """POST only, logged in, and the masters right — checked here and again in the service."""
-    @login_required
-    @require_POST
-    def wrapped(request, *args, **kwargs):
-        require(request.user, INV_MASTERS, "Only a role that edits settings can change them.")
-        try:
-            return view(request, *args, **kwargs)
-        except ServiceError as error:
-            messages.error(request, error.messages[0])
-            return _back(kwargs.get("anchor") or request.POST.get("anchor", ""))
-    return wrapped
+def _term_card(request, pk=None):
+    if pk is None:
+        return request.POST.get("kind", "")
+    return DiamondTerm.objects.filter(pk=pk).values_list("kind", flat=True).first() or ""
 
 
-@_guarded
+def _guarded(anchor):
+    """POST only, logged in, and the masters right — checked here and again in the service.
+    A refusal goes back to the view's own card: ``anchor``, or a function of the request that finds it."""
+    def decorate(view):
+        @login_required
+        @require_POST
+        def wrapped(request, *args, **kwargs):
+            require(request.user, INV_MASTERS, "Only a role that edits settings can change them.")
+            try:
+                return view(request, *args, **kwargs)
+            except ServiceError as error:
+                messages.error(request, error.messages[0])
+                return _back(anchor(request, **kwargs) if callable(anchor) else anchor)
+        return wrapped
+    return decorate
+
+
+@_guarded(_term_card)
 def term_add(request):
     kind = request.POST.get("kind", "")
     dia_services.add_term(request.user, kind, request.POST.get("value"))
     return _back(kind)
 
 
-@_guarded
+@_guarded(_term_card)
 def term_rename(request, pk):
     t = get_object_or_404(DiamondTerm, pk=pk)
     dia_services.rename_term(request.user, t, request.POST.get("value"))
     return _back(t.kind)
 
 
-@_guarded
+@_guarded(_term_card)
 def term_delete(request, pk):
     t = get_object_or_404(DiamondTerm, pk=pk)
     kind = t.kind
@@ -116,7 +125,7 @@ def term_delete(request, pk):
     return _back(kind)
 
 
-@_guarded
+@_guarded("expansion")
 def expansion(request, pk):
     t = get_object_or_404(DiamondTerm, pk=pk, kind__in=[DiamondTerm.COLOUR, DiamondTerm.CLARITY])
     dia_services.set_expansion(request.user, t, request.POST.get("grades"))
@@ -127,7 +136,7 @@ def _term_or_none(raw, kind):
     return DiamondTerm.objects.filter(pk=raw, kind=kind).first() if (raw or "").isdigit() else None
 
 
-@_guarded
+@_guarded("codes")
 def code_save(request, code):
     item = get_object_or_404(DiamondCode, pk=code)
     dia_services.save_code(
@@ -149,16 +158,29 @@ def _decimal(raw):
         raise ServiceError(f"{raw} is not a number.")
 
 
-@_guarded
+def _date(raw):
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        day = parse_date(raw)
+    except ValueError:
+        day = None
+    if day is None:
+        raise ServiceError(f"{raw} is not a date.")
+    return day
+
+
+@_guarded("rates")
 def rate_save(request):
     code = get_object_or_404(DiamondCode, pk=request.POST.get("code", ""))
     dia_services.set_rate(request.user, code, request.POST.get("size_text"), _decimal(request.POST.get("cost_rate")),
-                          _decimal(request.POST.get("sale_rate")), parse_date(request.POST.get("effective_from") or ""))
+                          _decimal(request.POST.get("sale_rate")), _date(request.POST.get("effective_from")))
     messages.success(request, "Rate saved.")
     return _back("rates")
 
 
-@_guarded
+@_guarded("rates")
 def rates_ivy(request):
     upload = request.FILES.get("workbook")
     if upload is None:
@@ -168,7 +190,7 @@ def rates_ivy(request):
     return _back("rates")
 
 
-@_guarded
+@_guarded("suppliers")
 def supplier_save(request):
     raw = request.POST.get("pk", "")
     vendor = Vendor.objects.filter(pk=raw).first() if raw.isdigit() else None
