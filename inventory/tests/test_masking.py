@@ -33,6 +33,9 @@ EXEMPT = {
     #: dia_settings/dia_import_home are placeholders (both alias `search`)
     #: until Tasks 9 and 10 replace them with real views.
     "inventory:diamonds", "inventory:dia_settings", "inventory:dia_import_home",
+    "inventory:dia_term_add", "inventory:dia_term_rename", "inventory:dia_term_delete", "inventory:dia_expansion",
+    "inventory:dia_code_save", "inventory:dia_rate_save", "inventory:dia_rates_ivy", "inventory:dia_supplier_save",
+    "inventory:dia_right_toggle",
 }
 
 

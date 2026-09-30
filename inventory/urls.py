@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views, views_diamonds
+from . import views, views_dia_settings, views_diamonds
 
 app_name = "inventory"
 
@@ -19,6 +19,15 @@ urlpatterns = [
     path("pouches/<str:ref>/movements/", views.movements, name="movements"),
     path("photos/<int:media_id>/", views.photo, name="photo"),
     path("diamonds/", views_diamonds.search, name="diamonds"),
-    path("diamonds/settings/", views_diamonds.search, name="dia_settings"),            # replaced in Task 9
+    path("diamonds/settings/", views_dia_settings.settings_page, name="dia_settings"),
+    path("diamonds/settings/terms/", views_dia_settings.term_add, name="dia_term_add"),
+    path("diamonds/settings/terms/<int:pk>/rename/", views_dia_settings.term_rename, name="dia_term_rename"),
+    path("diamonds/settings/terms/<int:pk>/delete/", views_dia_settings.term_delete, name="dia_term_delete"),
+    path("diamonds/settings/terms/<int:pk>/expansion/", views_dia_settings.expansion, name="dia_expansion"),
+    path("diamonds/settings/codes/<str:code>/", views_dia_settings.code_save, name="dia_code_save"),
+    path("diamonds/settings/rates/", views_dia_settings.rate_save, name="dia_rate_save"),
+    path("diamonds/settings/rates/ivy/", views_dia_settings.rates_ivy, name="dia_rates_ivy"),
+    path("diamonds/settings/suppliers/", views_dia_settings.supplier_save, name="dia_supplier_save"),
+    path("diamonds/settings/rights/", views_dia_settings.right_toggle, name="dia_right_toggle"),
     path("diamonds/import/", views_diamonds.search, name="dia_import_home"),           # replaced in Task 10
 ]
