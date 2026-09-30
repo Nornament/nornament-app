@@ -92,6 +92,17 @@ def graphic_user(db):
 
 
 @pytest.fixture
+def production_user(db):
+    """Stock staff: posts job cards, sees vendors, no cost."""
+    return _user("workshop", "PRODUCTION", full_name="Production")
+
+
+@pytest.fixture
+def karigar_user(db):
+    return _user("karigar", "KARIGAR", full_name="Karigar desk")
+
+
+@pytest.fixture
 def locations(db):
     return {
         code: Location.objects.get_or_create(code=code, defaults={"name": name, "kind": kind})[0]

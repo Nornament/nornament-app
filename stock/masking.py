@@ -40,6 +40,13 @@ GATED_FIELDS = {
     "vendor_name": VIEW_VENDOR,
     "vendor_avg_tat_days": VIEW_VENDOR,
     "material_breakup": MANAGE_MATERIALS,
+    # the inventory's own names for the same three secrets
+    "stone_rate": VIEW_COST,
+    "pouch_value": VIEW_COST,
+    "valuation_rate": VIEW_COST,
+    "purchase_rate": VIEW_COST,
+    "list_rate": VIEW_SALE,
+    "supplier_name": VIEW_VENDOR,
 }
 
 

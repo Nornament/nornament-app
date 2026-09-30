@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     "crm",
     "mediahub",
     "etl",
+    "inventory",
 ]
 
 MIDDLEWARE = [
@@ -72,6 +73,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "accounts.middleware.MustChangePasswordMiddleware",
+    "accounts.middleware.KarigarDeskMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"

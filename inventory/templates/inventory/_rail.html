@@ -1,0 +1,41 @@
+{% load inventory_extras %}{% comment %}The prototype's rail, in its order. What
+the prototype named but never built is shown locked, never as a dead link.{% endcomment %}
+<div class="nav-h">Physical stock</div>
+<nav class="nav">
+  <a class="{% if tab == 'shelf' %}on{% endif %}" href="{% url 'inventory:shelf' %}"><span class="ic">▦</span>Box colours<span class="ct">{{ rail.colours }}</span></a>
+  <a href="{% url 'inventory:shelf' %}"><span class="ic">◈</span>Batches<span class="ct">{{ rail.batches|grouped }}</span></a>
+  <a href="{% url 'inventory:shelf' %}"><span class="ic">◆</span>Pouches<span class="ct">{{ rail.pouches|grouped }}</span></a>
+  {% if rail.boxes %}<a href="{% url 'inventory:shelf' %}"><span class="ic">▤</span>Boxes<span class="ct">{{ rail.boxes|length }}</span></a>{% endif %}
+</nav>
+
+{% if not client_view %}
+<div class="nav-h">Stock control</div>
+<nav class="nav">
+  {% if caps.inv_masters %}<a class="{% if tab == 'import' %}on{% endif %}" href="{% url 'inventory:import_home' %}"><span class="ic">⇅</span>Import stones</a>{% endif %}
+  <span class="locked"><span class="ic">＋</span>Purchases<span class="ct">🔒</span></span>
+  <span class="locked"><span class="ic">⇄</span>Movements<span class="ct">🔒</span></span>
+  <span class="locked"><span class="ic">↗</span>Job work out<span class="ct">🔒</span></span>
+  <span class="locked"><span class="ic">↘</span>Memo out<span class="ct">🔒</span></span>
+  <span class="locked"><span class="ic">⊙</span>Stock takes<span class="ct">🔒</span></span>
+  <span class="locked"><span class="ic">⤴</span>Splits &amp; merges<span class="ct">🔒</span></span>
+  <span class="locked"><span class="ic">⇉</span>Transfers<span class="ct">🔒</span></span>
+</nav>
+{% endif %}
+
+<div class="nav-h">Commercial</div>
+<nav class="nav">
+  {% if not client_view %}<span class="locked"><span class="ic">₹</span>Price list — cost<span class="ct">🔒</span></span>{% endif %}
+  <span class="locked"><span class="ic">₹</span>Price list — selling<span class="ct">🔒</span></span>
+  <span class="locked"><span class="ic">⌗</span>Suppliers<span class="ct">🔒</span></span>
+  <span class="locked"><span class="ic">◐</span>Client lookbook<span class="ct">🔒</span></span>
+</nav>
+
+{% if not client_view %}
+<div class="nav-h">Data quality</div>
+<nav class="nav">
+  {% if 'misfiled' in rail %}<span class="locked"><span class="ic" style="color:var(--warning)">⚑</span>Misfiled colour<span class="ct">{{ rail.misfiled|grouped }} 🔒</span></span>{% endif %}
+  {% if 'no_pouch_no' in rail %}<span class="locked"><span class="ic" style="color:var(--critical)">!</span>No pouch no.<span class="ct">{{ rail.no_pouch_no|grouped }} 🔒</span></span>{% endif %}
+  <span class="locked"><span class="ic">◱</span>Missing photos<span class="ct">{{ rail.no_photo|grouped }} 🔒</span></span>
+  <span class="locked"><span class="ic">⤢</span>No size in mm<span class="ct">{{ rail.no_size|grouped }} 🔒</span></span>
+</nav>
+{% endif %}

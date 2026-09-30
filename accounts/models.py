@@ -24,6 +24,10 @@ class Capability(models.Model):
             ("adjust_stock", "Can adjust stock"),
             ("melt", "Can melt a piece"),
             ("edit_bom", "Can edit a bill of materials"),
+            ("inv_masters", "Can edit inventory records and import stock"),
+            ("inv_purchase", "Can post inventory purchases"),
+            ("inv_job", "Can post job-card movements"),
+            ("inv_assort", "Can post assortments"),
         ]
 
 
@@ -94,7 +98,7 @@ class User(AbstractUser):
 
 
 def sync_role_groups():
-    """Create the five role groups and give each its capabilities.
+    """Create the role groups and give each its capabilities.
 
     Idempotent: run from a data migration, from ``load_legacy`` and from tests.
     """

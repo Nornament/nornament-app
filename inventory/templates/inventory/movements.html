@@ -1,0 +1,74 @@
+{% extends "inventory_base.html" %}{% load inventory_extras %}
+{% block title %}Movements · {{ row.batch_code }} · {{ row.pouch_no|default:"?" }}{% endblock %}
+{% block crumb %}Shelf &nbsp;›&nbsp; {{ row.box_label }} &nbsp;›&nbsp; <b class="mono">{{ row.batch_code }} · {{ row.pouch_no|default:"?" }}</b> &nbsp;›&nbsp; Movements{% endblock %}
+{% block content %}
+<div class="head">
+  <div><div class="k1">{{ row.batch_code }} · {{ row.pouch_no|default:"?" }}</div>
+    <div class="k2">Movements · {{ row.stone_name|default:"Unidentified" }} · batch {{ row.batch_code }}, box {{ row.carton|default:"—" }}</div>
+    <div class="meta">
+      {% if in_stock %}<span class="chip good"><span class="dot"></span>In stock</span>{% else %}<span class="chip"><span class="dot" style="background:var(--muted)"></span>Out of stock</span>{% endif %}
+      <span class="chip">{{ ledger_total }} movement{{ ledger_total|pluralize }}</span></div></div>
+  <div class="head-act">
+    <a class="btn gho" href="{% url 'inventory:pouch' row.ref %}">← Pouch</a>
+    <button class="btn gho" disabled title="Coming soon">⤴ Split 🔒</button>
+    <button class="btn pri" disabled title="Coming soon">＋ Record movement 🔒</button></div>
+</div>
+
+<div class="tx-top">
+  <div class="derived">
+    <div style="display:flex;align-items:center;gap:9px"><span class="chip info"><span class="dot"></span>Derived</span>
+      <span class="card-t">Current balance</span></div>
+    <div class="drow">
+      <div class="dq"><div class="lab">Pieces</div><div class="val tnum">{% if row.countable %}{{ row.pcs|grouped }} <small>pcs</small>{% else %}<span style="font-size:15px;color:var(--muted)">Uncountable</span>{% endif %}</div></div>
+      <div class="dq"><div class="lab">Weight</div><div class="val tnum">{{ row.ct|ct }} <small>ct</small></div></div>
+      {% if 'pouch_value' in row %}<div class="dq"><div class="lab">Value</div><div class="val tnum">{{ row.pouch_value|rupees }}</div></div>{% endif %}
+    </div>
+  </div>
+  <div class="card"><div class="card-h"><span class="card-t">Where this pouch sits</span></div>
+    <div class="card-b">
+      <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:13px">
+        <span class="chip"><span class="dot" style="background:{{ row.box_swatch }}"></span>{{ row.box_label }}</span><span style="color:var(--muted)">›</span>
+        <span class="chip mono">◈ {{ row.batch_code }}</span><span style="color:var(--muted)">›</span>
+        <span class="chip mono">◆ pouch {{ row.pouch_no|default:"?" }}</span><span style="color:var(--muted)">·</span>
+        <span class="chip">▤ box {{ row.carton|default:"—" }}</span></div>
+      <button class="btn sm" style="margin-top:11px" disabled title="Coming soon">⇄ Transfer to another batch 🔒</button>
+    </div></div>
+</div>
+
+<div class="tx-cols">
+  <div class="card" style="overflow:hidden">
+    <div class="card-h"><span class="card-t">Movement ledger</span><span class="spacer"></span>
+      <form method="get" style="display:flex;gap:6px">
+        <select class="chip" name="reason" onchange="this.form.submit()"><option value="">All reasons ▾</option>
+          {% for value, label in reasons %}<option value="{{ value }}"{% if value == reason %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+        <select class="chip" name="months" onchange="this.form.submit()">
+          {% for value, label in periods %}<option value="{{ value }}"{% if value == months %} selected{% endif %}>{{ label }} ▾</option>{% endfor %}</select>
+      </form></div>
+    <div style="overflow:auto"><table class="led">
+      <thead><tr><th>Date</th><th>Reason</th><th>Dir</th><th class="r">Pcs</th><th class="r">Carats</th>
+        <th>Counterparty / ref</th><th class="r">Balance after</th><th>By</th></tr></thead>
+      <tbody>{% for m in ledger %}<tr>
+        <td>{{ m.when|date:"d M Y" }}<div class="hint">{{ m.when|date:"H:i" }}</div></td>
+        <td><span class="chip {{ m.tone }}">{% if m.tone %}<span class="dot"></span>{% endif %}{{ m.reason }}</span>{% if m.note %}<div class="hint">{{ m.note }}</div>{% endif %}</td>
+        <td class="dir {{ m.dir }}">{% if m.dir == 'in' %}＋{% else %}−{% endif %}</td>
+        <td class="r">{{ m.pcs|default_if_none:"—" }}</td><td class="r">{{ m.ct|ct }}</td>
+        <td>{{ m.vendor_name }}{% if m.ref %}<div class="chal">{{ m.ref }}</div>{% endif %}</td>
+        <td class="r">{{ m.bal_ct|ct }} ct<div class="hint tnum">{% if row.countable %}{{ m.bal_pcs }} pcs{% else %}no pcs{% endif %}</div></td>
+        <td class="hint">{{ m.by }}</td></tr>
+      {% empty %}<tr><td colspan="8" class="hint">No movements in this period.</td></tr>{% endfor %}</tbody></table></div>
+  </div>
+
+  <div><div class="card"><div class="card-h"><span class="card-t">Record movement</span><span class="lock" style="margin-left:auto">🔒</span></div>
+    <div class="card-b"><fieldset disabled style="border:0">
+      <div class="fld"><label>Reason</label><select class="inp">{% for value, label in reasons %}<option>{{ label }}</option>{% endfor %}</select></div>
+      <div class="two">
+        <div class="fld"><label>Pieces out</label><div class="unit"><input class="inp tnum"{% if not row.countable %} placeholder="uncountable"{% endif %}><span class="u">pcs</span></div></div>
+        <div class="fld"><label>Weight out</label><div class="unit"><input class="inp tnum"><span class="u">ct</span></div></div></div>
+      <div class="fld"><label>Karigar</label><select class="inp"><option>—</option></select></div>
+      <div class="fld"><label>Delivery challan no. <span style="color:var(--critical)">*</span></label><input class="inp mono"></div>
+      <div class="two"><div class="fld"><label>Date</label><input class="inp" type="date"></div>
+        <div class="fld"><label>Expected back</label><input class="inp" type="date"></div></div>
+      <button class="btn pri" style="width:100%;justify-content:center">Post movement</button>
+    </fieldset></div></div></div>
+</div>
+{% endblock %}

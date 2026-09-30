@@ -1,0 +1,31 @@
+{% extends "inventory_base.html" %}{% load inventory_extras %}
+{% block title %}{{ box.label }}{% endblock %}
+{% block crumb %}Shelf &nbsp;›&nbsp; {{ box.label }}{% endblock %}
+{% block content %}
+<div class="shelfbar"><h1>{{ box.label }} — {{ batch_total }} batches</h1></div>
+{% include "inventory/_totals.html" %}
+<div class="bcrumb"><a href="{% url 'inventory:shelf' %}">All box colours</a> <span>›</span> <b>{{ box.label }} · {{ box.code }}</b></div>
+
+<div class="cardgrid">
+{% for b in batches %}
+  <a class="imgcard" href="{% url 'inventory:batch' b.pk %}">
+    <div class="tile" style="background:linear-gradient(160deg,#fbfaf7,{{ b.hex }}22)">
+      {% if b.photo_id %}<img class="photo" src="{% url 'inventory:photo' b.photo_id %}" alt="" loading="lazy">{% else %}{% silhouette b.shape b.hex %}{% endif %}
+      {% if b.code %}<span class="badge">{{ b.code }}</span>{% endif %}
+      <span class="badge rt">{{ b.pouches }} pouch{{ b.pouches|pluralize:"es" }}</span>
+      {% if not client_view and not b.photo_id %}<span class="nophoto">no photo yet</span>{% endif %}
+    </div>
+    <div class="body">
+      <div class="t1">{{ b.names }}</div>
+      {% if b.family_label %}<div class="t2">{{ b.family_label }} · {{ b.class_label }}</div>{% endif %}
+      {% if 'value' in b %}<div class="money">{{ b.value|rupees }}</div>{% endif %}
+      <div class="t3">{{ b.ct|ct }} ct{% if b.boxes %} · box {{ b.boxes|join:", " }}{% endif %}</div>
+      {% if b.misfiled %}<div class="flags"><span class="chip warn"><span class="dot"></span>{{ b.misfiled }} colour mismatch</span></div>{% endif %}
+    </div>
+  </a>
+{% endfor %}
+</div>
+{% if batches|length < batch_total %}
+<div style="text-align:center;margin-top:18px"><a class="btn" href="?all=1">Show all {{ batch_total }} batches</a></div>
+{% endif %}
+{% endblock %}

@@ -6,6 +6,7 @@ from .views import healthz
 urlpatterns = [
     path("", include("stock.urls")),
     path("crm/", include("crm.urls")),
+    path("inventory/", include("inventory.urls")),
     path("media/", include("mediahub.urls")),
     path("accounts/", include("accounts.urls")),
     path("admin/", admin.site.urls),
