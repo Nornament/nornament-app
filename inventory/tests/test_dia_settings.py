@@ -126,3 +126,13 @@ def test_a_refused_write_goes_back_to_its_own_card(client, accounts_user, diamon
     assert response["Location"].endswith("#shape")
     response = client.post(reverse("inventory:dia_term_add"), {"kind": "colour", "value": "D"})
     assert response["Location"].endswith("#colour")
+
+
+def test_an_admin_previewing_a_role_sees_its_settings(client, admin_user_, diamonds):
+    client.force_login(admin_user_)
+    search = client.get(reverse("inventory:diamonds"), {"as": "SALES"}).content.decode()
+    assert f'href="{reverse("inventory:dia_settings")}?as=SALES"' in search          # the preview carries over
+    body = client.get(reverse("inventory:dia_settings"), {"as": "SALES"}).content.decode()
+    assert "Not permitted for Sales / Showroom" in body and "Rate card" not in body
+    body = client.get(reverse("inventory:dia_settings")).content.decode()
+    assert "Settings — you define these" in body and "＋ Add user 🔒" in body

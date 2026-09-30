@@ -5,17 +5,18 @@
 {% include "inventory/diamonds/_dsub.html" %}
 {% if denied %}
 <div class="dbanner"><h2>Settings</h2></div>
-<div class="banner crit"><div class="banner-ic">✕</div><div><h4>Not permitted for {{ role_name }}</h4>
+<div class="banner crit"><div class="banner-ic">✕</div><div><h4>Not permitted for {{ role_label }}</h4>
   <p>Master lists, suppliers and user rights need the Edit settings right.</p></div></div>
 {% else %}
 <div class="dbanner"><h2>Settings</h2></div>
 
 <div class="card" id="rights" style="margin-bottom:14px">
-  <div class="card-h"><span class="card-t">User rights</span></div>
-  <div class="card-b"><table class="pt">
+  <div class="card-h"><span class="card-t">User rights</span><span class="spacer"></span>
+    <button class="btn sm pri" disabled title="Users are managed elsewhere">＋ Add user 🔒</button></div>
+  <div class="card-b" style="overflow:auto"><table class="pt">
     <thead><tr><th>Role</th>{% for codename, label in rights %}<th>{{ label }}</th>{% endfor %}</tr></thead>
-    <tbody>{% for role in matrix %}<tr{% if role.code == role_code %} class="sel"{% endif %}>
-      <td><b>{{ role.name }}</b>{% if role.code == role_code %} <span class="chip info"><span class="dot"></span>you</span>{% endif %}</td>
+    <tbody>{% for role in matrix %}<tr{% if role.code == me %} class="sel"{% endif %}>
+      <td><b>{{ role.name }}</b>{% if role.code == me %} <span class="chip info"><span class="dot"></span>you</span>{% endif %}</td>
       {% for codename, on in role.cells %}<td>
         {% if is_admin and not role.locked %}
         <form method="post" action="{% url 'inventory:dia_right_toggle' %}" class="inline">{% csrf_token %}
@@ -39,7 +40,7 @@
         <input class="inp" name="city" placeholder="City" style="width:120px">
         <input class="inp" name="terms" placeholder="Terms" style="width:110px">
         <button class="btn pri">Save</button></form></details></div>
-  <div class="card-b"><table class="pt">
+  <div class="card-b" style="overflow:auto"><table class="pt">
     <thead><tr><th>Supplier</th><th>City</th><th>Terms</th><th class="r">Purchases</th><th>Actions</th></tr></thead>
     <tbody>{% for v in suppliers %}<tr>
       <td><b>{{ v.vendor_name }}</b> <span class="hint mono">{{ v.vendor_code }}</span></td><td>{{ v.city|default:"—" }}</td><td>{{ v.terms|default:"—" }}</td>
@@ -64,7 +65,7 @@
       <form method="post" action="{% url 'inventory:dia_term_add' %}" class="ctrow" style="margin-top:8px">{% csrf_token %}
         <input type="hidden" name="kind" value="{{ kind }}"><input class="inp" name="value" required style="width:180px">
         <button class="btn pri">Add</button></form></details></div>
-  <div class="card-b"><table class="pt">
+  <div class="card-b" style="overflow:auto"><table class="pt">
     <thead><tr><th>Value</th><th>In use</th><th class="r">Carats</th><th>Actions</th></tr></thead>
     <tbody>{% for item in items %}<tr>
       <td>{% if item.bad %}<span class="chip warn"><span class="dot"></span>{{ item.term.value }}</span>{% else %}<b>{{ item.term.value }}</b>{% endif %}</td>
@@ -120,7 +121,7 @@
 
 <div class="card" id="expansion">
   <div class="card-h"><span class="card-t">Range → grade expansion</span></div>
-  <div class="card-b"><table class="pt">
+  <div class="card-b" style="overflow:auto"><table class="pt">
     <thead><tr><th>Range</th><th>Expands to</th><th>Correct it</th></tr></thead>
     <tbody>{% for t in expansions %}<tr>
       <td class="mono"><b>{{ t.value }}</b></td>

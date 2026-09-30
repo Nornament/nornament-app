@@ -34,17 +34,22 @@ class PreviewUser:
         return perm in self.perms
 
 
+def _preview_role(request):
+    wanted = request.GET.get("as", "")
+    return wanted if wanted in ROLE_GROUPS and wanted != "ADMIN" and request.user.is_admin() else ""
+
+
 def viewer(request):
     """(who the page is built for, their role code). Only an admin may borrow another role."""
-    wanted = request.GET.get("as", "")
-    if wanted in ROLE_GROUPS and request.user.is_admin() and wanted != "ADMIN":
+    wanted = _preview_role(request)
+    if wanted:
         return PreviewUser(wanted), wanted
     return request.user, _role_code(request.user)
 
 
 def dia_page(request, template, **context):
-    """Every diamond page: the diamond rail, the diamond tabs, no client toggle."""
-    context.update(side="diamonds", drail=dia_rows.rail_counts())
+    """Every diamond page: the diamond rail, the diamond tabs (carrying a preview), no client toggle."""
+    context.update(side="diamonds", drail=dia_rows.rail_counts(), as_role=_preview_role(request))
     return render(request, template, context)
 
 

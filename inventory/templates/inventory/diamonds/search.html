@@ -30,7 +30,8 @@
       {% for b in cats %}<a class="bub big{% if b.on %} on{% endif %}" href="{{ b.href }}"><b>{{ b.value }}</b><span>{{ b.ct|ct }} ct · {{ b.n }}</span></a>{% endfor %}
     </div>
   </div>
-  {% if f.cat %}<div class="catnote">Showing only what <b>{{ f.cat }}</b> actually holds — {{ cat_shapes }} shapes.</div>{% endif %}
+  {% if f.cat %}<div class="catnote">Showing only what <b>{{ f.cat }}</b> actually holds — {{ cat_shapes }} shapes.
+    Grades and sizes absent from this category are not offered.</div>{% endif %}
   <div class="srow"><div class="slab">Shape</div><div class="bubrow">{% include "inventory/diamonds/_bubbles.html" with list=shape_bubbles %}</div></div>
   <div class="srow"><div class="slab">Colour</div><div class="bubrow">{% include "inventory/diamonds/_bubbles.html" with list=col_bubbles %}</div></div>
   <div class="srow"><div class="slab">Clarity</div><div class="bubrow">{% include "inventory/diamonds/_bubbles.html" with list=clar_bubbles %}</div></div>
@@ -46,6 +47,7 @@
       {% if f.as_role %}<input type="hidden" name="as" value="{{ f.as_role }}">{% endif %}
       <span class="hint">From</span><input class="inp tnum" name="ct_from" style="width:88px" value="{{ f.ct_from|default_if_none:'' }}" placeholder="Any" onchange="this.form.submit()">
       <span class="hint">To</span><input class="inp tnum" name="ct_to" style="width:88px" value="{{ f.ct_to|default_if_none:'' }}" placeholder="Any" onchange="this.form.submit()">
+      <span class="hint">per-stone, carat-banded goods only</span>
       <span class="hint">Batch</span><input class="inp mono" name="batch" style="width:110px" value="{{ f.batch }}" placeholder="Any" onchange="this.form.submit()">
       <span class="spacer"></span>
       {% if f.active %}<a class="btn" href="{{ clear_href }}">Clear all</a>{% endif %}

@@ -8,7 +8,7 @@ Settings links jump to their card on the one Settings page.{% endcomment %}
   <span class="locked"><span class="ic">＋</span>Purchases<span class="ct">🔒</span></span>
   {% if caps.inv_masters %}<a class="{% if dtab == 'import' %}on{% endif %}" href="{% url 'inventory:dia_import_home' %}"><span class="ic">⇅</span>Import diamonds</a>{% endif %}
 </nav>
-<div class="nav-h">Settings</div>
+<div class="nav-h">Settings — you define these</div>
 <nav class="nav">
   <a href="{% url 'inventory:dia_settings' %}#rights"><span class="ic">◈</span>User rights</a>
   <a href="{% url 'inventory:dia_settings' %}#suppliers"><span class="ic">⌗</span>Suppliers</a>

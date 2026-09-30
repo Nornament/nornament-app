@@ -25,6 +25,8 @@ def test_a_filter_narrows_the_table(client, accounts_user, diamonds):
     client.force_login(accounts_user)
     body = client.get(reverse("inventory:diamonds"), {"cat": "Foil Polki"}).content.decode()
     assert "1 of 3 lines" in body and "Showing only what" in body and "FPL" in body
+    assert "Grades and sizes absent from this category are not offered." in body
+    assert "per-stone, carat-banded goods only" in body
     assert "DRFGH VS-SI</td>" not in body
 
 

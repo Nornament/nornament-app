@@ -21,7 +21,7 @@ from stock.services import ServiceError, require
 
 from . import dia_rows, dia_seed, dia_services
 from .models import DiamondCode, DiamondRate, DiamondTerm, Movement
-from .views_diamonds import dia_page
+from .views_diamonds import dia_page, viewer
 
 CARD_TITLES = [(DiamondTerm.CATEGORY, "Categories"), (DiamondTerm.SHAPE, "Shapes"),
                (DiamondTerm.COLOUR, "Colour grades"), (DiamondTerm.CLARITY, "Clarity grades"),
@@ -35,7 +35,7 @@ def _back(anchor):
     return redirect(reverse("inventory:dia_settings") + f"#{anchor}")
 
 
-def _rights_matrix(user):
+def _rights_matrix():
     groups = {g.name: set(g.permissions.values_list("codename", flat=True)) for g in Group.objects.all()}
     return [{"code": code, "name": ROLE_GROUPS[code]["name"], "locked": code == "ADMIN",
              "cells": [(codename, code == "ADMIN" or codename in groups.get(code, set()))
@@ -45,8 +45,12 @@ def _rights_matrix(user):
 
 @login_required
 def settings_page(request):
-    if not request.user.has_perm(INV_MASTERS):
-        return dia_page(request, "inventory/diamonds/settings.html", dtab="settings", denied=True)
+    """Built for the viewer, so an admin's preview shows what the role would; every form still
+    posts as the real login."""
+    user, role = viewer(request)
+    if not user.has_perm(INV_MASTERS):
+        return dia_page(request, "inventory/diamonds/settings.html", dtab="settings", denied=True,
+                        role_label=ROLE_GROUPS[role]["name"])
     lines = list(dia_services.stocked_lines())
     usage = dia_rows.term_usage(lines)
     by_kind = {kind: [] for kind, _ in CARD_TITLES}
@@ -56,7 +60,7 @@ def settings_page(request):
     code_lines = {}
     for line in lines:
         code_lines[line.code_id] = code_lines.get(line.code_id, 0) + 1
-    rates = [mask(request.user, {"code": r.code_id, "size_text": r.size_text, "cost_rate": r.cost_rate,
+    rates = [mask(user, {"code": r.code_id, "size_text": r.size_text, "cost_rate": r.cost_rate,
                                  "sale_rate": r.sale_rate, "effective_from": r.effective_from})
              for r in DiamondRate.objects.all()]
     purchases = {}
@@ -68,14 +72,15 @@ def settings_page(request):
         codes=[(c, code_lines.get(c.pk, 0)) for c in DiamondCode.objects.select_related("shape", "colour", "clarity")],
         terms_of={kind: [t["term"] for t in by_kind[kind]] for kind, _ in CARD_TITLES},
         rates=sorted(rates, key=lambda r: (r["code"], r["size_text"])),
-        can_rate=request.user.has_perm(VIEW_COST) and request.user.has_perm(VIEW_SALE),
+        can_rate=user.has_perm(VIEW_COST) and user.has_perm(VIEW_SALE),
         expansions=[t for t in DiamondTerm.objects.filter(kind__in=[DiamondTerm.COLOUR, DiamondTerm.CLARITY])
                     if t.value not in LADDERS[t.kind] and not t.value.startswith("Fancy")],
-        supplier_card=mask(request.user, {"vendor_name": True}),
-        suppliers=[mask(request.user, {"pk": v.pk, "vendor_code": v.code, "vendor_name": v.name, "city": v.city,
+        supplier_card=mask(user, {"vendor_name": True}),
+        suppliers=[mask(user, {"pk": v.pk, "vendor_code": v.code, "vendor_name": v.name, "city": v.city,
                                        "terms": v.terms, "purchases": purchases.get(v.pk, 0)})
                    for v in Vendor.objects.filter(is_active=True).order_by("name")],
-        rights=dia_services.RIGHTS, matrix=_rights_matrix(request.user), is_admin=request.user.is_admin(),
+        rights=dia_services.RIGHTS, matrix=_rights_matrix(), me=role,
+        is_admin=user is request.user and request.user.is_admin(),
         today=date.today(),
     )
 
