@@ -20,7 +20,7 @@ from stock.models import Vendor
 from stock.services import ServiceError, require
 
 from . import dia_rows, dia_seed, dia_services
-from .models import DiamondCode, DiamondRate, DiamondTerm, Movement
+from .models import DiamondCode, DiamondTerm, Movement
 from .views_diamonds import dia_page, viewer
 
 CARD_TITLES = [(DiamondTerm.CATEGORY, "Categories"), (DiamondTerm.SHAPE, "Shapes"),
@@ -60,9 +60,8 @@ def settings_page(request):
     code_lines = {}
     for line in lines:
         code_lines[line.code_id] = code_lines.get(line.code_id, 0) + 1
-    rates = [mask(user, {"code": r.code_id, "size_text": r.size_text, "cost_rate": r.cost_rate,
-                                 "sale_rate": r.sale_rate, "effective_from": r.effective_from})
-             for r in DiamondRate.objects.all()]
+    rates = [mask(user, {"code": code, "size_text": size_text, "cost_rate": rate["cost"], "sale_rate": rate["sale"]})
+             for (code, size_text), rate in sorted(dia_services.rate_table().items())]
     purchases = {}
     for vendor_id in Movement.objects.filter(reason=Movement.Reason.PURCHASE).values_list("counterparty_id", flat=True):
         purchases[vendor_id] = purchases.get(vendor_id, 0) + 1
@@ -71,7 +70,7 @@ def settings_page(request):
         cards=[(kind, title, by_kind[kind]) for kind, title in CARD_TITLES],
         codes=[(c, code_lines.get(c.pk, 0)) for c in DiamondCode.objects.select_related("shape", "colour", "clarity")],
         terms_of={kind: [t["term"] for t in by_kind[kind]] for kind, _ in CARD_TITLES},
-        rates=sorted(rates, key=lambda r: (r["code"], r["size_text"])),
+        rates=rates,
         can_rate=user.has_perm(VIEW_COST) and user.has_perm(VIEW_SALE),
         expansions=[t for t in DiamondTerm.objects.filter(kind__in=[DiamondTerm.COLOUR, DiamondTerm.CLARITY])
                     if t.value not in LADDERS[t.kind] and not t.value.startswith("Fancy")],

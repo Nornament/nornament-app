@@ -104,11 +104,16 @@
     {% if can_rate %}<form method="post" enctype="multipart/form-data" action="{% url 'inventory:dia_rates_ivy' %}" class="inline">{% csrf_token %}
       <label class="btn sm upload">Load rates from IVY export<input type="file" name="workbook" accept=".xlsx" onchange="this.form.requestSubmit()"></label></form>{% endif %}</div>
   <div class="card-b" style="overflow:auto"><table class="pt">
-    <thead><tr><th>Code</th><th>Size</th><th class="r">Cost / ct</th><th class="r">Sale / ct</th><th>From</th></tr></thead>
+    <thead><tr><th>Code</th><th>Size</th><th class="r">Cost / ct</th><th class="r">Sale / ct</th>{% if can_rate %}<th>Actions</th>{% endif %}</tr></thead>
     <tbody>{% for r in rates %}<tr><td class="mono">{{ r.code }}</td><td class="mono">{{ r.size_text|default:"any size" }}</td>
       <td class="r">{% if 'cost_rate' in r %}{{ r.cost_rate|rupees }}{% else %}<span class="hint">hidden</span>{% endif %}</td>
       <td class="r">{% if 'sale_rate' in r %}{{ r.sale_rate|rupees }}{% else %}<span class="hint">hidden</span>{% endif %}</td>
-      <td>{{ r.effective_from|date:"d M Y" }}</td></tr>{% empty %}<tr><td colspan="5" class="hint">No rates yet.</td></tr>{% endfor %}</tbody></table>
+      {% if can_rate %}<td><form method="post" action="{% url 'inventory:dia_rate_save' %}" class="ctrow">{% csrf_token %}
+        <input type="hidden" name="code" value="{{ r.code }}"><input type="hidden" name="size_text" value="{{ r.size_text }}">
+        <input class="inp tnum" name="cost_rate" value="{{ r.cost_rate|default_if_none:''|floatformat:'-4' }}" placeholder="cost / ct" style="width:100px">
+        <input class="inp tnum" name="sale_rate" value="{{ r.sale_rate|default_if_none:''|floatformat:'-4' }}" placeholder="sale / ct" style="width:100px">
+        <button class="btn sm">Save</button></form></td>{% endif %}
+    </tr>{% empty %}<tr><td colspan="5" class="hint">No rates yet.</td></tr>{% endfor %}</tbody></table>
     {% if can_rate %}<form method="post" action="{% url 'inventory:dia_rate_save' %}" class="ctrow" style="margin-top:10px">{% csrf_token %}
       <select class="inp mono" name="code" style="width:170px" required>{% for c, n in codes %}<option>{{ c.item_code }}</option>{% endfor %}</select>
       <input class="inp mono" name="size_text" placeholder="size (blank = any)" style="width:140px">

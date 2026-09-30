@@ -136,3 +136,18 @@ def test_an_admin_previewing_a_role_sees_its_settings(client, admin_user_, diamo
     assert "Not permitted for Sales / Showroom" in body and "Rate card" not in body
     body = client.get(reverse("inventory:dia_settings")).content.decode()
     assert "Settings — you define these" in body and "＋ Add user 🔒" in body
+
+
+def test_the_rate_card_shows_the_current_rate_once_with_an_edit(client, accounts_user, admin_user_, diamonds):
+    from datetime import date
+    from decimal import Decimal
+
+    from inventory import dia_services
+
+    dia_services.set_rate(admin_user_, diamonds["round"].code, "+6-12", Decimal("17000"), Decimal("22000"), date(2026, 9, 20))
+    client.force_login(accounts_user)
+    body = client.get(reverse("inventory:dia_settings")).content.decode()
+    card = body[body.index('id="rates"'):body.index('id="expansion"')]
+    assert card.count('<td class="mono">DRFGH VS-SI</td>') == 1
+    assert "17,000" in card and "22,000" in card and DIA_COST not in card
+    assert 'name="cost_rate" value="17000"' in card and 'name="sale_rate" value="22000"' in card
