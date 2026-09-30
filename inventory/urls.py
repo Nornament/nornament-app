@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import views, views_diamonds
 
 app_name = "inventory"
 
@@ -18,4 +18,7 @@ urlpatterns = [
     path("pouches/<str:ref>/photos/", views.pouch_photos, name="pouch_photos"),
     path("pouches/<str:ref>/movements/", views.movements, name="movements"),
     path("photos/<int:media_id>/", views.photo, name="photo"),
+    path("diamonds/", views_diamonds.search, name="diamonds"),
+    path("diamonds/settings/", views_diamonds.search, name="dia_settings"),            # replaced in Task 9
+    path("diamonds/import/", views_diamonds.search, name="dia_import_home"),           # replaced in Task 10
 ]

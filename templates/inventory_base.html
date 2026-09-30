@@ -23,10 +23,10 @@ would fight on every page.
     <div class="brand"><div class="brand-mark"></div>
       <div><div class="brand-name">Nornament</div><div class="brand-sub">Inventory</div></div></div>
     <div class="catsw">
-      <a class="on" href="{% url 'inventory:shelf' %}">◆ Stones</a>
-      <span title="Coming soon">◇ Diamonds <span class="lock">🔒</span></span>
+      <a class="{% if side != 'diamonds' %}on{% endif %}" href="{% url 'inventory:shelf' %}">◆ Stones</a>
+      <a class="{% if side == 'diamonds' %}on{% endif %}" href="{% url 'inventory:diamonds' %}">◇ Diamonds</a>
     </div>
-    {% include "inventory/_rail.html" %}
+    {% if side == 'diamonds' %}{% include "inventory/diamonds/_rail.html" %}{% else %}{% include "inventory/_rail.html" %}{% endif %}
     <div class="rail-foot">
       <div class="who"><span class="avatar">{{ user.get_username|first|upper }}</span>{{ user.full_name|default:user.get_username }} · {{ role_name }}</div>
       {% if role_code != "KARIGAR" %}<a href="{% url 'stock:dashboard' %}">Stock</a> · <a href="{% url 'crm:dashboard' %}">CRM</a> ·{% endif %}
@@ -40,25 +40,34 @@ would fight on every page.
       <div class="crumb">{% block crumb %}{% endblock %}</div>
       <div class="spacer"></div>
       <div class="search locked" title="Coming soon">Search batch, pouch, stone… 🔒</div>
+      {% if side != 'diamonds' %}
       <form class="vt" method="post" action="{% url 'inventory:set_view' %}">{% csrf_token %}
         <input type="hidden" name="next" value="{{ request.get_full_path }}">
         <button name="view" value="internal" class="{% if not client_view %}on{% endif %}">🔓 Internal</button>
         <button name="view" value="client" class="{% if client_view %}on{% endif %}">👁 Client preview</button>
       </form>
+      {% endif %}
       <button class="btn sm" type="button" title="Toggle light / dark"
         onclick="const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'':'dark';localStorage.theme=r.dataset.theme">◐</button>
     </div>
 
     <div class="tabs">
-      <a class="{% if tab == 'shelf' %}on{% endif %}" href="{% url 'inventory:shelf' %}">Shelf</a>
-      {% if pouch_ref %}<a class="{% if tab == 'lot' %}on{% endif %}" href="{% url 'inventory:pouch' pouch_ref %}">Pouch detail</a>
-      {% else %}<button disabled>Pouch detail</button>{% endif %}
-      {% if not client_view %}
-        {% if pouch_ref %}<a class="{% if tab == 'tx' %}on{% endif %}" href="{% url 'inventory:movements' pouch_ref %}">Movements</a>
-        {% else %}<button disabled>Movements</button>{% endif %}
+      {% if side == 'diamonds' %}
+        <button disabled title="Coming soon">Movements 🔒</button>
         <button disabled title="Coming soon">Purchase 🔒</button>
+        <a class="on" href="{% url 'inventory:diamonds' %}">Diamond stock</a>
+        <button disabled title="Coming soon">Stock take 🔒</button>
+      {% else %}
+        <a class="{% if tab == 'shelf' %}on{% endif %}" href="{% url 'inventory:shelf' %}">Shelf</a>
+        {% if pouch_ref %}<a class="{% if tab == 'lot' %}on{% endif %}" href="{% url 'inventory:pouch' pouch_ref %}">Pouch detail</a>
+        {% else %}<button disabled>Pouch detail</button>{% endif %}
+        {% if not client_view %}
+          {% if pouch_ref %}<a class="{% if tab == 'tx' %}on{% endif %}" href="{% url 'inventory:movements' pouch_ref %}">Movements</a>
+          {% else %}<button disabled>Movements</button>{% endif %}
+          <button disabled title="Coming soon">Purchase 🔒</button>
+        {% endif %}
+        <button disabled title="Coming soon">Stock take 🔒</button>
       {% endif %}
-      <button disabled title="Coming soon">Stock take 🔒</button>
     </div>
 
     <div class="wrap">

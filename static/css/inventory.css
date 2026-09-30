@@ -474,6 +474,12 @@ a.btn{text-decoration:none}
 .upload{position:relative;display:block;cursor:pointer}
 .upload input{position:absolute;inset:0;opacity:0;cursor:pointer}
 .pt td input.inp{padding:5px 8px;font-size:12px}
+.dsub a,.dsub span{flex:1;text-align:center;color:var(--muted);font-size:13px;font-weight:560;padding:9px 6px;
+  border-radius:7px;text-decoration:none}
+.dsub a:hover{color:var(--ink)}
+.dsub a.on{background:var(--s1);color:#fff;box-shadow:0 1px 3px rgba(11,11,11,.2)}
+.dsub span{opacity:.55;cursor:not-allowed}
+a.bub{text-decoration:none}
 .tx-top{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
 @media(max-width:1120px){.tx-top{grid-template-columns:1fr}}
 select.chip{appearance:none;cursor:pointer;font:inherit;font-size:11px}
