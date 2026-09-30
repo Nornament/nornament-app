@@ -29,11 +29,12 @@ SCREENS = [
 EXEMPT = {
     "inventory:set_view", "inventory:pouch_save", "inventory:pouch_price", "inventory:pouch_photos", "inventory:photo",
     "inventory:import_home", "inventory:import_review", "inventory:import_commit",
-    # diamond writes: POST-only and gated on inv_masters (or admin), asserted in test_dia_settings
+    # diamond writes: POST-only and gated on inv_masters (the rights toggle on admin); each is asserted
+    # to 403 for a SALES login in test_dia_settings.test_every_diamond_write_refuses_a_login_without_inv_masters
     "inventory:dia_term_add", "inventory:dia_term_rename", "inventory:dia_term_delete", "inventory:dia_expansion",
     "inventory:dia_code_save", "inventory:dia_rate_save", "inventory:dia_rates_ivy", "inventory:dia_supplier_save",
     "inventory:dia_right_toggle",
-    # gated whole on inv_masters, asserted in test_dia_import_views
+    # gated whole on inv_masters, asserted in the same test
     "inventory:dia_import_home", "inventory:dia_import_review", "inventory:dia_import_commit",
 }
 

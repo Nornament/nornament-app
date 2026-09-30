@@ -151,3 +151,36 @@ def test_the_rate_card_shows_the_current_rate_once_with_an_edit(client, accounts
     assert card.count('<td class="mono">DRFGH VS-SI</td>') == 1
     assert "17,000" in card and "22,000" in card and DIA_COST not in card
     assert 'name="cost_rate" value="17000"' in card and 'name="sale_rate" value="22000"' in card
+
+
+def test_an_expansion_is_corrected_from_its_card(client, accounts_user, diamonds):
+    si_i = DiamondTerm.objects.get(kind="clarity", value="SI-I")
+    client.force_login(accounts_user)
+    response = client.post(reverse("inventory:dia_expansion", args=[si_i.pk]), {"grades": "SI1 SI2 SI3 I1 I2"})
+    assert response["Location"].endswith("#expansion")
+    si_i.refresh_from_db()
+    assert si_i.expands_to == "SI1 SI2 SI3 I1 I2"
+    response = client.post(reverse("inventory:dia_expansion", args=[si_i.pk]), {"grades": "SI1 Z9"}, follow=True)
+    assert "Not a single clarity grade: Z9." in response.content.decode()
+    si_i.refresh_from_db()
+    assert si_i.expands_to == "SI1 SI2 SI3 I1 I2"
+
+
+#: every diamond write, and the importer's three screens; "term" is a real term's pk
+WRITES = [("inventory:dia_term_add", []), ("inventory:dia_term_rename", ["term"]),
+          ("inventory:dia_term_delete", ["term"]), ("inventory:dia_expansion", ["term"]),
+          ("inventory:dia_code_save", ["FPL"]), ("inventory:dia_rate_save", []), ("inventory:dia_rates_ivy", []),
+          ("inventory:dia_supplier_save", []), ("inventory:dia_right_toggle", []),
+          ("inventory:dia_import_home", []), ("inventory:dia_import_review", [1]), ("inventory:dia_import_commit", [1])]
+
+
+@pytest.mark.parametrize("name, args", WRITES)
+def test_every_diamond_write_refuses_a_login_without_inv_masters(client, sales_user, diamonds, name, args):
+    term = DiamondTerm.objects.get(kind="clarity", value="SI-I")
+    args = [term.pk if a == "term" else a for a in args]
+    client.force_login(sales_user)
+    post = {"kind": "shape", "value": "Cushion", "grades": "", "code": "FPL", "cost_rate": "1", "sale_rate": "1",
+            "name": "X", "role": "SALES", "right": "view_cost", "on": "1"}
+    assert client.post(reverse(name, args=args), post).status_code == 403
+    term.refresh_from_db()
+    assert term.expands_to and not DiamondTerm.objects.filter(value="Cushion").exists()
