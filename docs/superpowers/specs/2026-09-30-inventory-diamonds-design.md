@@ -1,7 +1,7 @@
 # Inventory part 3: diamond stock — design
 
 **Date:** 2026-09-30
-**Status:** design agreed section by section; awaiting review of this document
+**Status:** approved, ready for planning
 **Overview and earlier decisions:** `2026-09-28-inventory-overview.md`; part 1 (stones) is `2026-09-28-inventory-stones-design.md`
 **Designed against:** the prototype `../Nornament_Inventory/04-source-scripts/_script.html` (diamond section: `ROLES`/`can()`, `dMatch`/`dRows`, `colBucket`, `bubbles()`, `diaSearch`, `diaSettings`), `build_dia.py` (the un-pivot and item-code grammar), and the IVY export `nornament stock.xlsx` (Shape/ShapeName and diamond cost/sale rates). The source workbook `DIAMOND 31.xlsx` is not yet on this machine — see *Dependency* below.
 
@@ -111,4 +111,4 @@ Service rules raise `ServiceError`, shown as a message: missing right; a blocked
 
 ## Dependency
 
-The parse step is designed to the layout `build_dia.py` describes. When `DIAMOND 31.xlsx` is placed in `/Users/preet/Desktop/Tech/nornament/`, it is checked against that layout before the implementation plan is finalised; if the layout differs, only the parse step changes.
+`DIAMOND 31.xlsx` is not available. Decision (2026-09-30): build the parse step to the layout `build_dia.py` documents, test it against a workbook rebuilt from the prototype's embedded diamond data, and correct the parse step when the real file arrives. If the real layout differs, only `inventory/importers/diamonds.py`'s parse and its fixture change.
