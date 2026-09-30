@@ -98,9 +98,16 @@ class User(AbstractUser):
 
 
 def sync_role_groups():
-    """Create the role groups and give each its capabilities.
+    """Create the role groups and give each its default capabilities — once.
 
-    Idempotent: run from a data migration, from ``load_legacy`` and from tests.
+    Rights are editable on the inventory's Settings page, so a deploy must never
+    put back a right an admin took away. A group gets its full defaults only when
+    it is first created; after that, only a capability that did not exist before
+    this run is granted, to the groups that list it by default. For that to work
+    a migration that adds a capability runs this before Django's own post-migrate
+    step creates the permission row.
+
+    Idempotent: run from data migrations, from ``load_legacy`` and from tests.
     """
     from django.contrib.auth.models import Permission
     from django.contrib.contenttypes.models import ContentType
@@ -108,14 +115,20 @@ def sync_role_groups():
     from .capabilities import ROLE_GROUPS
 
     content_type, _ = ContentType.objects.get_or_create(app_label="accounts", model="capability")
-    by_codename = {}
+    by_codename, new = {}, set()
     for codename, label in Capability._meta.permissions:
-        permission, _ = Permission.objects.get_or_create(
+        permission, created = Permission.objects.get_or_create(
             codename=codename, content_type=content_type, defaults={"name": label}
         )
         by_codename[codename] = permission
+        if created:
+            new.add(codename)
 
     for code, spec in ROLE_GROUPS.items():
-        group, _ = Group.objects.get_or_create(name=code)
-        group.permissions.set([by_codename[cap.split(".", 1)[1]] for cap in spec["caps"]])
+        group, created = Group.objects.get_or_create(name=code)
+        defaults = [by_codename[cap.split(".", 1)[1]] for cap in spec["caps"]]
+        if created:
+            group.permissions.set(defaults)
+        else:
+            group.permissions.add(*[p for p in defaults if p.codename in new])
     return by_codename
