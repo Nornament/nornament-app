@@ -17,6 +17,7 @@ from openpyxl import Workbook
 from inventory import dia_seed, dia_services
 from inventory.importers import dia_plan, diamonds
 from inventory.models import DiamondCode, DiamondTerm
+from inventory.tests.fixtures_diamonds import FANCY_HEADER
 
 pytestmark = [pytest.mark.django_db, pytest.mark.golden]
 
@@ -36,10 +37,11 @@ def _prototype_rows():
 def _register(rows):
     book = Workbook()
     sheet = book.active
-    sheet.title = "Sheet"
-    sheet.append(["Raw Material", "Batch No", "Item Code", "", "Size", "Weight"])
+    sheet.title = "FANCY FINAL"
+    sheet.append(FANCY_HEADER + ["Category"])
     for r in rows:
-        sheet.append([RAW_CATEGORY[r["cat"]], r["batch"] or None, r["item"], None, r["size"], r["wt"]])
+        sheet.append([r["batch"] or None, None, r["item"], None, None, r["size"], None, r["wt"], None, None, None,
+                      RAW_CATEGORY[r["cat"]]])
     buffer = io.BytesIO()
     book.save(buffer)
     buffer.seek(0)

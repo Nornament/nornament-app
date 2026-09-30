@@ -2,6 +2,7 @@ from decimal import Decimal
 
 import pytest
 
+from inventory import dia_rules
 from inventory.dia_rules import decode, size_band
 
 
@@ -18,6 +19,8 @@ from inventory.dia_rules import decode, size_band
     ("DFY", "Fancy Colour", "Fancy Yellow", ""),
     ("DFBR", "Fancy Colour", "Fancy Brown", ""),
     ("HPHTRGH VS-SI", "Round", "G-H", "VS-SI"),
+    ("DRLC VS-SI", "Round", "K-L", "VS-SI"),             # LC is now a known colour: K-L
+    ("DASCLB", "Asscher", "M-N", ""),                    # and LB: M-N
 ])
 def test_codes_that_read_cleanly(code, shape, colour, clarity):
     out = decode(code)
@@ -26,8 +29,6 @@ def test_codes_that_read_cleanly(code, shape, colour, clarity):
 
 
 @pytest.mark.parametrize("code, shape, colour", [
-    ("DRLC VS-SI", "Round", "? LC"),
-    ("DASCLB", "Asscher", "? LB"),
     ("DTBBL", "Tapered Baguette", "? BL"),
     ("DPIRD8", "? PI RD8", ""),
 ])
@@ -64,3 +65,8 @@ def test_a_carat_band_carries_its_range_and_shape():
     assert (sized.band, sized.ct_lo, sized.ct_hi, sized.shape) == ("carat band", Decimal("0.20"), Decimal("0.24"), "Trillion")
     assert size_band("PR 0.10-0.12").shape == "Pear"
     assert size_band("PC 0.16-0.19").shape == "Princess"
+
+
+@pytest.mark.parametrize("size", ["+0", "+00", "+000", "+0000"])
+def test_an_all_zero_sieve_is_below_two(size):
+    assert dia_rules.size_band(size).band == "-2"

@@ -22,8 +22,9 @@ SHAPES = [("RSC", "Rose Cut"), ("EMR", "Emerald"), ("ASC", "Asscher"), ("HRT", "
           ("TR", "Trillion"), ("M", "Marquise"), ("R", "Round"), ("F", "Fancy Colour")]
 FANCY = {"Y": "Fancy Yellow", "P": "Fancy Pink", "O": "Fancy Orange", "G": "Fancy Green", "B": "Fancy Blue",
          "BR": "Fancy Brown", "BL": "Fancy Black", "GL": "Fancy Grey"}
+#: LB is M-N and LC is K-L — the owner, 2026-09-30
 COLOURS = [("FGH", "F-G-H"), ("EF", "E-F"), ("GH", "G-H"), ("IJ", "I-J"), ("KL", "K-L"), ("MN", "M-N"),
-           ("LC", "? LC"), ("LB", "? LB")]
+           ("LC", "K-L"), ("LB", "M-N")]
 
 
 @dataclass
@@ -111,7 +112,7 @@ def _sieve(lower):
 
 def size_band(size_text):
     z = (size_text or "").strip()
-    if SUB.match(z) or z == "+1" or z.startswith("-2"):
+    if SUB.match(z) or z == "+1" or z.startswith("-2") or re.fullmatch(r"\+0+", z):
         return Sized("-2")
     match = SIEVE_SINGLE.match(z) or SIEVE_RANGE.match(z)
     if match:

@@ -6,7 +6,7 @@ from django.core.exceptions import PermissionDenied
 from inventory import dia_seed, dia_services
 from inventory.importers import dia_plan, diamonds
 from inventory.models import DiamondCode, DiamondLine, DiamondTerm
-from inventory.tests.fixtures_diamonds import ROWS_DEFAULT, build_workbook
+from inventory.tests.fixtures_diamonds import PLAN_ROWS, fancy_workbook
 from stock.services import ServiceError
 
 pytestmark = pytest.mark.django_db
@@ -18,7 +18,7 @@ def _terms():
 
 
 def _plan(rows=None, decisions=None):
-    return dia_plan.analyse(diamonds.parse(build_workbook(rows)), decisions)
+    return dia_plan.analyse(diamonds.parse(fancy_workbook(rows)), decisions)
 
 
 def test_a_first_import_opens_every_line_and_proposes_every_code(admin_user_):
@@ -27,51 +27,53 @@ def test_a_first_import_opens_every_line_and_proposes_every_code(admin_user_):
     assert (counts["new"], counts["codes"], counts["blocked"]) == (6, 4, 0)
     proposed = {c.item_code: c for c in plan.codes}
     assert proposed["DPCEF VVS-VS"].shape == "Princess"
-    assert proposed["DTRLC VS-SI"].colour == "? LC" and not proposed["DTRLC VS-SI"].confirmed
+    assert proposed["DTRQ VS-SI"].colour == "? Q" and not proposed["DTRQ VS-SI"].confirmed
     result = dia_plan.commit(plan, admin_user_)
     assert (result["created"], result["codes"]) == (6, 4)
-    trillion = DiamondLine.objects.get(src="Sheet!8")
+    trillion = DiamondLine.objects.get(src="FANCY FINAL!7")
     assert (trillion.band.value, trillion.ct_lo, trillion.category.value) == ("carat band", Decimal("0.200"), "Foil Polki")
     assert DiamondCode.objects.get(pk="FPL").shape.value == "Polki"
 
 
 def test_a_reviewed_code_is_created_as_decided(admin_user_):
     plan = _plan()
-    post = {"code:DTRLC VS-SI:shape": "Trillion", "code:DTRLC VS-SI:colour": "L", "code:DTRLC VS-SI:clarity": "VS-SI",
-            "code:DTRLC VS-SI:confirmed": "1"}
+    post = {"code:DTRQ VS-SI:shape": "Trillion", "code:DTRQ VS-SI:colour": "L", "code:DTRQ VS-SI:clarity": "VS-SI",
+            "code:DTRQ VS-SI:confirmed": "1"}
     decisions = dia_plan.read_decisions(post, plan, {})
     dia_plan.commit(_plan(decisions=decisions), admin_user_)
-    code = DiamondCode.objects.get(pk="DTRLC VS-SI")
+    code = DiamondCode.objects.get(pk="DTRQ VS-SI")
     assert (code.colour.value, code.confirmed) == ("L", True)
 
 
 def test_reimport_matches_recounts_and_lists_missing_lines(admin_user_):
     dia_plan.commit(_plan(), admin_user_)
-    changed = [list(r) for r in ROWS_DEFAULT]
-    changed[1][5] = 3.10                                     # B-771 DRFGH +6-12 lost 0.30 ct
-    del changed[6]                                           # the trillion line is gone from the file
+    changed = [list(r) for r in PLAN_ROWS]
+    changed[1][7] = 3.10                                     # B-771 DRFGH +6-12 lost 0.30 ct
+    del changed[5]                                           # the trillion line is gone from the file
     plan = _plan(changed)
     counts = plan.counts()
     assert (counts["new"], counts["update"], counts["recount"], counts["missing"]) == (0, 5, 1, 1)
     decisions = dia_plan.read_decisions({f"missing:{plan.missing[0][0].ref}": "zero"}, plan, {})
     result = dia_plan.commit(_plan(changed, decisions), admin_user_)
     assert (result["recounted"], result["zeroed"]) == (1, 1)
-    line = dia_services.stocked_lines().get(src="Sheet!3")
+    line = dia_services.stocked_lines().get(src="FANCY FINAL!3")
     assert line.on_ct == Decimal("3.10")
 
 
-DUP = ["Diamond", "B-771", "DRFGH VS-SI", "", "+6-12", 3.40]
+DUP = ["B-771", "Round", "DRFGH VS-SI", "FGH", "VS SI", "+6-12", None, 3.40, None, None, None, "Diamond"]
 
 
 def test_an_ambiguous_row_blocks_until_decided(admin_user_):
-    dia_plan.commit(_plan([list(DUP), list(DUP)]), admin_user_)       # two lines share one key, Sheet!2 and Sheet!3
-    shifted = [list(ROWS_DEFAULT[0]), ["Diamond", "B-900", "DPCEF VVS-VS", "", "+2", 0.85], list(DUP), list(DUP)]
-    plan = _plan(shifted)                                             # the pair moved to Sheet!4 and Sheet!5
+    dia_plan.commit(_plan([list(DUP), list(DUP)]), admin_user_)   # two lines share one key, FANCY FINAL!2 and !3
+    b900 = ["B-900", "Princess", "DPCEF VVS-VS", "EF", "VVS VS", "+2", None, 0.85, None, None, None, "Diamond"]
+    shifted = [list(PLAN_ROWS[0]), b900, list(DUP), list(DUP)]    # the pair moved to FANCY FINAL!4 and !5
+    plan = _plan(shifted)
     assert plan.counts()["blocked"] == 2
     with pytest.raises(ServiceError):
         dia_plan.commit(plan, admin_user_)
     refs = list(DiamondLine.objects.order_by("pk").values_list("ref", flat=True))
-    post = {"row:Sheet!4": "map", "row:Sheet!4:line": refs[0], "row:Sheet!5": "map", "row:Sheet!5:line": refs[1]}
+    post = {"row:FANCY FINAL!4": "map", "row:FANCY FINAL!4:line": refs[0],
+            "row:FANCY FINAL!5": "map", "row:FANCY FINAL!5:line": refs[1]}
     decided = dia_plan.read_decisions(post, plan, {})
     assert _plan(shifted, decided).counts()["blocked"] == 0
 

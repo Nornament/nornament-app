@@ -28,10 +28,10 @@ def test_upload_review_commit(client, admin_user_, bucket):
     review = client.post(reverse("inventory:dia_import_home"), {"workbook": upload})
     assert review.status_code == 302
     body = client.get(review["Location"]).content.decode()
-    assert "DTRLC VS-SI" in body and "? LC" in body               # a new code waiting for review
+    assert "DMLC SI I" in body                                    # a new code waiting for review
     batch_id = int(review["Location"].rstrip("/").split("/")[-1])
     client.post(reverse("inventory:dia_import_commit", args=[batch_id]))
-    assert DiamondLine.objects.count() == 6
+    assert DiamondLine.objects.count() == 11
     again = client.post(reverse("inventory:dia_import_commit", args=[batch_id]), follow=True)
     assert "already been committed" in again.content.decode()
 
