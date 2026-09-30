@@ -4,10 +4,13 @@ The register is re-exported and re-imported periodically, and diamond lines
 have no clean key (many have no batch number). A row matches an existing line
 by batch + item code + size; when that is not unique it falls back to the sheet
 row, and when that is still ambiguous a human decides. Nothing is written until
-``commit``, which refuses while anything is undecided.
+``commit``, which refuses while anything is undecided. Once a line is open,
+Settings owns its category, band and shape: a re-import updates only what the
+file alone knows.
 """
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from decimal import Decimal
 
 from django.db import transaction
 
@@ -182,6 +185,15 @@ def _term(kind, value):
     return dia_services.term(kind, value) if value else None
 
 
+def _sized(row):
+    """A size that fits no band is banded by the weight per stone, when the file gives pieces (the owner, 2026-09-30)."""
+    sized = dia_rules.size_band(row.band_text or row.size_text)
+    if sized.band == "?" and (row.pcs or 0) > 0 and (row.ct or 0) > 0:
+        per_stone = (row.ct / row.pcs).quantize(Decimal("0.001"))
+        return dia_rules.Sized("carat band", per_stone, per_stone)
+    return sized
+
+
 @transaction.atomic
 def commit(plan, user, import_batch=None):
     require(user, INV_MASTERS, "Only a role that edits inventory records can import stock.")
@@ -201,17 +213,17 @@ def commit(plan, user, import_batch=None):
         if item.action == "skip":
             result["empty" if item.empty else "skipped"] += 1
             continue
-        sized = dia_rules.size_band(row.band_text or row.size_text)
+        sized = _sized(row)
         code = DiamondCode.objects.get(pk=row.item_code)
-        fields = {
-            "category": dia_services.term(DiamondTerm.CATEGORY, row.category),
-            "batch_no": row.batch_no, "size_text": row.size_text,
-            "band": dia_services.term(DiamondTerm.BAND, sized.band),
-            "ct_lo": sized.ct_lo, "ct_hi": sized.ct_hi, "src": row.src,
-            "shape_override": _term(DiamondTerm.SHAPE, sized.shape) if sized.shape and code.shape_id is None else None,
-        }
+        fields = {"batch_no": row.batch_no, "size_text": row.size_text, "ct_lo": sized.ct_lo, "ct_hi": sized.ct_hi,
+                  "src": row.src}
         if item.existing is None:
-            fresh.append({"code": code, "ct": row.ct, "pcs": row.pcs, **fields})
+            fresh.append({
+                "code": code, "ct": row.ct, "pcs": row.pcs, **fields,
+                "category": dia_services.term(DiamondTerm.CATEGORY, row.category),
+                "band": dia_services.term(DiamondTerm.BAND, sized.band),
+                "shape_override": _term(DiamondTerm.SHAPE, sized.shape) if sized.shape and code.shape_id is None else None,
+            })
             continue
         line = item.existing
         changed = [name for name, value in fields.items() if getattr(line, name) != value]

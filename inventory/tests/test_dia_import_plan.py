@@ -146,3 +146,22 @@ def test_a_login_that_cannot_see_cost_imports_stock_without_prices(production_us
     production_user = type(production_user).objects.get(pk=production_user.pk)       # fresh permission cache
     result = dia_plan.commit(_file_plan(), production_user)
     assert result["created"] == 10 and result["prices_skipped"] and not DiamondRate.objects.exists()
+
+
+def test_a_reimport_keeps_what_settings_renamed(admin_user_):
+    dia_plan.commit(_plan(), admin_user_)
+    dia_services.rename_term(admin_user_, DiamondTerm.objects.get(kind="category", value="Natural Diamond"), "Natural")
+    dia_services.rename_term(admin_user_, DiamondTerm.objects.get(kind="band", value="+6-11"), "6-11 sieve")
+    result = dia_plan.commit(_plan(), admin_user_)
+    assert result["updated"] == 6
+    line = DiamondLine.objects.get(src="FANCY FINAL!3")
+    assert (line.category.value, line.band.value) == ("Natural", "6-11 sieve")
+    assert not DiamondTerm.objects.filter(kind="category", value="Natural Diamond").exists()
+    assert not DiamondTerm.objects.filter(kind="band", value="+6-11").exists()
+
+
+def test_a_size_that_reads_as_no_band_is_banded_by_weight_per_stone(admin_user_):
+    dia_plan.commit(_file_plan(), admin_user_)
+    emerald = DiamondLine.objects.get(src="FANCY FINAL!2")               # 0.14 ct in 2 pieces
+    assert (emerald.band.value, emerald.ct_lo, emerald.ct_hi) == ("carat band", Decimal("0.070"), Decimal("0.070"))
+    assert DiamondLine.objects.get(src="FANCY FINAL!6").band.value == "?"   # no pieces, nothing to divide by
