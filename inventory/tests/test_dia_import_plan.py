@@ -165,3 +165,34 @@ def test_a_size_that_reads_as_no_band_is_banded_by_weight_per_stone(admin_user_)
     emerald = DiamondLine.objects.get(src="FANCY FINAL!2")               # 0.14 ct in 2 pieces
     assert (emerald.band.value, emerald.ct_lo, emerald.ct_hi) == ("carat band", Decimal("0.070"), Decimal("0.070"))
     assert DiamondLine.objects.get(src="FANCY FINAL!6").band.value == "?"   # no pieces, nothing to divide by
+
+
+@pytest.mark.parametrize("rate", [-32200, 10 ** 10])
+def test_a_rate_out_of_range_blocks_the_row(rate):
+    rows = [[None, "Marquise", "DMIJ VVS VS", "IJ", "VVS VS", "2.3*1.3", 6, 0.31, rate, 9982]]
+    assert dia_plan.analyse(diamonds.parse(fancy_workbook(rows))).items[0].problem == "Rate out of range"
+
+
+def test_a_file_of_other_sheets_lists_none_of_these_lines_as_missing(admin_user_):
+    import io
+
+    from openpyxl import Workbook
+
+    from inventory.tests.fixtures_diamonds import RW_HEADER, RW_ROWS
+
+    dia_plan.commit(_plan(), admin_user_)                                  # lines from FANCY FINAL
+    book = Workbook()
+    book.active.title = "Round_RW"
+    book.active.append(RW_HEADER)
+    book.active.append(RW_ROWS[1])
+    buffer = io.BytesIO()
+    book.save(buffer)
+    buffer.seek(0)
+    assert dia_plan.analyse(diamonds.parse(buffer)).missing == []
+
+
+def test_a_later_row_that_differs_from_the_code_says_file_against_code():
+    rows = [[None, None, "DPRGH VVS VS", "GH", "VVS VS", "2.8*1.5", 10, 1.34, 37800, 50652],
+            [None, "Oval", "DPRGH VVS VS", "GH", "VVS VS", "3.0*2.0", 1, 0.20, 37800, 7560]]
+    code = dia_plan.analyse(diamonds.parse(fancy_workbook(rows))).codes[0]
+    assert "shape: file says Oval, code reads Pear" in code.note and "disagree" not in code.note

@@ -85,7 +85,9 @@ def _codes(rows, decisions):
             chosen = first_value or decoded_value
             values[attr] = chosen
             others = [v for v in file_values if v and v != chosen]
-            if others:
+            if others and not first_value:
+                notes.append(f"{attr}: file says {others[0]}, code reads {chosen or 'nothing'}")
+            elif others:
                 notes.append(f"rows disagree on {attr}: {chosen} / {others[0]}")
             if not first_value:
                 blank_field = True
@@ -106,6 +108,18 @@ def _codes(rows, decisions):
     return list(proposals.values())
 
 
+def _rate_ok(rate):
+    try:
+        dia_services._rate(rate)
+    except ServiceError:
+        return False
+    return True
+
+
+def _sheet(src):
+    return src.split("!")[0]
+
+
 def analyse(rows, decisions=None):
     decisions = decisions or {}
     existing = list(DiamondLine.objects.select_related("code"))
@@ -122,6 +136,8 @@ def analyse(rows, decisions=None):
         item = Item(row=row)
         if not row.item_code:
             item.problem = "No item code"
+        elif not _rate_ok(row.rate):
+            item.problem = "Rate out of range"
         choice = decisions.get(f"row:{row.src}") or {}
         candidates = by_key.get(_key(row.batch_no, row.item_code, row.size_text), [])
         if choice.get("action") == "skip":
@@ -155,8 +171,9 @@ def analyse(rows, decisions=None):
             item.held_ct = held.get(item.existing.pk)
             item.recount = item.row.ct != (item.held_ct or 0)
 
+    sheets = {_sheet(row.src) for row in rows}                # a file of other sheets says nothing of these lines
     missing = [(line, decisions.get(f"missing:{line.ref}", "keep"))
-               for line in existing if line.pk not in taken]
+               for line in existing if line.pk not in taken and _sheet(line.src) in sheets]
     return Plan(items=items, codes=_codes(rows, decisions), missing=missing)
 
 
@@ -165,7 +182,7 @@ def read_decisions(post, plan, decisions):
     decisions = dict(decisions or {})
     for item in plan.items:
         name = f"row:{item.row.src}"
-        if name in post:
+        if post.get(name):
             decisions[name] = {"action": post.get(name), "line": post.get(f"{name}:line", "")}
     for code in plan.codes:
         name = f"code:{code.item_code}"

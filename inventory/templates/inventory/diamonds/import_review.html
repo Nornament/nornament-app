@@ -42,7 +42,7 @@
     <tbody>{% for i in blocked %}<tr class="sel">
       <td class="mono">{{ i.row.src }}</td><td class="mono">{{ i.row.batch_no|default:"—" }}</td><td class="mono">{{ i.row.item_code }}</td><td class="mono">{{ i.row.size_text }}</td>
       <td class="r">{{ i.row.ct|ct }}</td><td><span class="chip crit"><span class="dot"></span>{{ i.problem }}</span></td>
-      <td><select class="inp" name="row:{{ i.row.src }}" style="width:120px"><option value="map">map to line</option><option value="new">new line</option><option value="skip">skip</option></select>
+      <td><select class="inp" name="row:{{ i.row.src }}" style="width:120px"><option value="" selected>choose…</option><option value="map">map to line</option><option value="new">new line</option><option value="skip">skip</option></select>
         <select class="inp mono" name="row:{{ i.row.src }}:line" style="width:130px">{% for line in i.candidates %}<option>{{ line.ref }}</option>{% endfor %}</select></td>
     </tr>{% endfor %}</tbody></table></div>
 {% endif %}
