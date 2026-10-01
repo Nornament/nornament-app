@@ -95,6 +95,8 @@ def transfer_pouch(user, pouch, to_batch, to_pouch_no, note=""):
     if not to_pouch_no or not ledger.pouch_no_free(to_batch, to_pouch_no):
         raise ServiceError(f"{to_batch} · {to_pouch_no or '(blank)'} is taken — a new pouch number must be free in its batch.")
     held = services.stocked(Pouch.objects.filter(pk=pouch.pk)).get()
+    if not (held.on_ct or held.on_pcs):
+        raise ServiceError("There is nothing in this pouch to transfer.")
     document = ledger.open_document(
         user, StockDocument.Kind.TRANSFER, note=note, from_batch=pouch.batch, from_pouch_no=pouch.pouch_no or "",
         to_batch=to_batch, to_pouch_no=to_pouch_no,

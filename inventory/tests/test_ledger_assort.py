@@ -129,7 +129,7 @@ def test_an_over_long_pouch_no_is_refused_on_a_split_and_a_transfer(accounts_use
 def test_an_empty_pouch_is_not_transferred(accounts_user, shelf):
     sale = ledger.open_document(accounts_user, StockDocument.Kind.SINGLE)
     ledger.post(accounts_user, sale, [ledger.Line(shelf["ruby"], R.SALE, Movement.OUT, None, D("40"))])
-    with pytest.raises(ServiceError, match="above zero"):
+    with pytest.raises(ServiceError, match="There is nothing in this pouch to transfer."):
         ledger_assort.transfer_pouch(accounts_user, shelf["ruby"], _other(), "1")
 
 

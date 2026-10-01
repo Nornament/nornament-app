@@ -91,6 +91,17 @@ def test_the_purchase_tab_opens_for_those_who_may(client, accounts_user, sales_u
     assert "<button disabled>Purchase</button>" in client.get(reverse("inventory:shelf")).content.decode()
 
 
+def test_the_purchase_right_alone_opens_no_link(client, graphic_user, shelf):
+    from django.contrib.auth.models import Permission
+
+    graphic_user.user_permissions.add(Permission.objects.get(codename="inv_purchase"))
+    client.force_login(graphic_user)
+    body = client.get(reverse("inventory:shelf")).content.decode()
+    assert f'href="{reverse("inventory:purchase")}"' not in body
+    assert "<button disabled>Purchase</button>" in body and 'Purchases<span class="ct">🔒' in body
+    assert client.get(reverse("inventory:purchase")).status_code == 403
+
+
 def test_client_view_never_opens_it(client, admin_user_, shelf):
     client.force_login(admin_user_)
     client.post(reverse("inventory:set_view"), {"view": "client"})

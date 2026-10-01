@@ -75,6 +75,15 @@ def test_the_rail_opens_the_ledger_screens_by_right(client, accounts_user, karig
     assert f'href="{urls["memo_list"]}"' not in body and f'href="{urls["purchase"]}"' not in body
 
 
+def test_the_empty_row_spans_every_column_shown(client, accounts_user, production_user, shelf):
+    assert 'colspan="9"' in _get(client, accounts_user, "inventory:job_work_list").content.decode()
+    assert 'colspan="8"' in _get(client, production_user, "inventory:job_work_list").content.decode()
+
+
+def test_the_shelf_tiles_keep_the_stylesheets_layout(client, accounts_user, shelf):
+    assert '<div class="totstrip">' in _get(client, accounts_user, "inventory:shelf").content.decode()
+
+
 def test_client_view_reaches_no_list(client, admin_user_, shelf):
     client.force_login(admin_user_)
     client.post(reverse("inventory:set_view"), {"view": "client"})

@@ -64,7 +64,7 @@ would fight on every page.
         {% if not client_view %}
           {% if pouch_ref %}<a class="{% if tab == 'tx' %}on{% endif %}" href="{% url 'inventory:movements' pouch_ref %}">Movements</a>
           {% else %}<button disabled>Movements</button>{% endif %}
-          {% if caps.inv_purchase %}<a class="{% if tab == 'purchase' %}on{% endif %}" href="{% url 'inventory:purchase' %}">Purchase</a>
+          {% if caps.inv_purchase and caps.view_cost and caps.view_vendor %}<a class="{% if tab == 'purchase' %}on{% endif %}" href="{% url 'inventory:purchase' %}">Purchase</a>
           {% else %}<button disabled>Purchase</button>{% endif %}
         {% endif %}
         <button disabled title="Coming soon">Stock take 🔒</button>

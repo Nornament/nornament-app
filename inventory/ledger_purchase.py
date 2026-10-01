@@ -93,6 +93,7 @@ def post_purchase(user, header, lines):
     """New pouches only: a line on an existing batch + pouch no. is refused (known limit)."""
     require(user, INV_PURCHASE, "Only a role that records purchases can post one.")
     require(user, VIEW_COST, "A purchase writes a cost you may not see.")
+    require(user, VIEW_VENDOR, "A purchase names a supplier you may not see.")
     for line in lines:
         line.batch = _filed(line.batch)
     _check(header, lines)

@@ -143,6 +143,14 @@ def test_a_purchase_needs_the_right_and_sight_of_cost(production_user, accounts_
         post_purchase(blind, _header(shelf["supplier"]), _lines(shelf["batch"]))
 
 
+def test_a_purchase_needs_sight_of_suppliers(graphic_user, shelf):
+    graphic_user.user_permissions.add(*Permission.objects.filter(codename__in=("inv_purchase", "view_cost")))
+    buyer = User.objects.get(pk=graphic_user.pk)
+    with pytest.raises(PermissionDenied):
+        post_purchase(buyer, _header(shelf["supplier"]), _lines(shelf["batch"]))
+    assert not StockDocument.objects.exists()
+
+
 def test_a_reversed_purchase_leaves_its_pouches_at_zero(accounts_user, shelf):
     doc = post_purchase(accounts_user, _header(shelf["supplier"]), _lines(shelf["batch"]))
     ledger.reverse_document(accounts_user, doc)

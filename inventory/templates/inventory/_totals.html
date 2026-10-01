@@ -1,5 +1,5 @@
 {% load inventory_extras %}{% if not client_view %}
-<div class="totstrip" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">
+<div class="totstrip">
   {% if 'value' in rail %}<div class="tot heroTot"><div class="l">Stock value</div><div class="v">{{ rail.value|rupees }}</div><div class="f">weight in carats × rate</div></div>{% endif %}
   {% if out %}<div class="tot"><div class="l">Out on job work / memo</div>
     <div class="v">{% if 'pouch_value' in out %}{{ out.pouch_value|rupees }}{% else %}{{ out.out_ct|ct }} ct{% endif %}</div>

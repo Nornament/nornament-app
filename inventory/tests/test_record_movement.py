@@ -144,6 +144,15 @@ def test_the_shelf_default_is_hidden_from_a_login_without_inv_move(client, karig
     assert "— from the shelf —" not in _body(client, karigar_user, shelf["onyx"])
 
 
+def test_job_work_in_is_never_offered_the_shelf(client, admin_user_, shelf):
+    import re
+
+    body = _body(client, admin_user_, shelf["onyx"])
+    blocks = dict(re.findall(r'data-for="([^"]*)"><label>Open challan</label>(.*?)</select>', body, re.S))
+    assert "— from the shelf —" not in blocks["Job Work In"]
+    assert "— from the shelf —" in blocks["Consumed in Production|Wastage / Loss in Process"]
+
+
 def test_consumed_without_a_challan_is_refused_on_the_form_not_a_403(client, karigar_user, shelf):
     """The Karigar desk has inv_job but not inv_move: posting Consumed with no challan chosen
     used to fall through to the inv_move-gated shelf path and come back as a bare 403, losing

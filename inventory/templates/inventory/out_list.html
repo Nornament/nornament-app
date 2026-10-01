@@ -17,5 +17,5 @@
     <td class="r">{% if d.open %}{{ d.owed_ct|ct }} ct{% if d.owed_pcs %}<div class="hint">{{ d.owed_pcs }} pcs</div>{% endif %}{% else %}—{% endif %}</td>
     {% if 'pouch_value' in d %}<td class="r">{% if d.open %}{{ d.pouch_value|rupees }}{% else %}—{% endif %}</td>{% endif %}
     <td><span class="chip {{ d.tone }}"><span class="dot"></span>{{ d.status }}</span></td></tr>
-  {% empty %}<tr><td colspan="9" class="hint">Nothing {% if closed %}here{% else %}out{% endif %}.</td></tr>{% endfor %}</tbody></table></div></div>
+  {% empty %}<tr><td colspan="{% if 'pouch_value' in money %}9{% else %}8{% endif %}" class="hint">Nothing {% if closed %}here{% else %}out{% endif %}.</td></tr>{% endfor %}</tbody></table></div></div>
 {% endblock %}
