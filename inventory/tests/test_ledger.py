@@ -221,6 +221,18 @@ def test_undo_refuses_a_reversed_document(admin_user_, shelf, parties):
         ledger.undo_last(admin_user_, doc)
 
 
+def test_a_post_re_reads_the_document_so_a_stale_copy_cannot_settle_a_reversed_one(admin_user_, shelf, parties):
+    onyx = shelf["onyx"]
+    doc = _job(admin_user_, parties)
+    ledger.post(admin_user_, doc, [Line(onyx, R.JOB_WORK_OUT, OUT, 5, D("3"))])
+    stale = StockDocument.objects.get(pk=doc.pk)
+    ledger.reverse_document(admin_user_, StockDocument.objects.get(pk=doc.pk))
+    count = Movement.objects.count()
+    with pytest.raises(ServiceError, match="is reversed; it takes no more entries"):
+        ledger.post(admin_user_, stale, [Line(onyx, R.CONSUMED, SETTLE, 1, D("1"))])
+    assert Movement.objects.count() == count
+
+
 def test_reversing_a_transfer_files_the_pouch_back(admin_user_, shelf):
     onyx, home = shelf["onyx"], shelf["batch"]
     other = Batch.objects.create(code="SP14B", box_colour_id="B", family="S", cls="P", seq="14")

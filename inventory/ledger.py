@@ -255,8 +255,11 @@ def post(user, document, lines, occurred_on=None):
     """Write a document's movements — all of them, or none — and settle its status.
 
     Internal: every caller has already checked the right for its action.
-    ``occurred_on`` is the day it happened (``None`` is now).
+    ``occurred_on`` is the day it happened (``None`` is now). The document is locked and
+    re-read first (document, then pouches, as ``undo_last``), so a caller's stale copy can
+    never post onto a document reversed or closed a moment ago.
     """
+    document.refresh_from_db(from_queryset=StockDocument.objects.select_for_update())
     if document.status != Status.OPEN:
         raise ServiceError(f"{document} is {document.get_status_display().lower()}; it takes no more entries.")
     if not lines and document.reverses_id is None:
