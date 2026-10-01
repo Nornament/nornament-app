@@ -23,6 +23,17 @@ CLIENT_HIDDEN = {
 }
 
 
+#: the rail's data-quality checks, each a test on a pouch row: ``summarise`` counts them and the
+#: filters list them, so a list always holds exactly the rail's count. Misfiled and no pouch no.
+#: read keys a client row does not carry; neither is ever asked of one.
+CHECKS = {
+    "misfiled": lambda r: r["misfiled"],
+    "no_pouch_no": lambda r: r["no_pouch_no"],
+    "no_photo": lambda r: not r["photo_id"],
+    "no_size": lambda r: r["size_kind"] in ("free", "none"),
+}
+
+
 def _photos(pouch_ids):
     """First photo per pouch, by rank. One query."""
     first = {}
@@ -81,16 +92,16 @@ def summarise(rows):
         "batches": len({r["batch_pk"] for r in rows}),
         "colours": len({r["box_colour"] for r in rows}),
         "ct": sum((r["ct"] or 0) for r in rows),
-        "no_size": sum(1 for r in rows if r["size_kind"] in ("free", "none")),
-        "no_photo": sum(1 for r in rows if not r["photo_id"]),
+        "no_size": sum(1 for r in rows if CHECKS["no_size"](r)),
+        "no_photo": sum(1 for r in rows if CHECKS["no_photo"](r)),
     }
     if _has(rows, "pouch_value"):
         out["value"] = sum((r["pouch_value"] or 0) for r in rows)
         out["unpriced"] = sum(1 for r in rows if r["pouch_value"] is None)
     if _has(rows, "misfiled"):
-        out["misfiled"] = sum(1 for r in rows if r["misfiled"])
+        out["misfiled"] = sum(1 for r in rows if CHECKS["misfiled"](r))
     if _has(rows, "no_pouch_no"):
-        out["no_pouch_no"] = sum(1 for r in rows if r["no_pouch_no"])
+        out["no_pouch_no"] = sum(1 for r in rows if CHECKS["no_pouch_no"](r))
         out["keyed"] = out["pouches"] - out["no_pouch_no"]
     if _has(rows, "carton"):
         out["boxes"] = sorted({r["carton"] for r in rows if r["carton"]}, key=lambda b: (len(b), b))
