@@ -1,14 +1,17 @@
 """Diamond reads that every screen shares, and every diamond write.
 
-Carats on hand are the sum of a line's movements (the stones' rule). Price is
-the inventory's own rate card — the latest rate for the line's item code and
-size, else for the code at any size — never the stock app's chart.
+Carats on hand are the sum of a line's movements (the stones' rule). Cost is
+the line's own cost when a purchase or an assortment set one, else the
+inventory's own rate card — the latest rate for the line's item code and size,
+else for the code at any size — never the stock app's chart. Sale is always
+the rate card's.
 """
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.models import Group, Permission
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
+from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 from openpyxl import load_workbook
 
@@ -16,9 +19,10 @@ from accounts.capabilities import INV_MASTERS, VIEW_COST, VIEW_SALE, VIEW_VENDOR
 from stock.models import Vendor
 from stock.services import ServiceError, log, require
 
-from . import inputs
+from . import dia_rules, inputs
 from .dia_rules import canonical_code
-from .models import DiamondCode, DiamondLine, DiamondRate, DiamondTerm, Movement, balance
+from .dia_seed import COLOUR_LADDER
+from .models import DiamondCode, DiamondLine, DiamondLineCost, DiamondRate, DiamondTerm, Movement, balance
 
 #: the prototype's seven rights, as the permissions they are, plus part 2's Record stock movements
 RIGHTS = [("view_cost", "See cost"), ("view_sale", "See sale"), ("view_margin", "See margin"),
@@ -34,11 +38,21 @@ def _by(user):
     return user if getattr(user, "is_authenticated", False) else None
 
 
+def _own_costs(line):
+    """A line's own cost rows in force today, latest first: a row dated ahead waits for its day."""
+    return (DiamondLineCost.objects.filter(line=line, effective_from__lte=timezone.localdate())
+            .order_by("-effective_from", "-pk"))
+
+
 def stocked_lines(queryset=None):
+    """Lines with ``on_ct`` (the sum of their movements) and ``own_cost`` (their latest own cost per
+    carat, or ``None`` for a line that never had one)."""
     queryset = DiamondLine.objects.all() if queryset is None else queryset
     return queryset.select_related(
         "category", "band", "shape_override", "colour_override", "code__shape", "code__colour", "code__clarity"
-    ).annotate(on_ct=balance("ct")).order_by("pk")
+    ).annotate(
+        on_ct=balance("ct"), own_cost=Subquery(_own_costs(OuterRef("pk")).values("cost_rate")[:1])
+    ).order_by("pk")
 
 
 def rate_table():
@@ -56,9 +70,17 @@ def rate_table():
 
 
 def price(line, rates):
+    """(cost, sale) per carat; ``None`` is "not set".
+
+    Cost is the line's own latest cost when it has one, else the rate card's for its code and
+    size, else for its code at any size. Sale is the rate card's alone. A line read through
+    ``stocked_lines`` carries ``own_cost``; any other is looked up, so no caller can skip it.
+    """
     exact = rates.get((line.code_id, line.size_text), {})
     any_size = rates.get((line.code_id, ""), {})
-    cost = exact.get("cost") if exact.get("cost") is not None else any_size.get("cost")
+    own = line.own_cost if hasattr(line, "own_cost") else _own_costs(line).values_list("cost_rate", flat=True).first()
+    card = exact.get("cost") if exact.get("cost") is not None else any_size.get("cost")
+    cost = own if own is not None else card
     sale = exact.get("sale") if exact.get("sale") is not None else any_size.get("sale")
     return cost, sale
 
@@ -72,6 +94,91 @@ def _last_ref_number():
     # ponytail: read-the-max under the caller's transaction, as for pouches
     last = DiamondLine.objects.order_by("-ref").values_list("ref", flat=True).first()
     return int(last[4:]) if last else 0
+
+
+def new_line(**fields):
+    """A line with the next ``NRD-`` reference and nothing in it: its carats arrive by the movement
+    its caller posts (a purchase or an assortment), in the caller's transaction."""
+    inputs.fits(DiamondLine, **fields)
+    return DiamondLine.objects.create(ref=f"NRD-{_last_ref_number() + 1:06d}", **fields)
+
+
+def line_label(line):
+    """How a line is named wherever it is picked or listed: ref · item code · size · batch."""
+    return f"{line.ref} · {line.code_id} · {line.size_text or line.band.value} · {line.batch_no or 'no batch'}"
+
+
+def line_choices(queryset=None):
+    """The lines with carats on hand, for a picker."""
+    return [{"pk": line.pk, "label": line_label(line), "ct": line.on_ct}
+            for line in stocked_lines(queryset).filter(on_ct__gt=0)]
+
+
+def term_values(kind):
+    """A master list's values for a picker, in its order. An unresolved ``?`` or ``(`` value is
+    never offered: it is a reading to correct, not a grade to choose."""
+    values = DiamondTerm.objects.filter(kind=kind).order_by("sort", "value").values_list("value", flat=True)
+    return [value for value in values if not value.startswith(("?", "("))]
+
+
+def listed(kind, value):
+    """The master-list term for a typed value. A purchase or an assortment never adds to the lists:
+    Settings does."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    found = DiamondTerm.objects.filter(kind=kind, value=value).first()
+    if found is None:
+        raise ServiceError(f"{value} is not on the {kind} list; add it in Settings first.")
+    return found
+
+
+def _code_name(shape, colour, clarity):
+    """A new code's name in the register's own grammar (``DRFGH VS-SI``) when the shape and colour
+    have tokens, so it reads back the same; otherwise the plain words (``D Polki I-J SI-I``)."""
+    shapes = {name: token for token, name in dia_rules.SHAPES}                 # OV after OVL: OV wins
+    colours = {name: token for token, name in reversed(dia_rules.COLOURS)}     # KL and MN, never LC or LB
+    if shape in shapes and (colour in colours or colour in COLOUR_LADDER):
+        return canonical_code(f"D{shapes[shape]}{colours.get(colour, colour)} {clarity}")
+    return canonical_code(f"D {shape} {colour} {clarity}")
+
+
+def code_for(user, shape, colour, clarity):
+    """The item code that means exactly this shape, colour and clarity — an existing one, a
+    confirmed one first — else a new one, created confirmed (owner, 2026-10-01).
+
+    Deviation from the brief (controller ruling, 2026-10-01): clarity may be blank only when
+    colour is a Fancy colour (a colour term whose value starts with "Fancy") — it then finds or
+    makes the code for that shape and colour with no clarity. A blank clarity with any other
+    colour is refused, same as a blank shape or colour.
+    """
+    shape, colour, clarity = ((value or "").strip() for value in (shape, colour, clarity))
+    if not shape or not colour or (not clarity and not colour.startswith("Fancy")):
+        raise ServiceError("Give the shape, colour and clarity.")
+    shape = listed(DiamondTerm.SHAPE, shape)
+    colour = listed(DiamondTerm.COLOUR, colour)
+    clarity = listed(DiamondTerm.CLARITY, clarity) if clarity else None
+    found = (DiamondCode.objects.filter(shape=shape, colour=colour, clarity=clarity)
+             .order_by("-confirmed", "item_code").first())
+    if found is not None:
+        return found
+    name = _code_name(shape.value, colour.value, clarity.value if clarity else "")
+    inputs.fits(DiamondCode, item_code=name)
+    if DiamondCode.objects.filter(pk=name).exists():
+        raise ServiceError(f"{name} already reads differently; correct it in Settings first.")
+    code = DiamondCode.objects.create(item_code=name, shape=shape, colour=colour, clarity=clarity, confirmed=True)
+    log(user, "INSERT", "inv_dia_code", code.pk, f"{code.pk} from a description")
+    return code
+
+
+def sized(size_text, pcs=None, ct=None):
+    """A size's band (part 3's rules). A size that fits no band is a carat band at its weight per
+    stone, when there are pieces to divide by (the owner, 2026-09-30)."""
+    out = dia_rules.size_band(size_text)
+    if out.band == "?" and (pcs or 0) > 0 and (ct or 0) > 0:
+        per_stone = (ct / pcs).quantize(Decimal("0.001"))
+        return dia_rules.Sized("carat band", per_stone, per_stone)
+    return out
 
 
 @transaction.atomic

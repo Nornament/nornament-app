@@ -10,7 +10,6 @@ file alone knows.
 """
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from decimal import Decimal
 
 from django.db import transaction
 
@@ -206,11 +205,7 @@ def _term(kind, value):
 
 def _sized(row):
     """A size that fits no band is banded by the weight per stone, when the file gives pieces (the owner, 2026-09-30)."""
-    sized = dia_rules.size_band(row.band_text or row.size_text)
-    if sized.band == "?" and (row.pcs or 0) > 0 and (row.ct or 0) > 0:
-        per_stone = (row.ct / row.pcs).quantize(Decimal("0.001"))
-        return dia_rules.Sized("carat band", per_stone, per_stone)
-    return sized
+    return dia_services.sized(row.band_text or row.size_text, row.pcs, row.ct)
 
 
 @transaction.atomic

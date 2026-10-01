@@ -46,7 +46,7 @@ def document(request, pk):
     if _client(request):
         return redirect("inventory:shelf")
     doc = get_object_or_404(StockDocument.objects.select_related(
-        "vendor", "customer", "reverses", "from_batch", "to_batch"), pk=pk)
+        "vendor", "customer", "reverses", "from_batch", "to_batch"), pk=pk, kind__in=ledger.STONE_KINDS)
     user = request.user
     owed = []
     if doc.kind in ledger.OPENABLE and doc.status == Status.OPEN:
@@ -86,7 +86,7 @@ def _back(pk):
 def document_settle(request, pk):
     if _client(request):
         return redirect("inventory:shelf")
-    doc = get_object_or_404(StockDocument, pk=pk)
+    doc = get_object_or_404(StockDocument, pk=pk, kind__in=ledger.STONE_KINDS)
     raw = request.POST.get("pouch") or ""
     pouch = Pouch.objects.filter(pk=raw).first() if raw.isdigit() else None
     settle = ledger_jobs.settle_job_work if doc.kind == Kind.JOB_WORK else ledger_jobs.settle_memo
@@ -108,7 +108,7 @@ def document_settle(request, pk):
 def document_undo(request, pk):
     if _client(request):
         return redirect("inventory:shelf")
-    doc = get_object_or_404(StockDocument, pk=pk)
+    doc = get_object_or_404(StockDocument, pk=pk, kind__in=ledger.STONE_KINDS)
     try:
         move = ledger.undo_last(request.user, doc)
     except ServiceError as refused:
@@ -123,7 +123,7 @@ def document_undo(request, pk):
 def document_reverse(request, pk):
     if _client(request):
         return redirect("inventory:shelf")
-    doc = get_object_or_404(StockDocument, pk=pk)
+    doc = get_object_or_404(StockDocument, pk=pk, kind__in=ledger.STONE_KINDS)
     try:
         reversal = ledger.reverse_document(request.user, doc, (request.POST.get("note") or "").strip())
     except ServiceError as refused:

@@ -68,19 +68,21 @@ def memo_list(request):
 
 @login_required
 def recent(request):
-    """Recent documents across every pouch, newest first.
+    """Recent stones documents across every pouch, newest first. A diamond document is never
+    listed here: the diamond ledgers have their own screens.
 
     ponytail: the newest 100; page through when someone asks for more.
     """
     if _client(request):
         return redirect("inventory:shelf")
     kind = request.GET.get("kind", "")
-    documents = StockDocument.objects.select_related("vendor", "customer").annotate(lines=Count("movements"))
-    if kind in Kind.values:
+    documents = (StockDocument.objects.filter(kind__in=ledger.STONE_KINDS)
+                 .select_related("vendor", "customer").annotate(lines=Count("movements")))
+    if kind in ledger.STONE_KINDS:
         documents = documents.filter(kind=kind)
     rows = [mask(request.user, {"pk": d.pk, "number": d.number, "kind": d.get_kind_display(), **ledger.party(d),
                                 "occurred_on": d.occurred_on, "status": d.get_status_display(),
                                 "tone": TONE[d.status], "lines": d.lines})
             for d in documents.order_by("-created_at", "-pk")[:RECENT_CAP]]
     return _page(request, "inventory/recent.html", _everything(request), tab="recent", rows=rows, kind=kind,
-                 kinds=Kind.choices)
+                 kinds=[(value, label) for value, label in Kind.choices if value in ledger.STONE_KINDS])

@@ -27,13 +27,19 @@ Kind, Status = StockDocument.Kind, StockDocument.Status
 
 #: the kinds that stay open while goods are out with someone
 OPENABLE = (Kind.JOB_WORK, Kind.MEMO)
+#: the stones kinds: every stones list and page shows only these
+STONE_KINDS = (Kind.PURCHASE, Kind.JOB_WORK, Kind.MEMO, Kind.SPLIT, Kind.TRANSFER, Kind.SINGLE)
+#: part 4's diamond kinds, shown only on the diamond screens
+DIAMOND_KINDS = (Kind.DIA_JOB, Kind.DIA_ASSORT, Kind.DIA_PURCHASE)
 #: the right that posts each kind — and so may undo or reverse it
 RIGHT_FOR_KIND = {
     Kind.PURCHASE: INV_PURCHASE, Kind.JOB_WORK: INV_JOB, Kind.MEMO: INV_MOVE,
     Kind.SPLIT: INV_ASSORT, Kind.TRANSFER: INV_ASSORT, Kind.SINGLE: INV_MOVE,
+    Kind.DIA_JOB: INV_JOB, Kind.DIA_ASSORT: INV_ASSORT, Kind.DIA_PURCHASE: INV_PURCHASE,
 }
 #: automatic numbers; job work and memos carry the challan or memo no. people type
-PREFIX = {Kind.PURCHASE: "PUR-", Kind.SPLIT: "SPL-", Kind.TRANSFER: "TRF-", Kind.SINGLE: "MOV-"}
+PREFIX = {Kind.PURCHASE: "PUR-", Kind.SPLIT: "SPL-", Kind.TRANSFER: "TRF-", Kind.SINGLE: "MOV-",
+          Kind.DIA_JOB: "JC-", Kind.DIA_ASSORT: "AS-", Kind.DIA_PURCHASE: "DP-"}
 REVERSAL_PREFIX = "REV-"
 #: the reasons that bring a pouch into being, so a reversal can find what it created
 CREATING = (Movement.Reason.PURCHASE, Movement.Reason.SPLIT)
@@ -116,7 +122,7 @@ def owed_by_document(documents):
     """``{document pk: [(pouch, pcs, ct)]}`` — what each of these job work or memo documents
     still has out, with the pouches read through ``services.stocked`` so each carries its
     current valuation ``rate``."""
-    totals = [t for t in Movement.objects.filter(document__in=documents).order_by()
+    totals = [t for t in Movement.objects.filter(document__in=documents, pouch__isnull=False).order_by()
               .values("document", "pouch").annotate(pcs=_owed("pcs"), ct=_owed("ct"))
               if t["pcs"] or t["ct"]]
     pouches = {p.pk: p for p in services.stocked(Pouch.objects.filter(pk__in={t["pouch"] for t in totals}))}
