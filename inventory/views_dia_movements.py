@@ -21,6 +21,7 @@ from .views_diamonds import dia_page, viewer
 Kind, Status = StockDocument.Kind, StockDocument.Status
 TONE = {Status.OPEN: "warn", Status.CLOSED: "good", Status.REVERSED: "crit"}
 SYMBOL = {1: ("＋", "in"), -1: ("−", "out"), 0: ("·", "adj")}
+WORD = {1: "In", -1: "Out", 0: "Settle"}
 RECENT_CAP = 100
 #: where each diamond document is read, and the query that picks it there
 SCREEN = {Kind.DIA_JOB: ("inventory:dia_jobs", "card"), Kind.DIA_ASSORT: ("inventory:dia_assorts", "doc"),
@@ -53,7 +54,7 @@ def movements(request):
     as_role = _as_role(request, user, role)
     kind = request.GET.get("kind", "")
     documents = (StockDocument.objects.filter(kind__in=ledger.DIAMOND_KINDS, reverses__isnull=True)
-                 .select_related("vendor").annotate(lines=Count("movements")))
+                 .select_related("vendor").annotate(lines=Count("movements__diamond", distinct=True)))
     if kind in ledger.DIAMOND_KINDS:
         documents = documents.filter(kind=kind)
     rows = [mask(user, {"pk": d.pk, "number": d.number, "kind": d.get_kind_display(), **ledger.party(d),
@@ -78,7 +79,7 @@ def _ledger(user, line, as_role=""):
         symbol, cls = SYMBOL[m.effect]
         rows.append(mask(user, {
             "when": m.occurred_at, "reason": m.reason, "note": m.note, "reversal": bool(m.reverses_id),
-            "sym": symbol, "cls": cls, "direction": m.get_direction_display(), "ct": m.ct, "balance": balance,
+            "sym": symbol, "cls": cls, "direction": WORD[m.effect], "ct": m.ct, "balance": balance,
             "number": doc.number if doc else "", "href": opens(doc, as_role) if doc else "",
             "ref": m.ref if not doc or m.ref != doc.number else "",
             "by": (m.recorded_by.full_name or m.recorded_by.get_username()) if m.recorded_by_id else "system",

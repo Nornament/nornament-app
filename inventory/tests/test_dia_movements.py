@@ -55,7 +55,9 @@ def test_the_line_ledger_runs_to_what_the_engine_holds(client, accounts_user, di
     held = dia_services.stocked_lines(DiamondLine.objects.filter(pk=line.pk)).get().on_ct
     assert [m["balance"] for m in moves] == [D("3.40"), D("2.40"), D("2.40"), D("2.40"), D("2.00"), D("3.00")]
     assert moves[-1]["balance"] == held
+    assert moves[-1]["direction"] == "In" and moves[-1]["sym"] == "＋"       # the reversed issue reads In, not Out
     body = _get(client, accounts_user, reverse("inventory:dia_line", args=[line.ref])).content.decode()
+    assert "＋ Out" not in body
     assert "Sheet!3" in body and "re-imported from Sheet!9" in body          # the import's source rows
     assert f'href="{reverse("inventory:dia_jobs")}?card={card.pk}">{card.number}</a>' in body
     assert f'href="{reverse("inventory:dia_jobs")}?card={card.pk}">{reversal.number}</a>' in body
@@ -71,6 +73,14 @@ def test_value_reads_own_cost_first_and_needs_the_cost_right(client, accounts_us
     assert f"₹{DIA_COST}" in rnd                                                  # no own cost: the rate card's
     body = _get(client, sales_user, url).content.decode()
     assert "23,456" not in body and "46,912" not in body and "<label>Value</label>" not in body
+
+
+def test_the_lines_column_counts_lines_not_movements(client, accounts_user, dia_docs):
+    card, line = dia_docs["card"], dia_docs["round"]
+    ledger_dia_jobs.post_entry(accounts_user, card, "loose", line, D("0.5"))          # a second movement, same line
+    body = _get(client, accounts_user, reverse("inventory:dia_movements")).content.decode()
+    row = body[body.index(card.number):]
+    assert '<td class="r">1</td>' in row[:row.index("</tr>")]
 
 
 def test_an_unknown_line_is_404(client, accounts_user, diamonds):

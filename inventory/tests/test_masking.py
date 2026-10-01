@@ -329,6 +329,12 @@ FINDER_SCREENS = {"inventory:search", "inventory:quality", "inventory:splits", "
                   "inventory:dia_movements", "inventory:dia_line"}
 
 #: what each login may not see on a finder (Production sees suppliers and karigars; the Karigar desk, karigars)
+#: SUPPLIER, CUSTOMER and PURCHASE_COST never render on any finder screen today (none of search, the
+#: quality filters, splits/transfers or the diamond Movements/line pages show a stones vendor, customer
+#: or purchase cost), so their absence here guards against a future screen growing one rather than
+#: proving masking now. The non-vacuous check for those three is
+#: test_no_ledger_screen_shows_a_login_what_it_may_not_see, which walks the document and purchase
+#: screens where an allowed role does see them (test_each_name_and_cost_reaches_those_who_may_see_it).
 FINDER_SECRETS = {
     "sales_user": ("7,919", PURCHASE_COST, SUPPLIER, KARIGAR, DIA_SUPPLIER, DIA_LINE_COST, DIA_OVERRIDE, DIA_COST),
     "karigar_user": ("7,919", PURCHASE_COST, SUPPLIER, CUSTOMER, DIA_SUPPLIER, DIA_LINE_COST, DIA_OVERRIDE, DIA_COST),
@@ -382,6 +388,10 @@ def test_each_finder_shows_names_and_cost_to_those_who_may_see_them(client, acco
     assert KARIGAR in movements and DIA_SUPPLIER in movements
     assorted = finder_docs["dia"]["assort"].movements.get(reason=Movement.Reason.ASSORT_IN).diamond
     assert DIA_OVERRIDE in client.get(reverse("inventory:dia_line", args=[assorted.ref])).content.decode()
+    bought = finder_docs["dia"]["purchase"].movements.get().diamond
+    assert DIA_LINE_COST in client.get(reverse("inventory:dia_line", args=[bought.ref])).content.decode()
+    round_line = finder_docs["dia"]["round"]
+    assert DIA_COST in client.get(reverse("inventory:dia_line", args=[round_line.ref])).content.decode()
     splits = client.get(reverse("inventory:splits")).content.decode()
     assert finder_docs["split"].number in splits and "SL01G · 7" in splits
     assert "SL02G · 5" in client.get(reverse("inventory:transfers")).content.decode()
