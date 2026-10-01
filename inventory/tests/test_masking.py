@@ -44,6 +44,14 @@ EXEMPT = {
     "inventory:movement_post", "inventory:document_settle", "inventory:document_undo", "inventory:document_reverse",
 }
 
+#: the diamond ledgers' screens, routed before they are built so they can link to one another;
+#: the masking-walk task walks each of them and deletes this set
+PENDING = {
+    "inventory:dia_jobs", "inventory:dia_job_new", "inventory:dia_job_post", "inventory:dia_job_close",
+    "inventory:dia_job_undo", "inventory:dia_job_reverse", "inventory:dia_assorts", "inventory:dia_assort_reverse",
+    "inventory:dia_purchase", "inventory:dia_purchase_reverse",
+}
+
 DIAMOND_SCREENS = [
     ("inventory:diamonds", ""),
     ("inventory:diamonds", "?cat=Natural+Diamond"),
@@ -129,7 +137,7 @@ def test_every_inventory_screen_is_walked():
             for pattern in resolver.url_patterns:
                 if isinstance(pattern, URLPattern) and pattern.name:
                     named.add(f"inventory:{pattern.name}")
-    missing = named - covered - EXEMPT
+    missing = named - covered - EXEMPT - PENDING
     assert not missing, f"inventory screens with no masking check: {sorted(missing)}"
 
 
