@@ -236,7 +236,7 @@ def movements(request, ref):
     row = next(r for r in everything if r["pk"] == obj.pk)
     ledger, pcs, ct = [], 0, 0
     for move in obj.movements.select_related("counterparty", "recorded_by").order_by("occurred_at", "pk"):
-        sign = 1 if move.direction == Movement.IN else -1
+        sign = move.effect
         pcs += sign * (move.pcs or 0)
         ct += sign * (move.ct or 0)
         ledger.append(mask(request.user, {

@@ -11,7 +11,7 @@ is not the pouch's identity: re-filing would change it. The identity is the
 """
 from django.conf import settings
 from django.db import models
-from django.db.models import Q
+from django.db.models import Case, F, Q, Sum, Value, When
 from django.utils import timezone
 
 from .seed import HATCH
@@ -106,6 +106,10 @@ class Pouch(models.Model):
     origin = models.CharField(max_length=40, blank=True, choices=ORIGINS)
     purchase_date = models.DateField(null=True, blank=True)
     supplier = models.ForeignKey("stock.Vendor", null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    parent = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.PROTECT, related_name="children",
+        help_text="The pouch a split took this one from.",
+    )
     created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
@@ -122,10 +126,81 @@ class Pouch(models.Model):
         return f"{self.batch.code} · {self.pouch_no or '?'}"
 
 
-class Movement(models.Model):
-    """Append-only. Pieces and carats are separate because a pouch can move by either."""
+class StockDocument(models.Model):
+    """The header every stock-moving action posts its movements under.
 
-    IN, OUT = "in", "out"
+    One shape for every kind, so a challan, a memo, a purchase bill, a split, a
+    transfer and a one-off sale are listed, read and reversed the same way. Job
+    work and memos stay open while goods are out; every other kind closes when
+    it is posted. Nothing on it is edited afterwards: a reversal is a new
+    document that points back at this one.
+    """
+
+    class Kind(models.TextChoices):
+        PURCHASE = "purchase", "Purchase"
+        JOB_WORK = "job_work", "Job work"
+        MEMO = "memo", "Memo"
+        SPLIT = "split", "Split"
+        TRANSFER = "transfer", "Transfer"
+        SINGLE = "single", "Single"
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Open"
+        CLOSED = "closed", "Closed"
+        REVERSED = "reversed", "Reversed"
+
+    CURRENCIES = [("INR", "INR"), ("USD", "USD")]
+
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    number = models.CharField(max_length=40)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
+    vendor = models.ForeignKey(
+        "stock.Vendor", null=True, blank=True, on_delete=models.PROTECT, related_name="+",
+        help_text="The supplier (purchase, purchase return) or the karigar (job work).",
+    )
+    # SET_NULL, as stock.Sale does: the CRM deletes customers, and a memo must not block it
+    customer = models.ForeignKey("crm.Customer", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    occurred_on = models.DateField(default=timezone.localdate)
+    expected_back = models.DateField(null=True, blank=True)
+    note = models.TextField(blank=True)
+    currency = models.CharField(max_length=3, choices=CURRENCIES, blank=True)
+    fx_rate = models.DecimalField("rate to INR", max_digits=12, decimal_places=4, null=True, blank=True)
+    landed_extras = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    # a transfer's from and to, so reversing it can file the pouch back
+    from_batch = models.ForeignKey(Batch, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    from_pouch_no = models.CharField(max_length=16, blank=True)
+    to_batch = models.ForeignKey(Batch, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    to_pouch_no = models.CharField(max_length=16, blank=True)
+    reverses = models.ForeignKey("self", null=True, blank=True, on_delete=models.PROTECT, related_name="reversals")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "inv_document"
+        ordering = ["-created_at", "-pk"]
+        constraints = [
+            # a reversed document's number may be used again
+            models.UniqueConstraint(
+                fields=["kind", "number"], condition=~Q(status="reversed"), name="inv_document_number"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.get_kind_display()} {self.number}"
+
+
+class Movement(models.Model):
+    """Append-only. Pieces and carats are separate because a pouch can move by either.
+
+    A ``settle`` is recorded against a document — goods already out, consumed,
+    lost or sold — and never counts in a balance. A movement that ``reverses``
+    another repeats its pouch, direction and quantities, and counts with the
+    opposite sign.
+    """
+
+    IN, OUT, SETTLE = "in", "out", "settle"
 
     class Reason(models.TextChoices):
         OPENING_BALANCE = "Opening Balance"
@@ -152,7 +227,7 @@ class Movement(models.Model):
     )
     occurred_at = models.DateTimeField(default=timezone.now)
     reason = models.CharField(max_length=32, choices=Reason.choices)
-    direction = models.CharField(max_length=3, choices=[(IN, "In"), (OUT, "Out")])
+    direction = models.CharField(max_length=6, choices=[(IN, "In"), (OUT, "Out"), (SETTLE, "Settle")])
     pcs = models.PositiveIntegerField(null=True, blank=True)
     ct = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)
     counterparty = models.ForeignKey("stock.Vendor", null=True, blank=True, on_delete=models.PROTECT, related_name="+")
@@ -163,6 +238,14 @@ class Movement(models.Model):
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
     )
     recorded_at = models.DateTimeField(default=timezone.now)
+    document = models.ForeignKey(
+        StockDocument, null=True, blank=True, on_delete=models.PROTECT, related_name="movements",
+        help_text="Empty for opening balances and import recounts.",
+    )
+    reverses = models.OneToOneField(
+        "self", null=True, blank=True, on_delete=models.PROTECT, related_name="reversal",
+        help_text="The movement this one cancels.",
+    )
 
     class Meta:
         db_table = "inv_movement"
@@ -177,6 +260,32 @@ class Movement(models.Model):
 
     def __str__(self):
         return f"{self.reason} {self.direction} {self.pouch_id or self.diamond_id}"
+
+    @property
+    def effect(self):
+        """+1, −1 or 0: what this movement does to its pouch's balance — ``balance``'s rule, row by row."""
+        if self.direction == self.SETTLE:
+            return 0
+        sign = 1 if self.direction == self.IN else -1
+        return -sign if self.reverses_id else sign
+
+
+def balance(field):
+    """The sum of ``pcs`` or ``ct`` over ``movements`` that is a pouch's (or a diamond line's) balance.
+
+    In adds and out subtracts; a settle never counts, because the goods it
+    settles had already left; a reversal counts with the opposite sign of the
+    movement it cancels. Stones and diamonds share this table, so every
+    balance reads through here.
+    """
+    value = F(f"movements__{field}")
+    return Sum(Case(
+        When(movements__direction=Movement.SETTLE, then=Value(0)),
+        When(movements__direction=Movement.OUT, movements__reverses__isnull=True, then=-value),
+        When(movements__direction=Movement.IN, movements__reverses__isnull=False, then=-value),
+        default=value,
+        output_field=Movement._meta.get_field(field),
+    ))
 
 
 class PriceEntry(models.Model):

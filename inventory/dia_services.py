@@ -9,7 +9,6 @@ from decimal import Decimal, InvalidOperation
 from django.contrib.auth.models import Group, Permission
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Case, DecimalField, F, Sum, When
 from django.utils import timezone
 from openpyxl import load_workbook
 
@@ -18,12 +17,12 @@ from stock.models import Vendor
 from stock.services import ServiceError, log, require
 
 from .dia_rules import canonical_code
-from .models import DiamondCode, DiamondLine, DiamondRate, DiamondTerm, Movement
+from .models import DiamondCode, DiamondLine, DiamondRate, DiamondTerm, Movement, balance
 
-#: the prototype's seven rights, as the permissions they are
+#: the prototype's seven rights, as the permissions they are, plus part 2's Record stock movements
 RIGHTS = [("view_cost", "See cost"), ("view_sale", "See sale"), ("view_margin", "See margin"),
           ("inv_purchase", "Post purchase"), ("inv_job", "Job cards"), ("inv_assort", "Assort"),
-          ("inv_masters", "Edit settings")]
+          ("inv_move", "Record stock movements"), ("inv_masters", "Edit settings")]
 ROLE_ORDER = ["ADMIN", "ACCOUNTS", "SALES", "GRAPHIC", "PRODUCTION", "KARIGAR"]
 
 #: IVY export: header on row 3, diamond band columns by position (the names repeat across bands)
@@ -35,15 +34,10 @@ def _by(user):
 
 
 def stocked_lines(queryset=None):
-    signed = Case(
-        When(movements__direction=Movement.OUT, then=-F("movements__ct")),
-        default=F("movements__ct"),
-        output_field=DecimalField(max_digits=14, decimal_places=4),
-    )
     queryset = DiamondLine.objects.all() if queryset is None else queryset
     return queryset.select_related(
         "category", "band", "shape_override", "colour_override", "code__shape", "code__colour", "code__clarity"
-    ).annotate(on_ct=Sum(signed)).order_by("pk")
+    ).annotate(on_ct=balance("ct")).order_by("pk")
 
 
 def rate_table():

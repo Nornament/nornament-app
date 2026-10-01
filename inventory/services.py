@@ -6,30 +6,19 @@ rate annotated.
 """
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Case, F, OuterRef, Subquery, Sum, When
+from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 
 from accounts.capabilities import INV_MASTERS, VIEW_COST, VIEW_SALE
 from stock.services import ServiceError, log, require
 
-from .models import Movement, Pouch, PriceEntry
+from .models import Movement, Pouch, PriceEntry, balance
 
 DETAIL_FIELDS = ("treatment", "origin", "purchase_date", "supplier")
 
 
 def _by(user):
     return user if getattr(user, "is_authenticated", False) else None
-
-
-def _signed(field):
-    # ponytail: Django 5.2 won't infer a mixed IntegerField/PositiveIntegerField
-    # Case output; the model's own field type settles it.
-    output_field = Movement._meta.get_field(field)
-    return Case(
-        When(movements__direction=Movement.OUT, then=-F(f"movements__{field}")),
-        default=F(f"movements__{field}"),
-        output_field=output_field,
-    )
 
 
 def stocked(queryset=None):
@@ -43,7 +32,7 @@ def stocked(queryset=None):
     # ordered here, not by Meta: the aggregate drops Meta.ordering, and every
     # screen groups in arrival order, so batches by code and pouches as imported
     return queryset.select_related("batch__box_colour", "supplier").annotate(
-        on_pcs=Sum(_signed("pcs")), on_ct=Sum(_signed("ct")), rate=Subquery(latest)
+        on_pcs=balance("pcs"), on_ct=balance("ct"), rate=Subquery(latest)
     ).order_by("batch__code", "pk")
 
 

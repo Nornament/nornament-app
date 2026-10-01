@@ -28,6 +28,7 @@ class Capability(models.Model):
             ("inv_purchase", "Can post inventory purchases"),
             ("inv_job", "Can post job-card movements"),
             ("inv_assort", "Can post assortments"),
+            ("inv_move", "Can record stock movements"),
         ]
 
 
