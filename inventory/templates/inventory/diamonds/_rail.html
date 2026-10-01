@@ -1,0 +1,20 @@
+{% load inventory_extras %}{% comment %}The prototype's diamond rail. The seven
+Settings links jump to their card on the one Settings page.{% endcomment %}
+<div class="nav-h">Diamonds — internal</div>
+<nav class="nav">
+  <a class="{% if dtab == 'search' %}on{% endif %}" href="{% url 'inventory:diamonds' %}"><span class="ic">🔍</span>Search stock<span class="ct">{{ drail.lines|grouped }}</span></a>
+  <span class="locked"><span class="ic">⚒</span>Job cards<span class="ct">🔒</span></span>
+  <span class="locked"><span class="ic">⇅</span>Assortments<span class="ct">🔒</span></span>
+  <span class="locked"><span class="ic">＋</span>Purchases<span class="ct">🔒</span></span>
+  {% if caps.inv_masters %}<a class="{% if dtab == 'import' %}on{% endif %}" href="{% url 'inventory:dia_import_home' %}"><span class="ic">⇅</span>Import diamonds</a>{% endif %}
+</nav>
+<div class="nav-h">Settings — you define these</div>
+<nav class="nav">
+  <a href="{% url 'inventory:dia_settings' %}#rights"><span class="ic">◈</span>User rights</a>
+  <a href="{% url 'inventory:dia_settings' %}#suppliers"><span class="ic">⌗</span>Suppliers</a>
+  <a href="{% url 'inventory:dia_settings' %}#category"><span class="ic">◇</span>Categories<span class="ct">{{ drail.categories }}</span></a>
+  <a href="{% url 'inventory:dia_settings' %}#shape"><span class="ic">◆</span>Shapes<span class="ct">{{ drail.shapes }}</span></a>
+  <a href="{% url 'inventory:dia_settings' %}#colour"><span class="ic">◈</span>Colour grades<span class="ct">{{ drail.colours }}</span></a>
+  <a href="{% url 'inventory:dia_settings' %}#clarity"><span class="ic">◇</span>Clarity grades<span class="ct">{{ drail.clarities }}</span></a>
+  <a href="{% url 'inventory:dia_settings' %}#band"><span class="ic">⊞</span>Size bands<span class="ct">{{ drail.bands }}</span></a>
+</nav>

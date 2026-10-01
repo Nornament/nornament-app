@@ -1,0 +1,70 @@
+{% extends "inventory_base.html" %}{% load inventory_extras %}
+{% block title %}Diamond import #{{ batch.pk }}{% endblock %}
+{% block crumb %}<b>Diamonds</b> &nbsp;›&nbsp; Import #{{ batch.pk }}{% endblock %}
+{% block content %}
+<div class="shelfbar"><h1>Review import #{{ batch.pk }}</h1><span class="spacer"></span>
+  <a class="btn gho" href="{% url 'inventory:dia_import_home' %}">← Imports</a></div>
+
+<div class="totstrip">
+  <div class="tot heroTot"><div class="l">Rows read</div><div class="v">{{ counts.rows|grouped }}</div>
+    <div class="f">{{ counts.new }} new · {{ counts.update }} already here · {{ counts.skip }} skipped</div></div>
+  <div class="tot"><div class="l">Blocked</div><div class="v">{{ counts.blocked }}</div><div class="f">need a decision before commit</div></div>
+  <div class="tot"><div class="l">New item codes</div><div class="v">{{ counts.codes }}</div><div class="f">created as reviewed below</div></div>
+  <div class="tot"><div class="l">Recounts</div><div class="v">{{ counts.recount }}</div><div class="f">{{ counts.missing }} lines not in this file</div></div>
+  {% if counts.empty %}<div class="tot"><div class="l">Empty</div><div class="v">{{ counts.empty }}</div><div class="f">at 0 ct, nothing to open</div></div>{% endif %}
+</div>
+
+{% if batch.status == 'DONE' %}
+<div class="banner"><div class="banner-ic">✓</div><div><h4>Imported {{ batch.finished_at|date:"d M Y H:i" }}</h4>
+  <p>{{ batch.result.created }} new · {{ batch.result.updated }} updated · {{ batch.result.recounted }} recounted · {{ batch.result.zeroed }} set to zero · {{ batch.result.codes }} new codes</p></div></div>
+{% else %}
+<form method="post">{% csrf_token %}
+{% if plan.codes %}
+<div class="card" style="overflow:hidden;margin-bottom:14px"><div class="card-h"><span class="card-t">New item codes</span><span class="spacer"></span><button class="btn">Save decisions</button></div>
+  <div style="overflow:auto"><table class="pt">
+    <thead><tr><th>Code</th><th>Shape</th><th>Colour</th><th>Clarity</th><th>Confirmed</th><th>Read</th></tr></thead>
+    <tbody>{% for c in plan.codes %}<tr class="{% if not c.confirmed %}sel{% endif %}">
+      <td class="mono"><b>{{ c.item_code }}</b></td>
+      <td><input class="inp" name="code:{{ c.item_code }}:shape" value="{{ c.shape }}" list="dl-shape" style="width:150px"></td>
+      <td><input class="inp" name="code:{{ c.item_code }}:colour" value="{{ c.colour }}" list="dl-colour" style="width:110px"></td>
+      <td><input class="inp" name="code:{{ c.item_code }}:clarity" value="{{ c.clarity }}" list="dl-clarity" style="width:100px"></td>
+      <td><input type="checkbox" name="code:{{ c.item_code }}:confirmed" value="1"{% if c.confirmed %} checked{% endif %}></td>
+      <td>{% if c.note %}<span class="chip warn"><span class="dot"></span>{{ c.note }}</span>{% else %}<span class="chip good"><span class="dot"></span>clean</span>{% endif %}</td>
+    </tr>{% endfor %}</tbody></table></div></div>
+  <datalist id="dl-shape">{% for v in terms.shape %}<option value="{{ v }}">{% endfor %}</datalist>
+  <datalist id="dl-colour">{% for v in terms.colour %}<option value="{{ v }}">{% endfor %}</datalist>
+  <datalist id="dl-clarity">{% for v in terms.clarity %}<option value="{{ v }}">{% endfor %}</datalist>
+{% endif %}
+
+{% if blocked %}
+<div class="card" style="overflow:hidden;margin-bottom:14px"><div class="card-h"><span class="card-t">Rows that need a decision</span><span class="spacer"></span><button class="btn">Save decisions</button></div>
+  <table class="pt"><thead><tr><th>Row</th><th>Batch</th><th>Item code</th><th>Size</th><th class="r">Carats</th><th>Problem</th><th>Decision</th></tr></thead>
+    <tbody>{% for i in blocked %}<tr class="sel">
+      <td class="mono">{{ i.row.src }}</td><td class="mono">{{ i.row.batch_no|default:"—" }}</td><td class="mono">{{ i.row.item_code }}</td><td class="mono">{{ i.row.size_text }}</td>
+      <td class="r">{{ i.row.ct|ct }}</td><td><span class="chip crit"><span class="dot"></span>{{ i.problem }}</span></td>
+      <td>{% if not i.only_skip %}<select class="inp" name="row:{{ i.row.src }}" style="width:120px"><option value="" selected>choose…</option><option value="map">map to line</option><option value="new">new line</option><option value="skip">skip</option></select>
+        <select class="inp mono" name="row:{{ i.row.src }}:line" style="width:130px">{% for line in i.candidates %}<option>{{ line.ref }}</option>{% endfor %}</select>{% else %}<select class="inp" name="row:{{ i.row.src }}" style="width:120px"><option value="" selected>choose…</option><option value="skip">skip</option></select>{% endif %}</td>
+    </tr>{% endfor %}</tbody></table></div>
+{% endif %}
+
+{% if plan.missing %}
+<div class="card" style="overflow:hidden;margin-bottom:14px"><div class="card-h"><span class="card-t">Lines in the app but not in this file</span><span class="spacer"></span><button class="btn">Save decisions</button></div>
+  <table class="pt"><thead><tr><th>Line</th><th>Item code</th><th>Batch</th><th>Size</th><th>Decision</th></tr></thead>
+    <tbody>{% for line, action in plan.missing %}<tr>
+      <td class="mono">{{ line.ref }}</td><td class="mono">{{ line.code_id }}</td><td class="mono">{{ line.batch_no|default:"—" }}</td><td class="mono">{{ line.size_text }}</td>
+      <td><select class="inp" name="missing:{{ line.ref }}" style="width:150px"><option value="keep"{% if action == 'keep' %} selected{% endif %}>leave as is</option><option value="zero"{% if action == 'zero' %} selected{% endif %}>recount to 0</option></select></td>
+    </tr>{% endfor %}</tbody></table></div>
+{% endif %}
+</form>
+
+{% if recounts %}
+<div class="card" style="overflow:hidden;margin-bottom:14px"><div class="card-h"><span class="card-t">Recounts that will post</span></div>
+  <table class="pt"><thead><tr><th>Line</th><th>Item code</th><th class="r">Carats held</th><th class="r">Carats in file</th></tr></thead>
+    <tbody>{% for i in recounts %}<tr><td class="mono">{{ i.existing.ref }}</td><td class="mono">{{ i.row.item_code }}</td>
+      <td class="r">{{ i.held_ct|ct }}</td><td class="r">{{ i.row.ct|ct }}</td></tr>{% endfor %}</tbody></table></div>
+{% endif %}
+
+<form method="post" action="{% url 'inventory:dia_import_commit' batch.pk %}">{% csrf_token %}
+  <button class="btn pri"{% if counts.blocked %} disabled{% endif %}>Commit {{ counts.new|add:counts.update }} rows</button></form>
+{% endif %}
+{% endblock %}

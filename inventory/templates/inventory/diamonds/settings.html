@@ -1,0 +1,139 @@
+{% extends "inventory_base.html" %}{% load inventory_extras %}
+{% block title %}Settings · Diamonds{% endblock %}
+{% block crumb %}<b>Diamonds</b> &nbsp;›&nbsp; Settings{% endblock %}
+{% block content %}
+{% include "inventory/diamonds/_dsub.html" %}
+{% if denied %}
+<div class="dbanner"><h2>Settings</h2></div>
+<div class="banner crit"><div class="banner-ic">✕</div><div><h4>Not permitted for {{ role_label }}</h4>
+  <p>Master lists, suppliers and user rights need the Edit settings right.</p></div></div>
+{% else %}
+<div class="dbanner"><h2>Settings</h2></div>
+
+<div class="card" id="rights" style="margin-bottom:14px">
+  <div class="card-h"><span class="card-t">User rights</span><span class="spacer"></span>
+    <button class="btn sm pri" disabled title="Users are managed elsewhere">＋ Add user 🔒</button></div>
+  <div class="card-b" style="overflow:auto"><table class="pt">
+    <thead><tr><th>Role</th>{% for codename, label in rights %}<th>{{ label }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for role in matrix %}<tr{% if role.code == me %} class="sel"{% endif %}>
+      <td><b>{{ role.name }}</b>{% if role.code == me %} <span class="chip info"><span class="dot"></span>you</span>{% endif %}</td>
+      {% for codename, on in role.cells %}<td>
+        {% if is_admin and not role.locked %}
+        <form method="post" action="{% url 'inventory:dia_right_toggle' %}" class="inline">{% csrf_token %}
+          <input type="hidden" name="role" value="{{ role.code }}"><input type="hidden" name="right" value="{{ codename }}">
+          <input type="hidden" name="on" value="{% if on %}0{% else %}1{% endif %}">
+          <button class="chip {% if on %}good{% endif %}" style="cursor:pointer">{% if on %}<span class="dot"></span>yes{% else %}<span class="dot" style="background:var(--muted)"></span>no{% endif %}</button>
+        </form>
+        {% elif on %}<span class="chip good"><span class="dot"></span>yes</span>
+        {% else %}<span class="chip"><span class="dot" style="background:var(--muted)"></span>no</span>{% endif %}
+      </td>{% endfor %}
+    </tr>{% endfor %}</tbody></table></div>
+</div>
+
+{% if 'vendor_name' in supplier_card %}
+<div class="card" id="suppliers" style="margin-bottom:14px">
+  <div class="card-h"><span class="card-t">Suppliers</span><span class="spacer"></span>
+    <details class="inline"><summary class="btn sm pri">＋ Add supplier</summary>
+      <form method="post" action="{% url 'inventory:dia_supplier_save' %}" class="ctrow" style="margin-top:8px">{% csrf_token %}
+        <input class="inp mono" name="code" placeholder="Code" style="width:90px" required>
+        <input class="inp" name="name" placeholder="Supplier" style="width:180px" required>
+        <input class="inp" name="city" placeholder="City" style="width:120px">
+        <input class="inp" name="terms" placeholder="Terms" style="width:110px">
+        <button class="btn pri">Save</button></form></details></div>
+  <div class="card-b" style="overflow:auto"><table class="pt">
+    <thead><tr><th>Supplier</th><th>City</th><th>Terms</th><th class="r">Purchases</th><th>Actions</th></tr></thead>
+    <tbody>{% for v in suppliers %}<tr>
+      <td><b>{{ v.vendor_name }}</b> <span class="hint mono">{{ v.vendor_code }}</span></td><td>{{ v.city|default:"—" }}</td><td>{{ v.terms|default:"—" }}</td>
+      <td class="r">{{ v.purchases }}</td>
+      <td><details><summary class="btn sm gho">Edit</summary>
+        <form method="post" action="{% url 'inventory:dia_supplier_save' %}" class="ctrow" style="margin-top:6px">{% csrf_token %}
+          <input type="hidden" name="pk" value="{{ v.pk }}">
+          <input class="inp mono" name="code" value="{{ v.vendor_code }}" style="width:90px" required>
+          <input class="inp" name="name" value="{{ v.vendor_name }}" style="width:170px" required>
+          <input class="inp" name="city" value="{{ v.city|default:'' }}" style="width:110px">
+          <input class="inp" name="terms" value="{{ v.terms }}" style="width:100px">
+          <button class="btn pri">Save</button></form></details></td>
+    </tr>{% empty %}<tr><td colspan="5" class="hint">No suppliers yet.</td></tr>{% endfor %}</tbody></table></div>
+</div>
+{% endif %}
+
+{% for kind, title, items in cards %}
+<div class="card" id="{{ kind }}" style="margin-bottom:14px">
+  <div class="card-h"><span class="card-t">{{ title }}</span><span class="spacer"></span>
+    <span class="hint">{{ items|length }} values</span>
+    <details class="inline"><summary class="btn sm pri">＋ Add</summary>
+      <form method="post" action="{% url 'inventory:dia_term_add' %}" class="ctrow" style="margin-top:8px">{% csrf_token %}
+        <input type="hidden" name="kind" value="{{ kind }}"><input class="inp" name="value" required style="width:180px">
+        <button class="btn pri">Add</button></form></details></div>
+  <div class="card-b" style="overflow:auto"><table class="pt">
+    <thead><tr><th>Value</th><th>In use</th><th class="r">Carats</th><th>Actions</th></tr></thead>
+    <tbody>{% for item in items %}<tr>
+      <td>{% if item.bad %}<span class="chip warn"><span class="dot"></span>{{ item.term.value }}</span>{% else %}<b>{{ item.term.value }}</b>{% endif %}</td>
+      <td>{% if item.n %}{{ item.n }} line{{ item.n|pluralize }}{% else %}<span class="hint">unused</span>{% endif %}</td>
+      <td class="r">{% if item.ct %}{{ item.ct|ct }}{% else %}—{% endif %}</td>
+      <td><details class="inline"><summary class="btn sm gho">Rename</summary>
+          <form method="post" action="{% url 'inventory:dia_term_rename' item.term.pk %}" class="ctrow" style="margin-top:6px">{% csrf_token %}
+            <input class="inp" name="value" value="{{ item.term.value }}" style="width:160px" required><button class="btn pri">Save</button></form></details>
+        {% if item.n %}<span class="hint" style="margin-left:6px">in use</span>
+        {% else %}<form method="post" action="{% url 'inventory:dia_term_delete' item.term.pk %}" class="inline">{% csrf_token %}<button class="btn sm gho">Delete</button></form>{% endif %}</td>
+    </tr>{% endfor %}</tbody></table></div>
+</div>
+{% endfor %}
+
+<div class="card" id="codes" style="margin-bottom:14px">
+  <div class="card-h"><span class="card-t">Item codes</span><span class="spacer"></span><span class="hint">{{ codes|length }} codes</span></div>
+  <div class="card-b" style="overflow:auto"><table class="pt">
+    <thead><tr><th>Code</th><th>Shape</th><th>Colour</th><th>Clarity</th><th>Read</th><th class="r">Lines</th><th>Actions</th></tr></thead>
+    <tbody>{% for c, n in codes %}<tr>
+      <td class="mono"><b>{{ c.item_code }}</b></td><td>{{ c.shape|default:"—" }}</td><td>{{ c.colour|default:"—" }}</td><td>{{ c.clarity|default:"—" }}</td>
+      <td>{% if c.confirmed %}<span class="chip good"><span class="dot"></span>clean</span>{% else %}<span class="chip warn"><span class="dot"></span>{{ c.note|default:"unconfirmed" }}</span>{% endif %}</td>
+      <td class="r">{{ n }}</td>
+      <td><details><summary class="btn sm gho">Edit</summary>
+        <form method="post" action="{% url 'inventory:dia_code_save' c.item_code %}" class="ctrow" style="margin-top:6px">{% csrf_token %}
+          <select class="inp" name="shape" style="width:150px"><option value="">—</option>{% for t in terms_of.shape %}<option value="{{ t.pk }}"{% if t.pk == c.shape_id %} selected{% endif %}>{{ t.value }}</option>{% endfor %}</select>
+          <select class="inp" name="colour" style="width:120px"><option value="">—</option>{% for t in terms_of.colour %}<option value="{{ t.pk }}"{% if t.pk == c.colour_id %} selected{% endif %}>{{ t.value }}</option>{% endfor %}</select>
+          <select class="inp" name="clarity" style="width:110px"><option value="">—</option>{% for t in terms_of.clarity %}<option value="{{ t.pk }}"{% if t.pk == c.clarity_id %} selected{% endif %}>{{ t.value }}</option>{% endfor %}</select>
+          <label class="hint"><input type="checkbox" name="confirmed" value="1"{% if c.confirmed %} checked{% endif %}> confirmed</label>
+          <input class="inp" name="note" value="{{ c.note }}" placeholder="note" style="width:160px">
+          <button class="btn pri">Save</button></form></details></td>
+    </tr>{% endfor %}</tbody></table></div>
+</div>
+
+<div class="card" id="rates" style="margin-bottom:14px">
+  <div class="card-h"><span class="card-t">Rate card</span><span class="spacer"></span>
+    {% if can_rate %}<form method="post" enctype="multipart/form-data" action="{% url 'inventory:dia_rates_ivy' %}" class="inline">{% csrf_token %}
+      <label class="btn sm upload">Load rates from IVY export<input type="file" name="workbook" accept=".xlsx" onchange="this.form.requestSubmit()"></label></form>{% endif %}</div>
+  <div class="card-b" style="overflow:auto"><table class="pt">
+    <thead><tr><th>Code</th><th>Size</th><th class="r">Cost / ct</th><th class="r">Sale / ct</th>{% if can_rate %}<th>Actions</th>{% endif %}</tr></thead>
+    <tbody>{% for r in rates %}<tr><td class="mono">{{ r.code }}</td><td class="mono">{{ r.size_text|default:"any size" }}</td>
+      <td class="r">{% if 'cost_rate' in r %}{{ r.cost_rate|rupees }}{% else %}<span class="hint">hidden</span>{% endif %}</td>
+      <td class="r">{% if 'sale_rate' in r %}{{ r.sale_rate|rupees }}{% else %}<span class="hint">hidden</span>{% endif %}</td>
+      {% if can_rate %}<td><form method="post" action="{% url 'inventory:dia_rate_save' %}" class="ctrow">{% csrf_token %}
+        <input type="hidden" name="code" value="{{ r.code }}"><input type="hidden" name="size_text" value="{{ r.size_text }}">
+        <input class="inp tnum" name="cost_rate" value="{{ r.cost_rate|default_if_none:''|floatformat:'-4' }}" placeholder="cost / ct" style="width:100px">
+        <input class="inp tnum" name="sale_rate" value="{{ r.sale_rate|default_if_none:''|floatformat:'-4' }}" placeholder="sale / ct" style="width:100px">
+        <button class="btn sm">Save</button></form></td>{% endif %}
+    </tr>{% empty %}<tr><td colspan="5" class="hint">No rates yet.</td></tr>{% endfor %}</tbody></table>
+    {% if can_rate %}<form method="post" action="{% url 'inventory:dia_rate_save' %}" class="ctrow" style="margin-top:10px">{% csrf_token %}
+      <select class="inp mono" name="code" style="width:170px" required>{% for c, n in codes %}<option>{{ c.item_code }}</option>{% endfor %}</select>
+      <input class="inp mono" name="size_text" placeholder="size (blank = any)" style="width:140px">
+      <input class="inp tnum" name="cost_rate" placeholder="cost / ct" style="width:110px">
+      <input class="inp tnum" name="sale_rate" placeholder="sale / ct" style="width:110px">
+      <input class="inp" type="date" name="effective_from" value="{{ today|date:'Y-m-d' }}" style="width:150px">
+      <button class="btn pri">Set rate</button></form>{% endif %}
+  </div>
+</div>
+
+<div class="card" id="expansion">
+  <div class="card-h"><span class="card-t">Range → grade expansion</span></div>
+  <div class="card-b" style="overflow:auto"><table class="pt">
+    <thead><tr><th>Range</th><th>Expands to</th><th>Correct it</th></tr></thead>
+    <tbody>{% for t in expansions %}<tr>
+      <td class="mono"><b>{{ t.value }}</b></td>
+      <td>{% if t.expands_to %}{{ t.grades|join:" · " }}{% else %}<span class="chip crit"><span class="dot"></span>unresolved</span>{% endif %}</td>
+      <td><form method="post" action="{% url 'inventory:dia_expansion' t.pk %}" class="ctrow">{% csrf_token %}
+        <input class="inp" name="grades" value="{{ t.expands_to }}" style="max-width:230px"><button class="btn sm">Save</button></form></td>
+    </tr>{% endfor %}</tbody></table></div>
+</div>
+{% endif %}
+{% endblock %}

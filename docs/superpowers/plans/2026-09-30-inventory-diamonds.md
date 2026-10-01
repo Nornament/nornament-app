@@ -3325,3 +3325,542 @@ Run: `.venv/bin/python manage.py makemigrations --check --dry-run` — Expected:
 git add inventory/tests/test_masking.py inventory/tests/test_dia_parity.py docs/superpowers/specs/2026-09-30-inventory-diamonds-design.md
 git commit -m "Walk the diamond screens as every role, and prove the diamonds match the prototype"
 ```
+
+---
+
+## Added 2026-09-30: the real diamond file
+
+`Dia_Stock_Nitesh.xlsx` arrived and is not the documented pivot. The spec section "The real diamond file (2026-09-30)" holds the decisions; Tasks 12 and 13 build them, in order (13 needs 12).
+
+### Task 12: Read the real diamond file
+
+**Files:**
+- Rewrite: `inventory/importers/diamonds.py`, `inventory/tests/fixtures_diamonds.py`, `inventory/tests/test_dia_parse.py`
+- Modify: `inventory/dia_rules.py` (LB/LC colours, all-zero sieves), `inventory/tests/test_dia_rules.py`, `inventory/tests/test_dia_import_plan.py`, `inventory/tests/test_dia_import_views.py`, `inventory/tests/test_dia_parity.py` (`_register` only)
+
+**Interfaces:**
+- Consumes: `dia_rules.size_band`, `dia_plan.analyse/commit` (unchanged in this task).
+- Produces: `diamonds.parse(fileobj) -> list[Row]`, `diamonds.header_problems(fileobj) -> list[str]`, `diamonds.SHEETS`, `diamonds.CATEGORY_NAMES` (unchanged); `Row` gains `band_text=""`, `shape=""`, `colour=""`, `clarity=""`, `pcs=None`, `rate=None` (all defaulted, after the existing fields). `fixtures_diamonds.build_workbook()` (the full four-sheet fixture), `fixtures_diamonds.fancy_workbook(rows)` (one `FANCY FINAL` sheet, header `FANCY_HEADER + ["Category"]`, rows may omit trailing cells), `FANCY_HEADER`, `PLAN_ROWS`. Task 13 relies on all of these.
+
+- [ ] **Step 1: Write the failing tests**
+
+`inventory/tests/fixtures_diamonds.py` (replace the whole file):
+
+```python
+"""A diamond register in memory, shaped like the owner's Dia_Stock_Nitesh.xlsx.
+
+Three sheets are read (FANCY FINAL, Round_LB_LC, Round_RW) and FANCY is not.
+Every awkward shape of the real file is here once: a blank Code that must not
+carry down, a carat-band Code, Round_LB_LC's swapped Amount/PRICE headers and
+its repeated header, bare sieve numbers, a Round_RW row with no item code at
+zero carats, and the total rows.
+"""
+import io
+
+from openpyxl import Workbook
+
+FANCY_HEADER = ["Code", "Shape", "Gati Code", "Colour", "Clarity", "Seive/Size", "Pieces", "Weight", "Rate", "Amount",
+                "REMARKS"]
+FANCY_ROWS = [
+    [None, "Emerald", "DEMREF VVS VS", "EF", "VVS VS", "2.7*2.1 - 2.9*1.8", 2, 0.14, 42000, 5880],             # !2
+    ["M0.10-0.15", "Marquise", "DMIJ VVS VS ", "IJ", "VVS VS", "2.3*1.3 - 3.5*2.3", 6, 0.31, 32200, 9982],     # !3
+    [None, "Marquise", "DMLC SI  I", "LC", "SI  I", "2.8*1.75 - 4.2*2.1", 3, 0.22, 35700, 7854],               # !4
+    ["TB1.1", "Tapers Buggutte", "DTBEF VVS VS", "EF", "VVS VS", "-2BG", None, 14.86, 32000, 475520],          # !5
+    ["FCD.20", "Mix Shapes", "DFY", "Yellow  ", "Fancy", None, None, 80.13, 25000, 2003250, "Average Price"],  # !6
+    [None, None, None, None, None, None, None, None, None, 2502493],                                           # !7 total
+]
+LB_HEADER = ["Code", "Seive", "GATI CODE ", "COLOUR", "CLARITY", "WEIGHT", "Amount", "PRICE"]
+LB_ROWS = [
+    ["LB1.01", "0-1", "DRMN VVS VS", "MN", "VVS VS ", 0.67, 20000, 13400],     # !2  Amount is the rate here
+    ["LB1.10", 10, "DRMN VVS VS", "MN", "VVS VS ", 0.22, 16000, 3520],         # !3  a bare sieve number
+    ["Total=", None, None, None, None, None, None, 16920],                    # !4
+    [],                                                                        # !5
+    LB_HEADER,                                                                 # !6  the header again
+    ["LC3.1 ", 1, "DRKL VS SI", "KL", "VS SI", 0.12, 15500, 1860],             # !7
+]
+RW_HEADER = ["Code", "Seive", "Colour", "Clarity", "Weight", "Rate", "Amount"]
+RW_ROWS = [
+    ["RW1", "+0000", "EF", "VVS VS", 0.29, 42000, 12180],                     # !2
+    ["RW1", "+5", "EF", "VVS VS", 7.06, 35000, 247100],                       # !3
+    ["RW2", "+3", "GH", "VVS VS", 0, 31500, 0],                               # !4  zero carats
+    [None, None, None, None, None, None, 259280],                             # !5 total
+]
+#: FANCY holds the same lines as FANCY FINAL with older rates; it must never be read
+IGNORED_ROWS = [[None, "Emerald", "DXX VVS VS", "EF", "VVS VS", None, 1, 99.99, 1, 99.99]]
+
+
+def _save(workbook):
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
+def build_workbook():
+    workbook = Workbook()
+    workbook.remove(workbook.active)
+    for title, header, rows in (("FANCY", FANCY_HEADER, IGNORED_ROWS), ("FANCY FINAL", FANCY_HEADER, FANCY_ROWS),
+                                ("Round_LB_LC", LB_HEADER, LB_ROWS), ("Round_RW", RW_HEADER, RW_ROWS)):
+        sheet = workbook.create_sheet(title)
+        sheet.append(header)
+        for row in rows:
+            sheet.append(row)
+    return _save(workbook)
+
+
+#: for import-plan tests: FANCY FINAL rows with a Category column (index 11)
+PLAN_ROWS = [
+    [None, "Round", "DRFGH VS-SI", "FGH", "VS SI", "0000-000", None, 20.13, None, None, None, "Diamond"],       # !2
+    ["B-771", "Round", "DRFGH VS-SI", "FGH", "VS SI", "+6-12", None, 3.40, None, None, None, "Diamond"],       # !3
+    ["B-771", "Round", "DRFGH VS-SI", "FGH", "VS SI", "+2", None, 1.15, None, None, None, "Diamond"],         # !4
+    ["B-771", "Princess", "DPCEF VVS-VS", "EF", "VVS VS", "+2", None, 0.85, None, None, None, "Diamond"],      # !5
+    ["BW-1", None, "FPL", None, None, "20+", None, 43.21, None, None, None, "Foil Polki"],                    # !6
+    ["BW-1", None, "DTRQ VS-SI", None, None, "TR 0.20-0.24", None, 0.93, None, None, None, "Foil Polki"],     # !7
+]
+
+
+def fancy_workbook(rows=None):
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "FANCY FINAL"
+    sheet.append(FANCY_HEADER + ["Category"])
+    for row in PLAN_ROWS if rows is None else rows:
+        sheet.append([None if cell == "" else cell for cell in row])
+    return _save(workbook)
+```
+
+`inventory/tests/test_dia_parse.py` (replace the whole file):
+
+```python
+from decimal import Decimal
+from io import BytesIO
+
+from openpyxl import Workbook
+
+from inventory.importers import diamonds
+from inventory.tests.fixtures_diamonds import build_workbook
+
+
+def _rows():
+    return {r.src: r for r in diamonds.parse(build_workbook())}
+
+
+def test_three_sheets_are_read_and_fancy_is_not():
+    assert list(_rows()) == ["FANCY FINAL!2", "FANCY FINAL!3", "FANCY FINAL!4", "FANCY FINAL!5", "FANCY FINAL!6",
+                             "Round_LB_LC!2", "Round_LB_LC!3", "Round_LB_LC!7",
+                             "Round_RW!2", "Round_RW!3", "Round_RW!4"]
+
+
+def test_totals_never_become_stock():
+    assert sum(r.ct for r in diamonds.parse(build_workbook())) == Decimal("104.02")
+
+
+def test_a_carat_band_code_is_a_band_and_a_blank_code_does_not_carry_down():
+    rows = _rows()
+    band, blank = rows["FANCY FINAL!3"], rows["FANCY FINAL!4"]
+    assert (band.batch_no, band.band_text, band.size_text) == ("", "M 0.10-0.15", "2.3*1.3 - 3.5*2.3")
+    assert (blank.batch_no, blank.band_text) == ("", "")
+    assert rows["FANCY FINAL!5"].batch_no == "TB1.1"
+
+
+def test_columns_are_mapped_onto_the_master_lists():
+    rows = _rows()
+    marquise = rows["FANCY FINAL!3"]
+    assert (marquise.item_code, marquise.shape, marquise.colour, marquise.clarity, marquise.pcs, marquise.rate) == (
+        "DMIJ VVS VS", "Marquise", "I-J", "VVS-VS", 6, Decimal("32200"))
+    lc = rows["FANCY FINAL!4"]
+    assert (lc.item_code, lc.colour, lc.clarity) == ("DMLC SI I", "K-L", "SI-I")
+    taper = rows["FANCY FINAL!5"]
+    assert (taper.shape, taper.size_text, taper.pcs) == ("Tapered Baguette", "-2BG", None)
+    fancy = rows["FANCY FINAL!6"]
+    assert (fancy.shape, fancy.colour, fancy.clarity) == ("Mix", "Fancy Yellow", "")
+    assert {r.category for r in rows.values()} == {"Natural Diamond"}
+
+
+def test_the_round_sheets():
+    rows = _rows()
+    lb, bare, lc = rows["Round_LB_LC!2"], rows["Round_LB_LC!3"], rows["Round_LB_LC!7"]
+    assert (lb.batch_no, lb.item_code, lb.size_text, lb.colour, lb.rate) == (
+        "LB1.01", "DRMN VVS VS", "0-1", "M-N", Decimal("20000"))        # the swapped headers do not fool it
+    assert bare.size_text == "+10"
+    assert (lc.batch_no, lc.size_text, lc.clarity, lc.colour) == ("LC3.1", "+1", "VS-SI", "K-L")
+    rw, zero = rows["Round_RW!2"], rows["Round_RW!4"]
+    assert (rw.item_code, rw.batch_no, rw.size_text, rw.colour, rw.rate) == (
+        "DREF VVS VS", "RW1", "+0000", "E-F", Decimal("42000"))
+    assert (zero.item_code, zero.ct, zero.rate) == ("DRGH VVS VS", Decimal("0.00"), Decimal("31500"))
+
+
+def test_a_workbook_that_is_not_the_register_is_refused():
+    book = Workbook()
+    book.active.append(["Jewel Code", "Gross Wt"])
+    buffer = BytesIO()
+    book.save(buffer)
+    buffer.seek(0)
+    assert diamonds.header_problems(buffer)
+    assert diamonds.header_problems(build_workbook()) == []
+```
+
+Add to `inventory/tests/test_dia_rules.py`: change the two decode expectations `("DRLC VS-SI", "Round", "? LC")` → `("DRLC VS-SI", "Round", "K-L")` and `("DASCLB", "Asscher", "? LB")` → `("DASCLB", "Asscher", "M-N")`, and add:
+
+```python
+@pytest.mark.parametrize("size", ["+0", "+00", "+000", "+0000"])
+def test_an_all_zero_sieve_is_below_two(size):
+    assert dia_rules.size_band(size).band == "-2"
+```
+
+(Check the file's existing imports; add `import pytest` / `from inventory import dia_rules` only if missing.)
+
+- [ ] **Step 2: Run them to see them fail**
+
+Run: `POSTGRES_DB=<your db> ../nornament-app/.venv/bin/pytest inventory/tests/test_dia_parse.py inventory/tests/test_dia_rules.py -p no:warnings`
+Expected: FAIL (old parser: no such sheets / no `band_text`; decode still gives `? LC`; `+0000` reads as `+2-6`).
+
+- [ ] **Step 3: Implement**
+
+`inventory/dia_rules.py`:
+- `COLOURS`: replace `("LC", "? LC"), ("LB", "? LB")` with `("LC", "K-L"), ("LB", "M-N")` and add above the list the comment `#: LB is M-N and LC is K-L — the owner, 2026-09-30`.
+- `size_band`: an all-zero single sieve is `-2`. Change the first test to `if SUB.match(z) or z == "+1" or z.startswith("-2") or re.fullmatch(r"\+0+", z):`.
+
+`inventory/importers/diamonds.py` (replace the whole file):
+
+```python
+"""The diamond register (``Dia_Stock_Nitesh.xlsx``): flat sheets, one row per line.
+
+FANCY FINAL, Round_LB_LC and Round_RW are read; FANCY holds the same lines with
+older rates and is not. The file's own Shape, Colour and Clarity columns are
+mapped onto the master lists here, so a new item code arrives already read.
+A header row can repeat mid-sheet; total rows have no weight and are skipped.
+"""
+import re
+from dataclasses import dataclass
+from decimal import Decimal
+
+from openpyxl import load_workbook
+
+SHEETS = ("FANCY FINAL", "Round_LB_LC", "Round_RW")
+
+CATEGORY_NAMES = {"Diamond": "Natural Diamond", "HPHT Diamond": "HPHT Lab Grown", "Lab Grown": "Lab Grown (CVD?)",
+                  "Solitare": "Solitaire", "Foil Polki": "Foil Polki"}
+
+#: header text, lower-cased → field
+HEADERS = {"code": "code", "shape": "shape", "gati code": "item_code", "colour": "colour", "clarity": "clarity",
+           "seive/size": "size", "seive": "size", "pieces": "pcs", "weight": "ct", "rate": "rate",
+           "amount": "amount", "price": "price", "category": "category"}
+#: LB is M-N and LC is K-L — the owner, 2026-09-30
+COLOURS = {"EF": "E-F", "GH": "G-H", "FGH": "F-G-H", "IJ": "I-J", "KL": "K-L", "MN": "M-N", "LB": "M-N", "LC": "K-L"}
+SHAPES = {"ASSCHER": "Asscher", "TAPERS BUGGUTTE": "Tapered Baguette", "TRIANGLE": "Trillion",
+          "PIECUT (EM)": "Pie Cut Emerald", "PIECUT (OV)": "Pie Cut Oval", "PIECUT (PEAR)": "Pie Cut Pear",
+          "PIECUT (STAR)": "Pie Cut Star", "MIX SHAPES": "Mix"}
+#: a Code like M0.10-0.15 is a carat band, written the way dia_rules.size_band reads one
+BAND_CODE = re.compile(r"^([A-Z]{1,3})\s*(\d*\.\d+)-(\d*\.\d+)$")
+
+
+@dataclass
+class Row:
+    src: str
+    category: str
+    batch_no: str
+    item_code: str
+    size_text: str
+    ct: Decimal
+    band_text: str = ""
+    shape: str = ""
+    colour: str = ""
+    clarity: str = ""
+    pcs: int = None
+    rate: Decimal = None
+
+
+def _text(value):
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    return re.sub(r"\s+", " ", str(value)).strip()
+
+
+def _number(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return Decimal(str(value))
+
+
+def _size(value):
+    """A bare number in the sieve column is a sieve: 10 is +10."""
+    number = _number(value)
+    if number is not None and number == number.to_integral_value():
+        return f"+{int(number)}"
+    return _text(value)
+
+
+def _clarity(value):
+    return "" if value.lower() == "fancy" else re.sub(r"[\s-]+", "-", value).upper()
+
+
+def _colour(value, fancy):
+    if fancy:
+        return f"Fancy {value.title()}" if value else ""
+    return COLOURS.get(value.upper(), value)
+
+
+def _rate(money, ct):
+    """Per carat. Round_LB_LC has its Amount and PRICE headers swapped, so the rate
+    is whichever money value, times the weight, gives another; else the Rate column."""
+    values = [v for v in money.values() if v is not None]
+    if ct:
+        for i, rate in enumerate(values):
+            for j, total in enumerate(values):
+                if i != j and abs(rate * ct - total) <= max(Decimal("1"), total / 200):
+                    return rate
+    return money.get("rate")
+
+
+def _sheets(workbook):
+    return [name for name in SHEETS if name in workbook.sheetnames]
+
+
+def header_problems(fileobj):
+    """Why this is not the diamond register, or ``[]``."""
+    try:
+        workbook = load_workbook(fileobj, read_only=True, data_only=True)
+    except Exception as error:
+        return [f"It does not open as a workbook ({error})."]
+    names = _sheets(workbook)
+    if not names:
+        return [f"None of the diamond sheets ({', '.join(SHEETS)}) is in it."]
+    problems = []
+    for name in names:
+        first = next(workbook[name].iter_rows(max_row=1, values_only=True), ())
+        if "weight" not in [_text(v).lower() for v in first]:
+            problems.append(f"Sheet {name} has no Weight column in row 1.")
+    return problems
+
+
+def parse(fileobj):
+    workbook = load_workbook(fileobj, read_only=True, data_only=True)
+    rows = []
+    for name in _sheets(workbook):
+        where = {}
+        for number, values in enumerate(workbook[name].iter_rows(values_only=True), start=1):
+            labels = [_text(v).lower() for v in values]
+            if "weight" in labels:                      # the header, first or repeated
+                where = {HEADERS[label]: i for i, label in enumerate(labels) if label in HEADERS}
+                continue
+
+            def cell(field):
+                index = where.get(field)
+                return values[index] if index is not None and index < len(values) else None
+
+            ct = _number(cell("ct"))
+            code = _text(cell("code"))
+            if ct is None or code.lower().startswith("total"):
+                continue                                # totals and blank rows
+            band = BAND_CODE.match(code.upper())
+            raw_colour, raw_clarity = _text(cell("colour")), _text(cell("clarity"))
+            fancy = raw_clarity.lower() == "fancy"
+            item_code = _text(cell("item_code"))
+            if "item_code" not in where:                # Round_RW: RW1 EF VVS VS is DREF VVS VS
+                item_code = f"DR{raw_colour.upper()} {raw_clarity}".strip()
+            category = _text(cell("category"))
+            money = {field: _number(cell(field)) for field in ("rate", "amount", "price") if field in where}
+            rows.append(Row(
+                src=f"{name}!{number}",
+                category=CATEGORY_NAMES.get(category, category) or "Natural Diamond",
+                batch_no="" if band else code,
+                item_code=item_code,
+                size_text=_size(cell("size")),
+                ct=ct.quantize(Decimal("0.01")),
+                band_text=f"{band.group(1)} {band.group(2)}-{band.group(3)}" if band else "",
+                shape=SHAPES.get(_text(cell("shape")).upper(), _text(cell("shape"))),
+                colour=_colour(raw_colour, fancy),
+                clarity=_clarity(raw_clarity),
+                pcs=None if _number(cell("pcs")) is None else int(_number(cell("pcs"))),
+                rate=_rate(money, ct),
+            ))
+    return rows
+```
+
+Then port the tests that built the old pivot:
+- `test_dia_import_views.py`: `build_workbook` still exists (the four-sheet fixture) — keep the import; fix any expectation that named `Sheet!N` or a count from the old fixture so the test keeps its intent (upload → review → commit works; closed without `inv_masters`). The four-sheet fixture has 11 rows and 9 distinct item codes.
+- `test_dia_import_plan.py`: build with `fancy_workbook(rows)` and `PLAN_ROWS` instead of `build_workbook(rows)` and `ROWS_DEFAULT`; rows are FANCY FINAL-shaped with Category at index 11 and weight at index 7; srcs are `FANCY FINAL!N`. `DTRLC VS-SI` now decodes (LC is K-L), so the fixture's unconfirmed code is `DTRQ VS-SI` (colour `? Q`) — use it wherever the tests used `DTRLC VS-SI`, and its line is `FANCY FINAL!7`. `DUP` becomes `["B-771", "Round", "DRFGH VS-SI", "FGH", "VS SI", "+6-12", None, 3.40, None, None, None, "Diamond"]`; the changed-weight edit becomes `changed[1][7] = 3.10`; `del changed[5]` removes the trillion line. Keep every test's scenario and assertions otherwise; update counts only where the fixture itself changed and say which in your report.
+- `test_dia_parity.py`: rewrite `_register` only — one `FANCY FINAL` sheet, header `FANCY_HEADER + ["Category"]` (import `FANCY_HEADER` from the fixtures), and each prototype row as `[r["batch"] or None, None, r["item"], None, None, r["size"], None, r["wt"], None, None, None, RAW_CATEGORY[r["cat"]]]`. The expected figures must not change; if any fails, stop and report which and by how much.
+
+- [ ] **Step 4: Run the tests**
+
+Run the two files from Step 2, then `inventory` and `accounts` in full. Expected: all pass, parity ran (not skipped).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add inventory/importers/diamonds.py inventory/dia_rules.py inventory/tests/fixtures_diamonds.py inventory/tests/test_dia_parse.py inventory/tests/test_dia_rules.py inventory/tests/test_dia_import_plan.py inventory/tests/test_dia_import_views.py inventory/tests/test_dia_parity.py
+git commit -m "Read the owner's diamond file: three flat sheets, columns mapped onto the master lists"
+```
+
+### Task 13: Codes from the file, pieces, zero rows, and cost prices
+
+**Files:**
+- Modify: `inventory/importers/dia_plan.py`, `inventory/dia_services.py` (`rate_table`, `price`, `open_lines`), `inventory/views_dia_import.py` (one message), `inventory/templates/inventory/diamonds/import_review.html` (the empty count)
+- Test: `inventory/tests/test_dia_import_plan.py` (add), `inventory/tests/test_dia_services.py` (add), create `inventory/tests/test_dia_real_file.py`
+
+**Interfaces:**
+- Consumes: Task 12's `Row` fields and `fancy_workbook`/`build_workbook`/`PLAN_ROWS`.
+- Produces: `Plan.counts()` gains `"empty"` (zero-carat rows that open nothing); `commit(...)` result gains `"rates"` (cost rows written) and `"prices_skipped"` (bool); `dia_services.rate_table()` returns `{(code_id, size_text): {"cost": Decimal|None, "sale": Decimal|None}}` and `price(line, rates)` keeps its `(cost, sale)` return.
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `inventory/tests/test_dia_import_plan.py`:
+
+```python
+from django.contrib.auth.models import Permission
+
+from inventory.models import DiamondRate, Movement
+from inventory.tests.fixtures_diamonds import build_workbook
+
+
+def _file_plan(decisions=None):
+    return dia_plan.analyse(diamonds.parse(build_workbook()), decisions)
+
+
+def test_a_code_takes_the_files_columns_and_is_confirmed_when_they_agree():
+    codes = {c.item_code: c for c in _file_plan().codes}
+    marquise = codes["DMIJ VVS VS"]
+    assert (marquise.shape, marquise.colour, marquise.clarity, marquise.confirmed) == ("Marquise", "I-J", "VVS-VS", True)
+    fancy = codes["DFY"]
+    assert (fancy.shape, fancy.colour, fancy.clarity, fancy.confirmed) == ("Mix", "Fancy Yellow", "", True)
+
+
+def test_a_column_that_disagrees_with_the_code_leaves_it_unconfirmed():
+    rows = [[None, "Marquise", "DMMN VVS VS", "MN", "VS-SI", "4.0*2.5", 4, 0.61, 26000, 15860]]
+    code = dia_plan.analyse(diamonds.parse(fancy_workbook(rows))).codes[0]
+    assert (code.clarity, code.confirmed) == ("VS-SI", False) and "clarity" in code.note
+
+
+def test_two_rows_of_one_code_that_disagree_leave_it_unconfirmed():
+    rows = [[None, "Pear", "DPRGH VVS VS", "GH", "VVS VS", "2.8*1.5", 10, 1.34, 37800, 50652],
+            [None, "Oval", "DPRGH VVS VS", "GH", "VVS VS", "3.0*2.0", 1, 0.20, 37800, 7560]]
+    code = dia_plan.analyse(diamonds.parse(fancy_workbook(rows))).codes[0]
+    assert (code.shape, code.confirmed) == ("Pear", False) and "Oval" in code.note
+
+
+def test_zero_rows_open_nothing_and_pieces_open_with_the_carats(admin_user_):
+    plan = _file_plan()
+    assert plan.counts()["empty"] == 1 and plan.counts()["blocked"] == 0
+    result = dia_plan.commit(plan, admin_user_)
+    assert result["created"] == 10
+    assert not DiamondLine.objects.filter(src="Round_RW!4").exists()
+    opening = Movement.objects.get(diamond__src="FANCY FINAL!3")
+    assert (opening.pcs, opening.ct) == (6, Decimal("0.31"))
+    marquise = DiamondLine.objects.get(src="FANCY FINAL!3")
+    assert (marquise.band.value, marquise.ct_lo, marquise.ct_hi) == ("carat band", Decimal("0.100"), Decimal("0.150"))
+
+
+def test_a_held_line_that_comes_back_at_zero_is_recounted_to_zero(admin_user_):
+    dia_plan.commit(_plan(), admin_user_)
+    changed = [list(r) for r in PLAN_ROWS]
+    changed[1][7] = 0
+    plan = _plan(changed)
+    assert plan.counts()["recount"] == 1
+    dia_plan.commit(plan, admin_user_)
+    assert dia_services.stocked_lines().get(src="FANCY FINAL!3").on_ct == Decimal("0")
+
+
+def test_commit_saves_each_lines_cost_to_the_rate_card_once(admin_user_):
+    dia_plan.commit(_file_plan(), admin_user_)
+    rates = dia_services.rate_table()
+    assert rates[("DMIJ VVS VS", "2.3*1.3 - 3.5*2.3")]["cost"] == Decimal("32200")
+    assert rates[("DRMN VVS VS", "0-1")]["cost"] == Decimal("20000")
+    before = DiamondRate.objects.count()
+    result = dia_plan.commit(_file_plan(), admin_user_)                # the same file again
+    assert result["rates"] == 0 and DiamondRate.objects.count() == before
+
+
+def test_a_login_that_cannot_see_cost_imports_stock_without_prices(production_user):
+    production_user.user_permissions.add(Permission.objects.get(codename="inv_masters"))
+    production_user = type(production_user).objects.get(pk=production_user.pk)       # fresh permission cache
+    result = dia_plan.commit(_file_plan(), production_user)
+    assert result["created"] == 10 and result["prices_skipped"] and not DiamondRate.objects.exists()
+```
+
+Append to `inventory/tests/test_dia_services.py` (use the file's existing imports and fixtures; add what is missing):
+
+```python
+def test_a_cost_only_rate_does_not_hide_an_earlier_sale_rate(admin_user_):
+    dia_seed.load(DiamondTerm)
+    code = DiamondCode.objects.create(item_code="DREF VVS VS")
+    dia_services.set_rate(admin_user_, code, "+5", None, "50000", None)
+    DiamondRate.objects.create(code=code, size_text="+5", cost_rate=Decimal("35000"))
+    rates = dia_services.rate_table()
+    assert rates[("DREF VVS VS", "+5")] == {"cost": Decimal("35000"), "sale": Decimal("50000")}
+```
+
+(If `test_dia_services.py` has no module-level `django_db` mark, decorate this test with `@pytest.mark.django_db`.)
+
+Create `inventory/tests/test_dia_real_file.py`:
+
+```python
+"""The owner's own diamond file, imported whole (skipped when it is not beside the repo)."""
+from decimal import Decimal
+
+import pytest
+from django.conf import settings
+
+from inventory import dia_seed, dia_services
+from inventory.importers import dia_plan, diamonds
+from inventory.models import DiamondTerm
+
+pytestmark = [pytest.mark.django_db, pytest.mark.golden]
+
+REAL = settings.BASE_DIR.parent / "Dia_Stock_Nitesh.xlsx"
+
+
+def test_the_owners_file_imports_whole(admin_user_):
+    if not REAL.exists():
+        pytest.skip(f"{REAL} is not beside the repo")
+    dia_seed.load(DiamondTerm)
+    rows = diamonds.parse(str(REAL))
+    assert len(rows) == 320
+    plan = dia_plan.analyse(rows)
+    counts = plan.counts()
+    assert (counts["blocked"], counts["empty"]) == (0, 39)
+    dia_plan.commit(plan, admin_user_)
+    lines = list(dia_services.stocked_lines())
+    assert len(lines) == 281
+    assert sum(line.on_ct for line in lines) == Decimal("546.96")
+    rates = dia_services.rate_table()
+    cost = sum(line.on_ct * dia_services.price(line, rates)[0] for line in lines)
+    assert abs(cost - Decimal("14798794")) <= 10
+```
+
+(Check `golden` is a registered marker in the pytest config — `test_dia_parity.py` uses it; if not, drop it.)
+
+- [ ] **Step 2: Run them to see them fail**
+
+Run: `POSTGRES_DB=<your db> ../nornament-app/.venv/bin/pytest inventory/tests/test_dia_import_plan.py inventory/tests/test_dia_services.py inventory/tests/test_dia_real_file.py -p no:warnings`
+Expected: the new tests FAIL (codes ignore the columns; no `empty`; no rates written; `rate_table` returns rate objects).
+
+- [ ] **Step 3: Implement**
+
+`dia_services.py`:
+- `rate_table()`: walk `DiamondRate.objects.order_by("effective_from", "pk")` and keep, per `(code_id, size_text)`, `{"cost": ..., "sale": ...}` where each field is overwritten only by a row whose value for it is not `None`.
+- `price(line, rates)`: cost and sale each from the exact size if set there, else from the any-size (`""`) entry; `(None, None)` when neither. Update every caller of `rate_table`/`price` that read rate objects (grep `rate_table(`, `price(` in `inventory/`); the settings rate card may list `DiamondRate` rows directly — leave that alone if it does.
+- `open_lines`: pop `pcs` from each spec as it pops `ct` (default `None`) and put it on the opening `Movement` (`pcs=`).
+
+`dia_plan.py`:
+- `_codes(rows, decisions)`: for each new item code, collect the column values of every row that has it. Take the first row's non-empty column value for each of shape/colour/clarity, else the decoded value. Notes, joined with "; ": for each field where another row of the code gives a different non-empty value, `"rows disagree on <field>: <a> / <b>"`; for each field where the decode is definite (decoded value non-empty, not starting with `?`, shape not `Fancy Colour`, and `decoded.note` empty) and the column value is non-empty and different, `"<field>: file says <column>, code reads <decoded>"`. If the file gave no value for a field, keep `decoded.note`. `confirmed` = no note and shape and colour set and (clarity set or colour starts with `Fancy`), unless the review decided otherwise (the existing `choice` override stays as it is).
+- `analyse`: a row whose `item_code` is empty gets `problem = "No item code"`. A row with `ct == 0` and no existing line (after matching) gets `action = "skip"` and `item.empty = True` (add `empty: bool = False` to `Item`); a zero row that matches a line is an ordinary update with `recount`. `Plan.counts()` adds `"empty": sum(1 for i in self.items if i.empty)`; empty rows count in `skip`, never in `new`.
+- `commit`: band from `dia_rules.size_band(row.band_text or row.size_text)`; `shape_override` logic unchanged; add `"pcs": row.pcs` to the spec for new lines. Empty rows are skipped like any skip (not counted in `result["skipped"]`: count them in `result["empty"]`). After lines are written: `can_cost = user.has_perm(VIEW_COST)`; `result["prices_skipped"] = not can_cost and any(i.row.rate is not None for i in live items)`; when `can_cost`, for each non-skipped row with a rate, deduplicated by `(item_code, size_text)` (last row wins), create `DiamondRate(code_id=..., size_text=..., cost_rate=rate, set_by=user)` only when `rate_table()`'s exact-size cost for that key differs; `result["rates"]` = rows created. Import `VIEW_COST` from `accounts.capabilities` and `DiamondRate` from `..models`.
+
+`views_dia_import.py`: after a successful commit, when `result["prices_skipped"]`, add a `messages.warning(request, "The stock was imported without prices: your role cannot see costs.")` next to the existing success message.
+
+`import_review.html`: where the counts are shown, add the empty count in the same style, labelled `at 0 ct, nothing to open`, only when it is non-zero.
+
+- [ ] **Step 4: Run the tests**
+
+Run the three files from Step 2, then `inventory` and `accounts` in full. Expected: all pass; `test_dia_real_file.py` and `test_dia_parity.py` both ran (not skipped). If the real-file figures differ, do not change them: report the actual numbers and where they come from.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add inventory/importers/dia_plan.py inventory/dia_services.py inventory/views_dia_import.py inventory/templates/inventory/diamonds/import_review.html inventory/tests/test_dia_import_plan.py inventory/tests/test_dia_services.py inventory/tests/test_dia_real_file.py
+git commit -m "Diamond import: codes from the file's columns, pieces, zero rows, cost prices to the rate card"
+```

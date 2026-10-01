@@ -146,7 +146,10 @@ class Movement(models.Model):
         SAMPLE = "Sample"
         RECOUNT_ADJUSTMENT = "Recount Adjustment"
 
-    pouch = models.ForeignKey(Pouch, on_delete=models.PROTECT, related_name="movements")
+    pouch = models.ForeignKey(Pouch, on_delete=models.PROTECT, related_name="movements", null=True, blank=True)
+    diamond = models.ForeignKey(
+        "DiamondLine", on_delete=models.PROTECT, related_name="movements", null=True, blank=True
+    )
     occurred_at = models.DateTimeField(default=timezone.now)
     reason = models.CharField(max_length=32, choices=Reason.choices)
     direction = models.CharField(max_length=3, choices=[(IN, "In"), (OUT, "Out")])
@@ -164,9 +167,16 @@ class Movement(models.Model):
     class Meta:
         db_table = "inv_movement"
         ordering = ["-occurred_at", "-pk"]
+        constraints = [
+            # one ledger for both kinds of stock: a movement moves exactly one thing
+            models.CheckConstraint(
+                condition=Q(pouch__isnull=False, diamond__isnull=True) | Q(pouch__isnull=True, diamond__isnull=False),
+                name="inv_movement_one_owner",
+            )
+        ]
 
     def __str__(self):
-        return f"{self.reason} {self.direction} {self.pouch_id}"
+        return f"{self.reason} {self.direction} {self.pouch_id or self.diamond_id}"
 
 
 class PriceEntry(models.Model):
@@ -188,3 +198,112 @@ class PriceEntry(models.Model):
 
     def __str__(self):
         return f"{self.kind} {self.rate}/ct on {self.pouch_id}"
+
+
+class DiamondTerm(models.Model):
+    """One value in one of the diamond master lists.
+
+    Every list the Settings page edits is rows here, so renaming a value renames
+    it on every code and line that uses it.
+    """
+
+    CATEGORY, SHAPE, COLOUR, CLARITY, BAND = "category", "shape", "colour", "clarity", "band"
+    KINDS = [(CATEGORY, "Category"), (SHAPE, "Shape"), (COLOUR, "Colour grade"),
+             (CLARITY, "Clarity grade"), (BAND, "Size band")]
+
+    kind = models.CharField(max_length=10, choices=KINDS)
+    value = models.CharField(max_length=60)
+    sort = models.IntegerField(default=1000)
+    expands_to = models.CharField(
+        max_length=120, blank=True, help_text="Space-separated single grades this range stands for."
+    )
+
+    class Meta:
+        db_table = "inv_dia_term"
+        ordering = ["kind", "sort", "value"]
+        constraints = [models.UniqueConstraint(fields=["kind", "value"], name="inv_dia_term_key")]
+
+    def __str__(self):
+        return self.value
+
+    def grades(self):
+        """The single grades a filter chip matches this value by.
+
+        A range answers for each grade it spans; a plain grade for itself; a
+        fancy colour or an unresolved token for none, so it never poses as a grade.
+        """
+        if self.expands_to:
+            return self.expands_to.split()
+        if self.value.startswith(("?", "(", "Fancy")):
+            return []
+        return [self.value]
+
+
+class DiamondCode(models.Model):
+    """One item code (``DRFGH VS-SI``) and what it means. Fixed once, every line follows."""
+
+    item_code = models.CharField(max_length=40, primary_key=True)
+    shape = models.ForeignKey(DiamondTerm, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    colour = models.ForeignKey(DiamondTerm, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    clarity = models.ForeignKey(DiamondTerm, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    confirmed = models.BooleanField(default=False)
+    note = models.CharField(max_length=120, blank=True)
+
+    class Meta:
+        db_table = "inv_dia_code"
+        ordering = ["item_code"]
+
+    def __str__(self):
+        return self.item_code
+
+
+class DiamondLine(models.Model):
+    """One diamond stock line. Carats on hand are the sum of its movements."""
+
+    ref = models.CharField(max_length=12, unique=True, editable=False)
+    category = models.ForeignKey(DiamondTerm, on_delete=models.PROTECT, related_name="+")
+    code = models.ForeignKey(DiamondCode, on_delete=models.PROTECT, related_name="lines")
+    shape_override = models.ForeignKey(
+        DiamondTerm, null=True, blank=True, on_delete=models.PROTECT, related_name="+",
+        help_text="From a carat-band size prefix, when the code names no shape.",
+    )
+    batch_no = models.CharField(max_length=40, blank=True)
+    size_text = models.CharField(max_length=40, blank=True)
+    band = models.ForeignKey(DiamondTerm, on_delete=models.PROTECT, related_name="+")
+    ct_lo = models.DecimalField(max_digits=8, decimal_places=3, null=True, blank=True)
+    ct_hi = models.DecimalField(max_digits=8, decimal_places=3, null=True, blank=True)
+    src = models.CharField(max_length=24, blank=True, help_text="Sheet and row it came from.")
+    import_batch = models.ForeignKey(
+        "stock.ImportBatch", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "inv_dia_line"
+        ordering = ["pk"]
+
+    def __str__(self):
+        return f"{self.ref} {self.code_id}"
+
+    @property
+    def shape(self):
+        return self.shape_override or self.code.shape
+
+
+class DiamondRate(models.Model):
+    """The inventory's own rate card: per item code, per size ("" = any size). Latest wins."""
+
+    code = models.ForeignKey(DiamondCode, on_delete=models.PROTECT, related_name="rates")
+    size_text = models.CharField(max_length=40, blank=True)
+    cost_rate = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)
+    sale_rate = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)
+    effective_from = models.DateField(default=timezone.localdate)
+    set_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "inv_dia_rate"
+        ordering = ["code", "size_text", "-effective_from", "-pk"]
+
+    def __str__(self):
+        return f"{self.code_id} {self.size_text or 'any size'}"

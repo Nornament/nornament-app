@@ -172,6 +172,7 @@ class Vendor(AppModel):
     name = models.CharField(max_length=120)
     contact = models.CharField(max_length=120, blank=True, null=True)
     city = models.CharField(max_length=80, blank=True, null=True)
+    terms = models.CharField(max_length=60, blank=True, help_text="Payment terms, e.g. 30 days, Advance.")
     avg_tat_days = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     is_active = models.BooleanField(default=True)
 

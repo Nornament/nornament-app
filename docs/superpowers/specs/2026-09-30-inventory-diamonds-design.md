@@ -112,3 +112,43 @@ Service rules raise `ServiceError`, shown as a message: missing right; a blocked
 ## Dependency
 
 `DIAMOND 31.xlsx` is not available. Decision (2026-09-30): build the parse step to the layout `build_dia.py` documents, test it against a workbook rebuilt from the prototype's embedded diamond data, and correct the parse step when the real file arrives. If the real layout differs, only `inventory/importers/diamonds.py`'s parse and its fixture change.
+
+## Changed while planning
+
+- **Category belongs to the line.** The prototype takes each line's category from column A of its row, so `DiamondLine.category` holds it; `DiamondCode` holds shape, colour and clarity.
+- **A line can carry a shape override** (`DiamondLine.shape_override`): when a code names no shape and the size is a carat band with a shape prefix (`TR 0.20-0.24`), the shape comes from the size, as in the prototype.
+- **Carat-band size prefixes read the IVY way too:** `PR` = Pear, `PC` = Princess.
+- **A single leftover ladder letter is a colour grade** (`DTBG` → colour G, `SOMG` → Marquise G), as the prototype read it, but the code stays unconfirmed.
+- **Setting a rate needs both `view_cost` and `view_sale`**, because one rate row carries both.
+- **The band list is seeded with `?`** for a size that fits no band.
+- **Diamond parity** is `inventory/tests/test_dia_parity.py` (marked `golden`): the prototype's `const DD` rebuilt in file order and imported must give 348 lines, 673.90 ct, 270 batches, 84 codes and the prototype's category and band totals.
+
+## The real diamond file (2026-09-30)
+
+The owner supplied `Dia_Stock_Nitesh.xlsx` in place of `DIAMOND 31.xlsx`. It is not the pivot `build_dia.py` documents: four flat sheets, one row per line, header in row 1. Decisions, approved by the owner the same day:
+
+- **Sheets.** `FANCY FINAL`, `Round_LB_LC` and `Round_RW` are read; `FANCY` (the same 117 lines in another order, two rates swapped) is ignored. Header rows (repeated mid-sheet in `Round_LB_LC`), `Total=` rows and the unlabelled total rows (no weight) are skipped.
+- **Columns.** Item code = `Gati Code` (whitespace collapsed). `Round_RW` has none, so it is built as `DR{colour} {clarity}` (RW1 EF VVS VS → `DREF VVS VS`, the prototype's naming). `Code` is a carat band when it reads as one (`M0.10-0.15`, `EM0.16-019` is not one) and the batch number otherwise (`FCD.1`, `TB1.1`, `LB1.01`, `RW1`); blank means neither and is never carried down. Size = `Seive/Size` or `Seive`; a bare number there is a sieve (`10` → `+10`). Shape, colour, clarity and pieces come from their columns. An optional `Category` column is honoured; without it every line is Natural Diamond. The Foil Polki, HPHT, Solitaire and Lab Grown stock will come from another file later, through the same importer.
+- **Vocabulary.** File values are mapped onto the master lists: colour `EF`→`E-F`, `GH`→`G-H`, `FGH`→`F-G-H`, `IJ`→`I-J`, `KL`→`K-L`, `MN`→`M-N`; **`LB` is colour M-N and `LC` is K-L** (owner, 2026-09-30), in the file and in item codes; clarity separators are made hyphens (`SI  I`, `SI I`, `SI-I` → `SI-I`; `VS SI` → `VS-SI`); a row whose clarity is `Fancy` has colour `Fancy <colour>` and no clarity; shapes `ASSCHER`→Asscher, `Tapers Buggutte`→Tapered Baguette, `Triangle`→Trillion, `Piecut (EM/OV/Pear/Star)`→Pie Cut Emerald/Oval/Pear/Star, `Mix Shapes`→Mix. Unknown values become new terms, editable in Settings.
+- **Item codes.** A new code takes its shape, colour and clarity from the file's columns, falling back to decoding the code where a column is blank. It is confirmed when the columns give all three (shape and colour for a fancy colour) and nothing disagrees with the decoded code; otherwise it stays unconfirmed with a note naming the disagreement (including two rows of one code that disagree).
+- **Pieces** go into the opening balance with the carats.
+- **Zero-carat rows** open nothing; if one matches a line already held, that line is recounted to zero.
+- **Cost.** The file's per-carat rate is the **cost** rate. `Round_LB_LC` has its `Amount` and `PRICE` headers swapped, so the rate is whichever of the two money columns, times the weight, gives the other; failing that, the column headed `Rate`. On commit, and only for a login with `view_cost`, each line's cost rate goes to the rate card for its item code and size when it differs from the current one; without `view_cost` the stock is imported and the page says the prices were skipped. Sale prices still come from the rate card (the IVY loader or Settings).
+- **Rate lookup, per field.** Cost and sale each resolve to the latest row that sets them (exact size, then any size), so a cost-only row never hides an earlier sale rate.
+- **Real-file check.** `inventory/tests/test_dia_real_file.py` imports `Dia_Stock_Nitesh.xlsx` from beside the repo (skipped if absent): 320 rows read, 281 lines opened (39 zero-carat rows open nothing), 546.96 ct, nothing blocked, and a cost value of ₹1,47,98,794 give or take ₹10 (the file's own sheet totals).
+- **Parity** still runs: the prototype's `const DD`, rebuilt as a `FANCY FINAL` sheet with the Category column and the columns it has, must still give 348 lines, 673.90 ct, 270 batches, 84 codes and the same category and band totals.
+
+## Changed in the final review (2026-09-30)
+
+- **SI-I1** (owner): "SI I1" is a clarity range covering SI1, SI2 and I1; seeded, added by migration `0005` where missing or blank, and read from item codes (`DRGH SI I1` → clarity SI-I1, no note).
+- **Per-stone band** (owner): a new line whose size fits no band but which has pieces and carats is a carat band at its weight per stone (ct ÷ pieces, 3 decimals, as both ends). Parity is unchanged; the prototype has no pieces.
+- **Settings owns category, band and shape once a line is open.** A re-import updates only batch, size text, source row and the carat range. Known limit: a *new* line still takes the file's text, so a renamed term's old name comes back for new lines.
+- **Canonical item codes.** Spaces are squashed and the clarity pair is hyphenated (`VVS VS` → `VVS-VS`, `SI I` → `SI-I`, `SI I1` → `SI-I1`) when the register is read and when the IVY export is matched, so the export's rates find their codes. Still 84 codes in parity and 73 in the real file.
+- **Suppliers need `view_vendor`.** The Suppliers card is shown and saved only for a role that may see vendors; it edits `stock.Vendor`, part 1's supplier store.
+- **Rate card** shows the current cost and sale per code and size (the same per-field lookup as pricing), each with an inline edit that posts a new dated rate.
+- **Lines at 0 ct leave Search**: the table, "n of m lines" and the rail count leave them out.
+- **"Missing" is scoped to the file's sheets**: a line is offered for recount to zero only when its source sheet is one of the sheets in the file being imported.
+- **Still in the "?" band** after the per-stone rule: 50 of the real file's 281 lines (378.45 ct), which have no readable size and no pieces; 33 lines were banded per stone.
+- **A re-import moves a line's carat range only to another range** (a per-stone reading replaces a per-stone reading); it never adds or removes one, so band and range always agree.
+- **A rate dated in the future waits for its day**: the rate card and prices use only rows effective today or earlier.
+- **A row that only "skip" can clear** (no item code, rate out of range) is offered only skip on the review page, and keeps its own problem even when its key is also ambiguous.

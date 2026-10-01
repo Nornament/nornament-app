@@ -1,0 +1,7 @@
+<div class="dsub">
+  <a class="{% if dtab == 'search' %}on{% endif %}" href="{% url 'inventory:diamonds' %}{% if as_role %}?as={{ as_role }}{% endif %}">Search stock</a>
+  <span title="Coming soon">Job cards 🔒</span>
+  <span title="Coming soon">Assortments 🔒</span>
+  <span title="Coming soon">Purchases 🔒</span>
+  <a class="{% if dtab == 'settings' %}on{% endif %}" href="{% url 'inventory:dia_settings' %}{% if as_role %}?as={{ as_role }}{% endif %}">Settings</a>
+</div>
