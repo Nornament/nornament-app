@@ -54,8 +54,9 @@ would fight on every page.
     <div class="tabs">
       {% if side == 'diamonds' %}
         <button disabled title="Coming soon">Movements 🔒</button>
-        <button disabled title="Coming soon">Purchase 🔒</button>
-        <a class="on" href="{% url 'inventory:diamonds' %}">Diamond stock</a>
+        {% if caps.inv_purchase and caps.view_cost and caps.view_vendor %}<a class="{% if dtab == 'purchase' %}on{% endif %}" href="{% url 'inventory:dia_purchase' %}">Purchase</a>
+        {% else %}<button disabled>Purchase 🔒</button>{% endif %}
+        <a class="{% if dtab != 'purchase' %}on{% endif %}" href="{% url 'inventory:diamonds' %}">Diamond stock</a>
         <button disabled title="Coming soon">Stock take 🔒</button>
       {% else %}
         <a class="{% if tab == 'shelf' %}on{% endif %}" href="{% url 'inventory:shelf' %}">Shelf</a>
