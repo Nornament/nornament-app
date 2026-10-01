@@ -190,9 +190,34 @@ def test_undo_reverses_only_the_latest_entry(admin_user_, shelf, parties):
     assert doc.status == S.OPEN
 
 
-def test_undo_is_only_for_an_open_job_work_or_memo(admin_user_, shelf):
+def test_undo_is_only_for_an_open_or_closed_job_work_or_memo(admin_user_, shelf):
     doc = _single(admin_user_, shelf["onyx"], R.BREAKAGE, OUT, "1")
-    with pytest.raises(ServiceError, match="Only an open job work or memo"):
+    with pytest.raises(ServiceError, match="Only an open or closed job work or memo"):
+        ledger.undo_last(admin_user_, doc)
+
+
+def test_undo_reopens_a_document_its_own_settlement_had_closed(admin_user_, shelf, parties):
+    """Owner, 2026-10-01: undo works on a challan or memo its settlements closed, not only an open one."""
+    onyx = shelf["onyx"]
+    doc = _job(admin_user_, parties)
+    ledger.post(admin_user_, doc, [Line(onyx, R.JOB_WORK_OUT, OUT, 5, D("3"))])
+    ledger.post(admin_user_, doc, [Line(onyx, R.CONSUMED, SETTLE, 5, D("3"))])
+    assert doc.status == S.CLOSED and ledger.outstanding(doc)[onyx.pk] == (0, D("0"))
+    undone = ledger.undo_last(admin_user_, doc)
+    assert undone.reverses.reason == R.CONSUMED
+    doc.refresh_from_db()
+    assert doc.status == S.OPEN and ledger.outstanding(doc)[onyx.pk] == (5, D("3"))
+
+
+def test_undo_refuses_a_reversed_document(admin_user_, shelf, parties):
+    onyx = shelf["onyx"]
+    doc = _job(admin_user_, parties)
+    ledger.post(admin_user_, doc, [Line(onyx, R.JOB_WORK_OUT, OUT, 5, D("3"))])
+    ledger.post(admin_user_, doc, [Line(onyx, R.CONSUMED, SETTLE, 5, D("3"))])
+    ledger.reverse_document(admin_user_, doc)
+    doc.refresh_from_db()
+    assert doc.status == S.REVERSED
+    with pytest.raises(ServiceError, match="Only an open or closed job work or memo"):
         ledger.undo_last(admin_user_, doc)
 
 

@@ -80,6 +80,7 @@ For a Job work or Memo document, per pouch: carats (and pieces) **out** − **in
 9. **Corrections** — nothing is edited.
    - **Reverse document** (any kind) posts a reversing movement for every movement on it not already reversed, and marks it Reversed. Refused if any balance would go negative, or if a pouch it created (purchase, split) has moved since. A purchase's or split's new pouches remain, at zero.
    - **Undo last entry** on an open job work or memo reverses its most recent un-reversed entry (a mistaken return, consumption, loss or sale), so one wrong line does not mean reversing the whole challan.
+     Also on a challan or memo its settlements closed; undoing reopens it when something is outstanding again (owner, 2026-10-01).
 
 ## Screens
 

@@ -226,17 +226,10 @@ def _settle_status(document):
         document.save(update_fields=["status"])
 
 
-@transaction.atomic
-def post(user, document, lines, occurred_on=None):
-    """Write a document's movements — all of them, or none — and settle its status.
-
-    Internal: every caller has already checked the right for its action.
-    ``occurred_on`` is the day it happened (``None`` is now).
-    """
-    if document.status != Status.OPEN:
-        raise ServiceError(f"{document} is {document.get_status_display().lower()}; it takes no more entries.")
-    if not lines and document.reverses_id is None:
-        raise ServiceError("Nothing to post.")
+def _write(user, document, lines, occurred_on=None):
+    """Write a document's movements — all of them, or none — check every pouch's balance, and
+    settle the document's status. Shared by ``post`` (an open document only) and ``undo_last``
+    (which may do this on a document its own settlements already closed)."""
     locked = Pouch.objects.select_for_update().filter(pk__in={line.pouch.pk for line in lines})
     pouches = {pouch.pk: pouch for pouch in locked}
     owed = outstanding(document) if document.kind in OPENABLE else {}
@@ -255,6 +248,20 @@ def post(user, document, lines, occurred_on=None):
     _settle_status(document)
     log(user, "INSERT", "inv_movement", document.pk, f"{document}: {len(moves)} movement(s)")
     return moves
+
+
+@transaction.atomic
+def post(user, document, lines, occurred_on=None):
+    """Write a document's movements — all of them, or none — and settle its status.
+
+    Internal: every caller has already checked the right for its action.
+    ``occurred_on`` is the day it happened (``None`` is now).
+    """
+    if document.status != Status.OPEN:
+        raise ServiceError(f"{document} is {document.get_status_display().lower()}; it takes no more entries.")
+    if not lines and document.reverses_id is None:
+        raise ServiceError("Nothing to post.")
+    return _write(user, document, lines, occurred_on)
 
 
 def _unfile(document):
@@ -300,14 +307,17 @@ def reverse_document(user, document, note=""):
 
 @transaction.atomic
 def undo_last(user, document):
-    """Reverse the latest entry on an open job work or memo — one wrong line, not the whole challan."""
+    """Reverse the latest entry on a job work or memo — open, or already closed by its own
+    settlements — one wrong line, not the whole challan. Never a reversed document, nor any
+    other kind. Undoing recomputes the status the same way posting does: something outstanding
+    again reopens it; nothing outstanding leaves it closed (owner, 2026-10-01)."""
     require(user, RIGHT_FOR_KIND[document.kind], "Only a role that posts this kind of document may undo its entries.")
     document = StockDocument.objects.select_for_update().get(pk=document.pk)
-    if document.kind not in OPENABLE or document.status != Status.OPEN:
-        raise ServiceError("Only an open job work or memo has a last entry to undo.")
+    if document.kind not in OPENABLE or document.status not in (Status.OPEN, Status.CLOSED):
+        raise ServiceError("Only an open or closed job work or memo has a last entry to undo.")
     last = (document.movements.filter(reverses__isnull=True, reversal__isnull=True)
             .select_related("pouch").order_by("-pk").first())
     if last is None:
         raise ServiceError(f"{document} has nothing left to undo.")
-    return post(user, document, [Line(last.pouch, last.reason, last.direction, last.pcs, last.ct,
-                                      note=f"Undoes {last.reason}", reverses=last)])[0]
+    return _write(user, document, [Line(last.pouch, last.reason, last.direction, last.pcs, last.ct,
+                                        note=f"Undoes {last.reason}", reverses=last)])[0]
