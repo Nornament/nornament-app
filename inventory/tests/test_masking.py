@@ -7,9 +7,10 @@ not listed here fails ``test_every_inventory_screen_is_walked``.
 import pytest
 from django.urls import URLPattern, URLResolver, get_resolver, reverse
 
-from inventory.models import Movement
+from inventory.models import Movement, StockDocument
 from inventory.tests.conftest import (
-    CUSTOMER, DIA_COST, DIA_COST_VALUE, DIA_SALE, DIA_SALE_VALUE, DIA_SUPPLIER, KARIGAR, PURCHASE_COST, SUPPLIER, VALUE,
+    CUSTOMER, DIA_COST, DIA_COST_VALUE, DIA_LINE_COST, DIA_OVERRIDE, DIA_SALE, DIA_SALE_VALUE, DIA_SUPPLIER, KARIGAR,
+    PURCHASE_COST, SUPPLIER, VALUE,
 )
 
 pytestmark = pytest.mark.django_db
@@ -42,14 +43,10 @@ EXEMPT = {
     # ledger writes: POST-only; each refuses a login without its right (403), asserted in
     # test_the_ledger_writes_refuse_a_login_without_the_right below
     "inventory:movement_post", "inventory:document_settle", "inventory:document_undo", "inventory:document_reverse",
-}
-
-#: the diamond ledgers' screens, routed before they are built so they can link to one another;
-#: the masking-walk task walks each of them and deletes this set
-PENDING = {
-    "inventory:dia_jobs", "inventory:dia_job_new", "inventory:dia_job_post", "inventory:dia_job_close",
-    "inventory:dia_job_undo", "inventory:dia_job_reverse", "inventory:dia_assorts", "inventory:dia_assort_reverse",
-    "inventory:dia_purchase", "inventory:dia_purchase_reverse",
+    # diamond ledger writes: POST-only; each refuses a login without its right (403), asserted in
+    # test_the_diamond_ledger_writes_refuse_a_login_without_the_right below
+    "inventory:dia_job_new", "inventory:dia_job_post", "inventory:dia_job_close", "inventory:dia_job_undo",
+    "inventory:dia_job_reverse", "inventory:dia_assort_reverse", "inventory:dia_purchase_reverse",
 }
 
 DIAMOND_SCREENS = [
@@ -130,14 +127,15 @@ def test_an_admin_preview_masks_like_the_role(client, admin_user_, diamonds):
 
 
 def test_every_inventory_screen_is_walked():
-    covered = {name for name, _, _ in SCREENS} | {name for name, _ in DIAMOND_SCREENS} | LEDGER_SCREENS
+    covered = ({name for name, _, _ in SCREENS} | {name for name, _ in DIAMOND_SCREENS} | LEDGER_SCREENS
+               | DIA_LEDGER_SCREENS)
     named = set()
     for resolver in get_resolver().url_patterns:
         if isinstance(resolver, URLResolver) and resolver.app_name == "inventory":
             for pattern in resolver.url_patterns:
                 if isinstance(pattern, URLPattern) and pattern.name:
                     named.add(f"inventory:{pattern.name}")
-    missing = named - covered - EXEMPT - PENDING
+    missing = named - covered - EXEMPT
     assert not missing, f"inventory screens with no masking check: {sorted(missing)}"
 
 
@@ -226,3 +224,99 @@ def test_the_ledger_writes_refuse_a_login_without_the_right(client, sales_user, 
     ]:
         assert client.post(url, data).status_code == 403, url
     assert Movement.objects.count() == before
+
+
+#: the diamond ledgers' screens, walked by test_no_diamond_ledger_screen_shows_a_login_what_it_may_not_see
+DIA_LEDGER_SCREENS = {"inventory:dia_jobs", "inventory:dia_assorts", "inventory:dia_purchase"}
+
+#: what each role may not see on a diamond ledger screen (Production sees suppliers; the Karigar desk, karigars)
+DIA_SECRETS = {
+    "SALES": (KARIGAR, DIA_SUPPLIER, DIA_LINE_COST, DIA_OVERRIDE, DIA_COST),
+    "KARIGAR": (DIA_SUPPLIER, DIA_LINE_COST, DIA_OVERRIDE, DIA_COST),
+    "PRODUCTION": (DIA_LINE_COST, DIA_OVERRIDE, DIA_COST),
+    "GRAPHIC": (KARIGAR, DIA_SUPPLIER, DIA_LINE_COST, DIA_OVERRIDE, DIA_COST),
+}
+#: the forms a page shows only to a login that may post, and never in a preview
+DIA_FORMS = ("Post an entry", "＋ New job card", "↺ Undo last entry", "＋ New assortment", "Post purchase",
+             ">Reverse</button>")
+
+
+def _dia_ledger_urls(d):
+    """Every diamond ledger screen, with each document picked."""
+    jobs, assorts = reverse("inventory:dia_jobs"), reverse("inventory:dia_assorts")
+    return [jobs, f"{jobs}?card={d['card'].pk}", f"{jobs}?closed=1", assorts, f"{assorts}?doc={d['assort'].pk}",
+            reverse("inventory:dia_purchase")]
+
+
+def _dia_urls(d):
+    """The ledger screens plus Search and Settings, where a purchased or assorted line's own cost
+    and a supplier's purchases now show."""
+    return _dia_ledger_urls(d) + [reverse("inventory:diamonds"), reverse("inventory:dia_settings")]
+
+
+@pytest.mark.parametrize("fixture, role", [("sales_user", "SALES"), ("karigar_user", "KARIGAR"),
+                                           ("production_user", "PRODUCTION"), ("graphic_user", "GRAPHIC")])
+def test_no_diamond_ledger_screen_shows_a_login_what_it_may_not_see(client, dia_docs, request, fixture, role):
+    client.force_login(request.getfixturevalue(fixture))
+    for url in _dia_urls(dia_docs):
+        response = client.get(url)
+        assert response.status_code == 200, f"{url} returned {response.status_code}"
+        body = response.content.decode()
+        for secret in DIA_SECRETS[role]:
+            assert secret not in body, f"{url} leaked {secret!r} to {fixture}"
+
+
+@pytest.mark.parametrize("role", ["SALES", "KARIGAR", "PRODUCTION", "GRAPHIC", "ACCOUNTS"])
+def test_an_admin_preview_of_each_diamond_ledger_masks_like_the_role_and_hides_every_form(
+        client, admin_user_, dia_docs, role):
+    client.force_login(admin_user_)
+    ledger_urls = _dia_ledger_urls(dia_docs)
+    for url in _dia_urls(dia_docs):
+        previewed = f"{url}{'&' if '?' in url else '?'}as={role}"
+        body = client.get(previewed).content.decode()
+        for secret in DIA_SECRETS.get(role, ()):
+            assert secret not in body, f"{previewed} leaked {secret!r}"
+        # Settings' rights matrix has a "Post purchase" column, so only the ledger screens are checked for forms
+        for form in DIA_FORMS if url in ledger_urls else ():
+            assert form not in body, f"{previewed} showed {form!r} in a preview"
+
+
+def test_each_diamond_name_and_cost_reaches_those_who_may_see_it(client, accounts_user, karigar_user, dia_docs):
+    client.force_login(karigar_user)
+    assert KARIGAR in client.get(reverse("inventory:dia_jobs")).content.decode()
+    client.force_login(accounts_user)
+    assert KARIGAR in client.get(reverse("inventory:dia_jobs")).content.decode()
+    purchases = client.get(reverse("inventory:dia_purchase")).content.decode()
+    assert DIA_SUPPLIER in purchases and "₹46,912" in purchases                   # 2 ct × ₹23,456
+    search = client.get(reverse("inventory:diamonds")).content.decode()
+    assert DIA_LINE_COST in search and DIA_OVERRIDE in search
+    assert "Cost / ct" in client.get(reverse("inventory:dia_assorts")).content.decode()
+
+
+def test_the_diamond_ledger_writes_refuse_a_login_without_the_right(client, sales_user, dia_docs):
+    d = dia_docs
+    client.force_login(sales_user)
+    before = (Movement.objects.count(), StockDocument.objects.count())
+    for url, data in [
+        (reverse("inventory:dia_job_new"), {}),
+        (reverse("inventory:dia_job_post", args=[d["card"].pk]), {"entry": "loose", "line": d["round"].pk, "ct": "1"}),
+        (reverse("inventory:dia_job_close", args=[d["card"].pk]), {}),
+        (reverse("inventory:dia_job_undo", args=[d["card"].pk]), {}),
+        (reverse("inventory:dia_job_reverse", args=[d["card"].pk]), {}),
+        (reverse("inventory:dia_assorts"), {"source": d["round"].pk, "take_out": "1", "ct": "1"}),
+        (reverse("inventory:dia_assort_reverse", args=[d["assort"].pk]), {}),
+        (reverse("inventory:dia_purchase"), {"supplier": d["supplier"].pk}),
+        (reverse("inventory:dia_purchase_reverse", args=[d["purchase"].pk]), {}),
+    ]:
+        assert client.post(url, data).status_code == 403, url
+    assert (Movement.objects.count(), StockDocument.objects.count()) == before
+
+
+def test_no_stones_screen_lists_or_opens_a_diamond_document(client, accounts_user, shelf, dia_docs):
+    client.force_login(accounts_user)
+    recent = client.get(reverse("inventory:recent")).content.decode()
+    for doc in ("card", "assort", "purchase"):
+        assert dia_docs[doc].number not in recent, doc
+        assert client.get(reverse("inventory:document", args=[dia_docs[doc].pk])).status_code == 404, doc
+    for url in (reverse("inventory:job_work_list") + "?closed=1", reverse("inventory:shelf")):
+        assert dia_docs["card"].number not in client.get(url).content.decode(), url
