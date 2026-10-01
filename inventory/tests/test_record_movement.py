@@ -73,6 +73,20 @@ def test_a_refusal_comes_back_on_the_form_with_what_was_typed(client, admin_user
     assert not Movement.objects.filter(reason="Job Work Out").exists()
 
 
+@pytest.mark.parametrize("data", [
+    {"reason": "Job Work Out", "challan_no": "C" * 41, "karigar": "{karigar}"},
+    {"reason": "Memo Out", "memo_no": "M" * 41, "customer": "C-881"},
+    {"reason": "Sale", "ref": "I" * 41, "customer": "C-881"},
+])
+def test_an_over_long_number_is_refused_on_the_form(client, admin_user_, shelf, parties, data):
+    data = {**data, "pcs": "1", "ct": "1"}
+    if data.get("karigar"):
+        data["karigar"] = parties["karigar"].pk
+    response = _post(client, admin_user_, shelf["onyx"], data)
+    assert response.status_code == 200 and "at most 40 characters" in response.content.decode()
+    assert not Movement.objects.filter(document__isnull=False).exists()
+
+
 def test_too_much_out_is_refused_in_plain_words(client, admin_user_, shelf, parties):
     response = _post(client, admin_user_, shelf["onyx"], {"reason": "Sale", "ct": "99", "customer": "C-881"})
     assert "Not enough in SL01G · 1" in response.content.decode()

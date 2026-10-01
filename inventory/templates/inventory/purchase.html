@@ -20,12 +20,12 @@
           <input class="inp" type="date" name="occurred_on" value="{{ form.occurred_on|default:today }}"></div>
       </div>
       <div id="newsupplier" hidden><div class="two">
-        <div class="fld"><label>Supplier code</label><input class="inp mono" name="new_code" value="{{ form.new_code|default:'' }}"></div>
-        <div class="fld"><label>Supplier name</label><input class="inp" name="new_name" value="{{ form.new_name|default:'' }}"></div>
+        <div class="fld"><label>Supplier code</label><input class="inp mono" name="new_code" maxlength="32" value="{{ form.new_code|default:'' }}"></div>
+        <div class="fld"><label>Supplier name</label><input class="inp" name="new_name" maxlength="120" value="{{ form.new_name|default:'' }}"></div>
       </div></div>
       <div class="two">
         <div class="fld"><label>Invoice / bill no.</label>
-          <input class="inp mono" name="invoice_no" placeholder="e.g. 2026/0442" value="{{ form.invoice_no|default:'' }}"></div>
+          <input class="inp mono" name="invoice_no" maxlength="40" placeholder="e.g. 2026/0442" value="{{ form.invoice_no|default:'' }}"></div>
         <div class="fld"><label>Currency</label><select class="inp" name="currency">
           <option{% if form.currency != 'USD' %} selected{% endif %}>INR</option>
           <option{% if form.currency == 'USD' %} selected{% endif %}>USD</option></select></div>
@@ -41,10 +41,10 @@
         <th class="r">Pieces</th><th class="r">Weight (ct)</th><th class="r">Cost / ct</th><th class="r">Cost value</th></tr></thead>
         <tbody>{% for l in lines %}<tr>
           <td><input class="inp mono" name="batch" list="batches" value="{{ l.batch }}" style="width:88px"></td>
-          <td><input class="inp mono" name="pouch_no" value="{{ l.pouch_no }}" style="width:58px"></td>
-          <td><input class="inp" name="stone_name" value="{{ l.stone_name }}" style="width:130px"></td>
-          <td><input class="inp" name="shape" value="{{ l.shape }}" style="width:90px"></td>
-          <td><input class="inp" name="colour" value="{{ l.colour }}" style="width:90px"></td>
+          <td><input class="inp mono" name="pouch_no" maxlength="16" value="{{ l.pouch_no }}" style="width:58px"></td>
+          <td><input class="inp" name="stone_name" maxlength="120" value="{{ l.stone_name }}" style="width:130px"></td>
+          <td><input class="inp" name="shape" maxlength="80" value="{{ l.shape }}" style="width:90px"></td>
+          <td><input class="inp" name="colour" maxlength="80" value="{{ l.colour }}" style="width:90px"></td>
           <td class="r"><input class="inp tnum" name="pcs" inputmode="numeric" placeholder="uncountable" value="{{ l.pcs }}" style="width:96px"></td>
           <td class="r"><input class="inp tnum" name="ct" inputmode="decimal" value="{{ l.ct }}" style="width:84px"></td>
           <td class="r"><input class="inp tnum" name="cost" inputmode="decimal" value="{{ l.cost }}" style="width:90px"></td>

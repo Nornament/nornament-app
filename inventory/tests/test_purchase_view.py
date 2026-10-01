@@ -78,6 +78,12 @@ def test_a_refused_purchase_creates_no_supplier(client, accounts_user, shelf):
     assert not Vendor.objects.filter(code="RLS").exists()
 
 
+def test_an_over_long_new_supplier_is_refused_on_the_form(client, accounts_user, shelf):
+    response = _post(client, accounts_user, shelf, supplier="new", new_code="R" * 33, new_name="Ratanlal & Sons")
+    assert response.status_code == 200 and "at most 32 characters" in response.content.decode()
+    assert not Vendor.objects.filter(name="Ratanlal & Sons").exists()
+
+
 def test_the_purchase_tab_opens_for_those_who_may(client, accounts_user, sales_user, shelf):
     client.force_login(accounts_user)
     assert f'href="{reverse("inventory:purchase")}">Purchase</a>' in client.get(reverse("inventory:shelf")).content.decode()

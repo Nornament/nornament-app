@@ -20,6 +20,8 @@ def decimal(raw, label):
     # the columns hold ten digits before the point; NaN and Infinity parse but are not numbers
     if value is None or not value.is_finite() or abs(value) >= 10 ** 10:
         raise ServiceError(f"{label}: {raw} is not a number.")
+    if value.normalize().as_tuple().exponent < -4:     # the columns keep 4 places; never round silently
+        raise ServiceError(f"{label}: {raw} has more than 4 decimal places.")
     return value
 
 
@@ -30,6 +32,15 @@ def whole(raw, label):
     if value != value.to_integral_value():
         raise ServiceError(f"{label} must be a whole number.")
     return int(value)
+
+
+def fits(model, **fields):
+    """Refuse typed text longer than its column, in words, rather than a database error."""
+    for name, value in fields.items():
+        limit = model._meta.get_field(name).max_length
+        if isinstance(value, str) and limit and len(value) > limit:
+            label = model._meta.get_field(name).verbose_name
+            raise ServiceError(f"{label[:1].upper()}{label[1:]} is too long: at most {limit} characters.")
 
 
 def day(raw, label="Date"):

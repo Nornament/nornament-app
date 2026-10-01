@@ -118,6 +118,14 @@ def test_a_transfer_needs_another_existing_batch_and_a_free_number(accounts_user
         ledger_assort.transfer_pouch(accounts_user, shelf["ruby"], other, "1")
 
 
+def test_an_over_long_pouch_no_is_refused_on_a_split_and_a_transfer(accounts_user, shelf):
+    with pytest.raises(ServiceError, match="at most 16 characters"):
+        _split(accounts_user, shelf, parts=[SplitPart("3" * 17, 6, D("3.5")), SplitPart("4", 3, D("2"))])
+    with pytest.raises(ServiceError, match="at most 16 characters"):
+        ledger_assort.transfer_pouch(accounts_user, shelf["onyx"], _other(), "1" * 17)
+    assert not StockDocument.objects.exists()
+
+
 def test_an_empty_pouch_is_not_transferred(accounts_user, shelf):
     sale = ledger.open_document(accounts_user, StockDocument.Kind.SINGLE)
     ledger.post(accounts_user, sale, [ledger.Line(shelf["ruby"], R.SALE, Movement.OUT, None, D("40"))])

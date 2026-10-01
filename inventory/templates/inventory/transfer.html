@@ -9,7 +9,7 @@
     <div class="fsel"><label>From</label><div class="ro2 mono">{{ row.batch_code }} · {{ row.pouch_no|default:"?" }}</div></div>
     <div class="fsel"><label>Quantity</label><div class="ro2">{% if row.countable %}{{ row.pcs|grouped }} pcs · {% endif %}{{ row.ct|ct }} ct — unchanged</div></div>
     <div class="fsel"><label>Target batch</label><input class="inp mono" name="batch" list="batches" value="{{ form.batch|default:'' }}" required></div>
-    <div class="fsel"><label>Pouch no. there</label><input class="inp mono" name="pouch_no" value="{{ form.pouch_no|default:'' }}" required></div>
+    <div class="fsel"><label>Pouch no. there</label><input class="inp mono" name="pouch_no" maxlength="16" value="{{ form.pouch_no|default:'' }}" required></div>
   </div>
   <div class="fld" style="margin-top:12px"><label>Note</label><input class="inp" name="note" value="{{ form.note|default:'' }}"></div>
   <div class="hint" style="margin-bottom:10px">Keeps its reference <span class="mono">{{ row.ref }}</span>.</div>

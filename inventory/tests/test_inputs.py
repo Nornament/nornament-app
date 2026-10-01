@@ -24,6 +24,13 @@ def test_anything_else_is_refused_by_its_label(raw):
         inputs.decimal(raw, "Weight")
 
 
+def test_more_than_four_decimal_places_is_refused_not_rounded():
+    with pytest.raises(ServiceError, match="Weight: 0.00001 has more than 4 decimal places"):
+        inputs.decimal("0.00001", "Weight")
+    assert inputs.decimal("0.0001", "Weight") == Decimal("0.0001")
+    assert inputs.decimal("12.50000", "Weight") == Decimal("12.5")         # trailing zeros are not places
+
+
 def test_pieces_are_whole():
     with pytest.raises(ServiceError, match="whole number"):
         inputs.whole("2.5", "Pieces")

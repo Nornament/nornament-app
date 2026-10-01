@@ -104,6 +104,24 @@ def test_every_line_needs_a_number_a_weight_and_a_rate(accounts_user, shelf, fie
         post_purchase(accounts_user, _header(shelf["supplier"]), lines)
 
 
+@pytest.mark.parametrize("field, value, words", [
+    ("pouch_no", "9" * 17, "Pouch no is too long: at most 16"),
+    ("stone_name", "T" * 121, "Stone name is too long: at most 120"),
+    ("colour", "B" * 81, "Colour is too long: at most 80"),
+])
+def test_an_over_long_pouch_field_is_refused_and_nothing_is_written(accounts_user, shelf, field, value, words):
+    lines = _lines(shelf["batch"])
+    setattr(lines[1], field, value)
+    with pytest.raises(ServiceError, match=words):
+        post_purchase(accounts_user, _header(shelf["supplier"]), lines)
+    assert not StockDocument.objects.exists() and Pouch.objects.count() == 2
+
+
+def test_an_over_long_invoice_no_is_refused(accounts_user, shelf):
+    with pytest.raises(ServiceError, match="at most 40 characters"):
+        post_purchase(accounts_user, _header(shelf["supplier"], invoice_no="I" * 41), _lines(shelf["batch"]))
+
+
 def test_a_supplier_and_a_line_are_required(accounts_user, shelf):
     with pytest.raises(ServiceError, match="Choose the supplier"):
         post_purchase(accounts_user, _header(None), _lines(shelf["batch"]))

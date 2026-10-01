@@ -20,10 +20,10 @@
   <div style="overflow:auto"><table class="led" id="parts">
     <thead><tr><th>Pouch no.</th><th class="r">Pieces</th><th class="r">Carats</th><th>Size</th><th>Remarks</th></tr></thead>
     <tbody>{% for p in parts %}<tr>
-      <td><input class="inp mono" name="pouch_no" value="{{ p.pouch_no }}" style="width:80px"></td>
+      <td><input class="inp mono" name="pouch_no" maxlength="16" value="{{ p.pouch_no }}" style="width:80px"></td>
       <td class="r"><input class="inp tnum" name="pcs" inputmode="numeric" value="{{ p.pcs }}" style="width:80px"{% if not row.countable %} readonly placeholder="—"{% endif %}></td>
       <td class="r"><input class="inp tnum" name="ct" inputmode="decimal" value="{{ p.ct }}" style="width:90px"></td>
-      <td><input class="inp" name="size_text" value="{{ p.size_text }}" style="width:110px"></td>
+      <td><input class="inp" name="size_text" maxlength="80" value="{{ p.size_text }}" style="width:110px"></td>
       <td><input class="inp" name="remarks" value="{{ p.remarks }}" style="width:180px"></td></tr>{% endfor %}</tbody>
     <tfoot><tr class="ledtot"><td><b>Wastage / Loss in Process</b></td>
       <td class="r"><input class="inp tnum" name="loss_pcs" inputmode="numeric" value="{{ form.loss_pcs|default:'' }}" style="width:80px"{% if not row.countable %} readonly placeholder="—"{% endif %}></td>

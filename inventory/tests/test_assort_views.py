@@ -26,7 +26,7 @@ def test_the_split_screen_starts_from_the_whole_balance(client, accounts_user, s
     for text in ("Split pouch", "Source pouch", "＋ Add pouch", "Wastage / Loss in Process", "Post split",
                  "ct unaccounted — cannot post", "balances"):
         assert text in body, text
-    assert 'name="out_ct" value="12.5"' in body and 'name="pouch_no" value="3"' in body
+    assert 'name="out_ct" value="12.5"' in body and 'name="pouch_no" maxlength="16" value="3"' in body
 
 
 def test_the_default_take_out_is_the_exact_balance_never_rounded(client, accounts_user, shelf):

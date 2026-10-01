@@ -77,7 +77,7 @@
       <div class="fld" data-for="Job Work Out"><label>Karigar</label><select class="inp" name="karigar"><option value="">—</option>
         {% for k in karigars %}{% if 'karigar_name' in k %}<option value="{{ k.pk }}"{% if form.karigar == k.pk|stringformat:"s" %} selected{% endif %}>{{ k.karigar_name }}</option>{% endif %}{% endfor %}</select></div>
       <div class="fld" data-for="Job Work Out"><label>Delivery challan no. <span style="color:var(--critical)">*</span></label>
-        <input class="inp mono" name="challan_no" value="{{ form.challan_no|default:'' }}"></div>
+        <input class="inp mono" name="challan_no" maxlength="40" value="{{ form.challan_no|default:'' }}"></div>
       <div class="fld" data-for="Job Work In|Consumed in Production|Wastage / Loss in Process"><label>Open challan</label>
         <select class="inp" name="challan">
           {% if caps.inv_move %}<option value="">— from the shelf —</option>{% endif %}
@@ -87,14 +87,14 @@
         <input class="inp" name="customer" list="customers" placeholder="customer code" value="{{ form.customer|default:'' }}">
         <datalist id="customers">{% for c in customers %}<option value="{{ c.code }}">{% if 'customer_name' in c %}{{ c.customer_name }}{% endif %}</option>{% endfor %}</datalist></div>
       <div class="fld" data-for="Memo Out"><label>Memo no. <span style="color:var(--critical)">*</span></label>
-        <input class="inp mono" name="memo_no" value="{{ form.memo_no|default:'' }}"></div>
+        <input class="inp mono" name="memo_no" maxlength="40" value="{{ form.memo_no|default:'' }}"></div>
       <div class="fld" data-for="Memo In|Sale"><label>Open memo</label>
         <select class="inp" name="memo"><option value="">— a direct sale —</option>
           {% for d in memos %}<option value="{{ d.pk }}"{% if form.memo == d.pk|stringformat:"s" %} selected{% endif %}>{{ d.number }}{% if 'customer_name' in d %} · {{ d.customer_name }}{% endif %} · {{ d.ct|ct }} ct out</option>{% endfor %}</select></div>
       <div class="fld" data-for="Purchase Return"><label>Supplier</label><select class="inp" name="supplier"><option value="">—</option>
         {% for s in suppliers %}{% if 'vendor_name' in s %}<option value="{{ s.pk }}"{% if form.supplier == s.pk|stringformat:"s" %} selected{% endif %}>{{ s.vendor_name }}</option>{% endif %}{% endfor %}</select></div>
       <div class="fld" data-for="Sale|Sales Return|Purchase Return"><label>Invoice / ref no.</label>
-        <input class="inp mono" name="ref" value="{{ form.ref|default:'' }}"></div>
+        <input class="inp mono" name="ref" maxlength="40" value="{{ form.ref|default:'' }}"></div>
       <div data-for="{{ qty_reasons }}"><div class="two">
         <div class="fld"><label>Date</label><input class="inp" type="date" name="occurred_on" value="{{ form.occurred_on|default:today }}"></div>
         <div class="fld" data-for="Job Work Out|Memo Out"><label>Expected back</label><input class="inp" type="date" name="expected_back" value="{{ form.expected_back|default:'' }}"></div>

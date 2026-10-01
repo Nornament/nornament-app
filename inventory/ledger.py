@@ -19,7 +19,7 @@ from django.utils import timezone
 from accounts.capabilities import INV_ASSORT, INV_JOB, INV_MOVE, INV_PURCHASE
 from stock.services import ServiceError, log, require
 
-from . import services
+from . import inputs, services
 from .models import Batch, Movement, Pouch, StockDocument
 
 ZERO = Decimal("0")
@@ -83,6 +83,7 @@ def open_document(user, kind, number="", **fields):
     for job work and memos, where goods leave without a sale and need theirs.
     """
     number = (number or "").strip()
+    inputs.fits(StockDocument, number=number, **fields)
     if not number:
         if kind not in PREFIX:
             what = "delivery challan no." if kind == Kind.JOB_WORK else "memo no."
@@ -177,6 +178,7 @@ def pouch_no_free(batch, pouch_no):
 def new_pouch(batch, **fields):
     """A pouch with the next ``NRN-`` reference and nothing in it: its stock arrives by the
     movement its caller posts."""
+    inputs.fits(Pouch, **fields)
     return Pouch.objects.create(ref=f"NRN-{services._last_ref_number() + 1:06d}", batch=batch, **fields)
 
 
@@ -190,6 +192,7 @@ def _ct(value):
 def _check(document, pouch, line, owed):
     if line.reverses is not None:
         return                      # a reversal repeats a movement that passed these once
+    inputs.fits(Movement, ref=line.ref)
     if any(value is not None and value < 0 for value in (line.pcs, line.ct)):
         raise ServiceError("A quantity cannot be negative; the reason says which way it moves.")
     if not (line.pcs or line.ct):

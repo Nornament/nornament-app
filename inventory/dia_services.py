@@ -16,6 +16,7 @@ from accounts.capabilities import INV_MASTERS, VIEW_COST, VIEW_SALE, VIEW_VENDOR
 from stock.models import Vendor
 from stock.services import ServiceError, log, require
 
+from . import inputs
 from .dia_rules import canonical_code
 from .models import DiamondCode, DiamondLine, DiamondRate, DiamondTerm, Movement, balance
 
@@ -255,6 +256,7 @@ def save_supplier(user, vendor, code, name, city, terms):
     code, name = (code or "").strip().upper(), (name or "").strip()
     if not code or not name:
         raise ServiceError("A supplier needs a code and a name.")
+    inputs.fits(Vendor, code=code, name=name, city=(city or "").strip(), terms=(terms or "").strip())
     clash = Vendor.objects.filter(code=code)
     if vendor is not None:
         clash = clash.exclude(pk=vendor.pk)
