@@ -69,7 +69,7 @@ def test_the_rail_opens_the_ledger_screens_by_right(client, accounts_user, karig
     urls = {name: reverse(f"inventory:{name}") for name in ("purchase", "recent", "job_work_list", "memo_list")}
     body = _get(client, accounts_user, "inventory:shelf").content.decode()
     assert all(f'href="{url}"' in body for url in urls.values())
-    assert 'Stock takes<span class="ct">🔒' in body and 'Transfers<span class="ct">🔒' in body
+    assert 'Stock takes<span class="ct">🔒' in body and f'href="{reverse("inventory:transfers")}"' in body
     body = _get(client, karigar_user, "inventory:shelf").content.decode()
     assert f'href="{urls["job_work_list"]}"' in body and f'href="{urls["recent"]}"' in body
     assert f'href="{urls["memo_list"]}"' not in body and f'href="{urls["purchase"]}"' not in body

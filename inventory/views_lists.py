@@ -1,6 +1,7 @@
 """The rail's ledger lists: what is out on job work, what is out on memo, and recent documents."""
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count
+from django.http import Http404
 from django.shortcuts import redirect
 from django.utils import timezone
 
@@ -86,3 +87,11 @@ def recent(request):
             for d in documents.order_by("-created_at", "-pk")[:RECENT_CAP]]
     return _page(request, "inventory/recent.html", _everything(request), tab="recent", rows=rows, kind=kind,
                  kinds=[(value, label) for value, label in Kind.choices if value in ledger.STONE_KINDS])
+
+
+def splits(request):
+    raise Http404("Not built yet.")
+
+
+def transfers(request):
+    raise Http404("Not built yet.")

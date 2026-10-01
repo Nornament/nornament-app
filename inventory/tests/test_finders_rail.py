@@ -1,0 +1,38 @@
+"""Part 5a's rail and tabs: what was padlocked now links, and what stays padlocked still is."""
+import pytest
+from django.urls import reverse
+
+pytestmark = pytest.mark.django_db
+CHECKS = ("misfiled", "no_pouch_no", "no_photo", "no_size")
+
+
+def _shelf(client, user):
+    client.force_login(user)
+    return client.get(reverse("inventory:shelf")).content.decode()
+
+
+def test_the_stones_rail_links_the_lists_and_the_data_quality_filters(client, accounts_user, shelf):
+    body = _shelf(client, accounts_user)
+    urls = [reverse("inventory:splits"), reverse("inventory:transfers"),
+            *(reverse("inventory:quality", args=[check]) for check in CHECKS)]
+    for url in urls:
+        assert f'href="{url}"' in body, url
+    assert 'Misfiled colour<span class="ct">1</span>' in body and 'No pouch no.<span class="ct">0</span>' in body
+    assert 'Missing photos<span class="ct">2</span>' in body and 'No size in mm<span class="ct">1</span>' in body
+    assert "🔒" not in body.split('<div class="nav-h">Data quality</div>')[1].split("</nav>")[0]
+    assert 'Stock takes<span class="ct">🔒' in body and 'Client lookbook<span class="ct">🔒' in body
+
+
+def test_client_view_shows_neither_the_lists_nor_the_filters(client, admin_user_, shelf):
+    client.force_login(admin_user_)
+    client.post(reverse("inventory:set_view"), {"view": "client"})
+    body = client.get(reverse("inventory:shelf")).content.decode()
+    assert reverse("inventory:splits") not in body and reverse("inventory:quality", args=["misfiled"]) not in body
+
+
+def test_the_diamond_movements_tab_is_live_and_stock_take_stays_locked(client, admin_user_, diamonds):
+    client.force_login(admin_user_)
+    body = client.get(reverse("inventory:diamonds")).content.decode()
+    assert f'href="{reverse("inventory:dia_movements")}">Movements</a>' in body and "Stock take 🔒" in body
+    previewed = client.get(reverse("inventory:diamonds"), {"as": "SALES"}).content.decode()       # only an admin previews
+    assert f'href="{reverse("inventory:dia_movements")}?as=SALES">Movements</a>' in previewed
