@@ -213,3 +213,17 @@ def test_a_reimport_moves_a_range_only_to_another_range(admin_user_):
     dia_plan.commit(_plan([one_piece]), admin_user_)
     line.refresh_from_db()
     assert (line.ct_lo, line.ct_hi) == (Decimal("0.140"), Decimal("0.140"))
+
+
+def test_a_line_keeps_its_own_colour_when_its_code_says_another(admin_user_):
+    rows = [["FCD.0", "Mix Shapes", "DFO", "Mix", "Fancy", None, None, 9.44, 25000, 236000],
+            ["FCD.1", "Mix Shapes", "DFO", "Orange", "Fancy", None, None, 13.25, 25000, 331250]]
+    dia_plan.commit(_plan(rows), admin_user_)
+    mix, orange = DiamondLine.objects.order_by("src")
+    assert (mix.colour.value, mix.colour_override) == ("Fancy Mix", None)        # the code's own colour
+    assert orange.colour.value == "Fancy Orange"
+    from inventory import dia_rows
+    shown = {r["batch"]: r["colour"] for r in dia_rows.line_rows(admin_user_)}
+    assert shown == {"FCD.0": "Fancy Mix", "FCD.1": "Fancy Orange"}
+    in_use = dia_rows.term_usage(dia_services.stocked_lines())
+    assert in_use[DiamondTerm.objects.get(kind="colour", value="Fancy Orange").pk][0] == 1

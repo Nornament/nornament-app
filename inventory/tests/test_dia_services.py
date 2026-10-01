@@ -82,7 +82,16 @@ def test_a_rate_needs_both_money_rights(diamonds, sales_user):
 def test_rates_load_from_the_ivy_export(diamonds, admin_user_):
     book = ivy_workbook([("DPCEF  VVS VS", "+2", 21000, 27500), ("DZZZ", "+2", 1, 1)])   # the export's own spelling
     assert dia_services.load_ivy_rates(admin_user_, book) == {"loaded": 1, "unknown": 1}
-    assert dia_services.price(_line(diamonds["princess"].pk), dia_services.rate_table()) == (Decimal("21000"), Decimal("27500"))
+    assert dia_services.price(_line(diamonds["princess"].pk), dia_services.rate_table()) == (None, Decimal("27500"))
+
+
+def test_the_ivy_export_sets_sale_prices_and_never_the_files_cost(diamonds, admin_user_):
+    round_line = _line(diamonds["round"].pk)
+    cost_before = dia_services.price(round_line, dia_services.rate_table())[0]
+    book = ivy_workbook([(round_line.code_id, round_line.size_text, 99999, 30000)])
+    dia_services.load_ivy_rates(admin_user_, book)
+    assert dia_services.price(round_line, dia_services.rate_table()) == (cost_before, Decimal("30000"))
+    assert not DiamondRate.objects.filter(cost_rate=99999).exists()
 
 
 def test_rights_are_set_by_an_admin_only_and_never_on_admin(diamonds, admin_user_, accounts_user):
@@ -146,9 +155,9 @@ def test_a_grade_named_in_a_range_is_in_use_and_renames_through_it(diamonds, adm
     assert DiamondTerm.objects.get(kind="clarity", value="I1-I2").expands_to == "I-1 I2"
 
 
-def test_an_ivy_cost_that_is_not_a_number_is_refused(diamonds, admin_user_):
+def test_an_ivy_sale_rate_that_is_not_a_number_is_refused(diamonds, admin_user_):
     with pytest.raises(ServiceError):
-        dia_services.load_ivy_rates(admin_user_, ivy_workbook([("DPCEF VVS VS", "+2", "on request", 27500)]))
+        dia_services.load_ivy_rates(admin_user_, ivy_workbook([("DPCEF VVS VS", "+2", 21000, "on request")]))
     assert not DiamondRate.objects.filter(code_id="DPCEF VVS-VS").exists()
 
 

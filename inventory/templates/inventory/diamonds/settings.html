@@ -102,7 +102,7 @@
 <div class="card" id="rates" style="margin-bottom:14px">
   <div class="card-h"><span class="card-t">Rate card</span><span class="spacer"></span>
     {% if can_rate %}<form method="post" enctype="multipart/form-data" action="{% url 'inventory:dia_rates_ivy' %}" class="inline">{% csrf_token %}
-      <label class="btn sm upload">Load rates from IVY export<input type="file" name="workbook" accept=".xlsx" onchange="this.form.requestSubmit()"></label></form>{% endif %}</div>
+      <label class="btn sm upload">Load sale rates from IVY export<input type="file" name="workbook" accept=".xlsx" onchange="this.form.requestSubmit()"></label></form>{% endif %}</div>
   <div class="card-b" style="overflow:auto"><table class="pt">
     <thead><tr><th>Code</th><th>Size</th><th class="r">Cost / ct</th><th class="r">Sale / ct</th>{% if can_rate %}<th>Actions</th>{% endif %}</tr></thead>
     <tbody>{% for r in rates %}<tr><td class="mono">{{ r.code }}</td><td class="mono">{{ r.size_text|default:"any size" }}</td>

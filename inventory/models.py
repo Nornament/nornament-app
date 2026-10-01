@@ -267,6 +267,10 @@ class DiamondLine(models.Model):
         DiamondTerm, null=True, blank=True, on_delete=models.PROTECT, related_name="+",
         help_text="From a carat-band size prefix, when the code names no shape.",
     )
+    colour_override = models.ForeignKey(
+        DiamondTerm, null=True, blank=True, on_delete=models.PROTECT, related_name="+",
+        help_text="The file's colour for this line, when it differs from its code's (fancy lots under one code).",
+    )
     batch_no = models.CharField(max_length=40, blank=True)
     size_text = models.CharField(max_length=40, blank=True)
     band = models.ForeignKey(DiamondTerm, on_delete=models.PROTECT, related_name="+")
@@ -288,6 +292,10 @@ class DiamondLine(models.Model):
     @property
     def shape(self):
         return self.shape_override or self.code.shape
+
+    @property
+    def colour(self):
+        return self.colour_override or self.code.colour
 
 
 class DiamondRate(models.Model):

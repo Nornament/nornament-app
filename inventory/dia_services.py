@@ -42,7 +42,7 @@ def stocked_lines(queryset=None):
     )
     queryset = DiamondLine.objects.all() if queryset is None else queryset
     return queryset.select_related(
-        "category", "band", "shape_override", "code__shape", "code__colour", "code__clarity"
+        "category", "band", "shape_override", "colour_override", "code__shape", "code__colour", "code__clarity"
     ).annotate(on_ct=Sum(signed)).order_by("pk")
 
 
@@ -131,8 +131,9 @@ def _in_use(t):
         return DiamondLine.objects.filter(band=t).exists()
     if t.kind == DiamondTerm.SHAPE:
         return DiamondCode.objects.filter(shape=t).exists() or DiamondLine.objects.filter(shape_override=t).exists()
-    field = "colour" if t.kind == DiamondTerm.COLOUR else "clarity"
-    return DiamondCode.objects.filter(**{field: t}).exists()
+    if t.kind == DiamondTerm.COLOUR:
+        return DiamondCode.objects.filter(colour=t).exists() or DiamondLine.objects.filter(colour_override=t).exists()
+    return DiamondCode.objects.filter(clarity=t).exists()
 
 
 def add_term(user, kind, value):
@@ -223,7 +224,9 @@ def set_rate(user, code, size_text, cost_rate, sale_rate, effective_from):
 
 
 def load_ivy_rates(user, fileobj):
-    """Rates from the IVY export file (not the stock app): item code, size, cost and sale rate."""
+    """Sale rates from the IVY export file (not the stock app), per item code and size.
+
+    Only the sale rate: cost comes from the diamond register itself (the owner, 2026-10-01)."""
     require(user, INV_MASTERS, "Only a role that edits settings can load rates.")
     require(user, VIEW_COST, "A cost you may not see is not yours to set.")
     require(user, VIEW_SALE, "A sale price you may not see is not yours to set.")
@@ -236,20 +239,19 @@ def load_ivy_rates(user, fileobj):
     for values in sheet.iter_rows(min_row=IVY_HEADER_ROW + 1, values_only=True):
         values = list(values) + [None] * 40
         code = canonical_code(str(values[IVY_CODE] or ""))
-        if not code or values[IVY_COST] is None and values[IVY_SALE] is None:
+        if not code or values[IVY_SALE] is None:
             continue
         if code not in codes:
             unknown.add(code)
             continue
         size = str(values[IVY_SIZE] or "").strip()
-        found[(code, size)] = (values[IVY_COST], values[IVY_SALE])
+        found[(code, size)] = values[IVY_SALE]
     today = timezone.localdate()
     with transaction.atomic():
-        for (code, size), (cost, sale) in found.items():
+        for (code, size), sale in found.items():
             DiamondRate.objects.create(code_id=code, size_text=size, effective_from=today, set_by=_by(user),
-                                       cost_rate=_rate(None if cost is None else str(cost)),
-                                       sale_rate=_rate(None if sale is None else str(sale)))
-    log(user, "IMPORT", "inv_dia_rate", "-", f"{len(found)} rates from the IVY export, {len(unknown)} unknown codes")
+                                       sale_rate=_rate(str(sale)))
+    log(user, "IMPORT", "inv_dia_rate", "-", f"{len(found)} sale rates from the IVY export, {len(unknown)} unknown codes")
     return {"loaded": len(found), "unknown": len(unknown)}
 
 

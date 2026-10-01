@@ -190,7 +190,7 @@ def rates_ivy(request):
     if upload is None:
         raise ServiceError("Choose the IVY export first.")
     result = dia_services.load_ivy_rates(request.user, upload)
-    messages.success(request, f"{result['loaded']} rates loaded; {result['unknown']} codes in the export are not diamond lines here.")
+    messages.success(request, f"{result['loaded']} sale rates loaded; {result['unknown']} codes in the export are not diamond lines here.")
     return _back("rates")
 
 

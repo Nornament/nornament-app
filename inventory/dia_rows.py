@@ -14,7 +14,7 @@ from .models import DiamondCode, DiamondLine, DiamondTerm
 
 def line_row(user, line, rates):
     code = line.code
-    shape, colour, clarity = line.shape, code.colour, code.clarity
+    shape, colour, clarity = line.shape, line.colour, code.clarity
     cost, sale = dia_services.price(line, rates)
     ct = line.on_ct
     row = {
@@ -43,7 +43,7 @@ def term_usage(lines):
     usage = defaultdict(lambda: [0, Decimal("0")])
     for line in lines:
         shape = line.shape
-        for t in (line.category, line.band, shape, line.code.colour, line.code.clarity):
+        for t in (line.category, line.band, shape, line.colour, line.code.clarity):
             if t is not None:
                 usage[t.pk][0] += 1
                 usage[t.pk][1] += line.on_ct or 0
