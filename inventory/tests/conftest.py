@@ -93,3 +93,26 @@ def parties(db):
         "karigar": Vendor.objects.create(code="MAH", name=KARIGAR, city="Johari Bazar"),
         "customer": Customer.objects.create(customer_code="C-881", name=CUSTOMER),
     }
+
+
+#: the purchase's cost per carat, findable in a body and nowhere else
+PURCHASE_COST = "4,321"
+
+
+@pytest.fixture
+def ledger_docs(admin_user_, shelf, parties):
+    """A job work (karigar), a memo (customer) and a purchase (supplier, cost) on the shelf."""
+    from datetime import date
+
+    from inventory import ledger_jobs
+    from inventory.ledger_purchase import PurchaseHeader, PurchaseLine, post_purchase
+
+    job = ledger_jobs.job_work_out(admin_user_, shelf["onyx"], parties["karigar"], "2026/0431", 2, Decimal("1"))
+    memo = ledger_jobs.memo_out(admin_user_, shelf["ruby"], parties["customer"], "MEMO-0088", None, Decimal("5"))
+    purchase = post_purchase(
+        admin_user_, PurchaseHeader(supplier=shelf["supplier"], occurred_on=date(2026, 8, 7), invoice_no="2026/0442"),
+        [PurchaseLine(batch=shelf["batch"], pouch_no="3", stone_name="Tanzanite", shape="Oval", colour="Blue",
+                      pcs=6, ct=Decimal("3"), cost_per_ct=Decimal("4321"))],
+    )
+    return {**shelf, **parties, "job": job, "memo": memo, "purchase": purchase,
+            "bought": purchase.movements.get().pouch}

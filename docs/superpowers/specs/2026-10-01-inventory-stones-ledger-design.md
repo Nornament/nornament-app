@@ -129,3 +129,28 @@ Each refusal in "Checks on every post" is a `ServiceError` shown as a message on
 - **Masking walk:** every new screen joins `test_masking.py`'s walk (cost, supplier, karigar and customer per role; client view) and its every-screen check.
 - **Views:** each form as an allowed and a refused role; the reason list offers only what the viewer may post.
 - The real stones register still imports unchanged (existing golden test).
+
+## Changed while planning
+
+- **Single documents are numbered `MOV-…`.** A sale's invoice no. (and a return's reference) stays on the movement, because one invoice may cover several pouches and a document's number is unique per kind. A purchase with no invoice no. is numbered `PUR-…`.
+- **A reversal is its own document** — the same kind, numbered `REV-…`, `reverses` set, closed when posted; the original becomes Reversed and its number is free again. A reversal cannot itself be reversed. **Undo last entry** posts its reversing movement on the same open document.
+- **A split takes an explicit "Take out" quantity** (the whole balance by default); the parent keeps the rest. The loss posts as a Wastage / Loss in Process out on the parent; the Split out carries only what went into new pouches. New pouches also copy category, treatment, origin, purchase date and countability.
+- **A transfer keeps its from and to on the document** (`from_batch`, `from_pouch_no`, `to_batch`, `to_pouch_no`), so reversing it files the pouch back — refused if it has been re-filed since or its old number is taken. An empty pouch cannot be transferred.
+- **A purchase files into an existing batch, or creates a new one** when the code reads as family · class · number · box colour (owner, 2026-10-01), and needs the purchase right with sight of cost and suppliers; "＋ New supplier…" uses Settings' supplier save (Edit settings right). Landed valuation = cost per ct in INR + extras ÷ the purchase's total carats, both rows dated the purchase date.
+- **A document's customer is SET_NULL**, as `stock.Sale`'s is, so the CRM can still delete a customer.
+- **Karigar names are gated as `karigar_name` (inv_job), customer names as `customer_name` (view_sale).** A login without sight of suppliers is offered as karigars only those already named on a challan, so the Karigar desk never sees a supplier list.
+- **The document page and the rail's Movements are readable by every internal login, masked;** the Job work out list needs Job cards, the Memo out list needs Record stock movements.
+- **On Record movement**, Consumed in Production and Wastage / Loss in Process settle a chosen challan (Job cards right), else post from the shelf (Record stock movements right); Sale settles a chosen memo, else is a direct sale. Recount Adjustment there needs Record stock movements; the importer's recount keeps Edit settings, and both share one difference rule.
+- **A back-dated movement is stamped noon of its day;** expected back may not precede the date.
+- **Undoing the only entry of a job work or memo leaves it closed at zero.**
+- **Values out on documents** (shelf tile, lists) sum the valued pouches, as Stock value does.
+
+## Owner rulings and review fixes (2026-10-01)
+
+- A purchase may create a new batch when its code reads as family · class · number · box colour.
+- "Undo last entry" works on an open or closed (settled) job work or memo and reopens it when something is outstanding again.
+- Refusal messages print carats with up to 4 places, trailing zeros trimmed; an empty post is refused.
+- A creating document can be reversed once its later movements are reversed.
+- Consumed and Wastage posted from the shelf need Record stock movements; posted against a challan they need Job cards — the form offers only the path the viewer may use.
+- A login without `view_vendor` can only name karigars already on a challan, so the Karigar desk cannot start a challan with a brand-new karigar — Admin/Accounts name it first.
+- The split screen's live balance line checks pieces too, not only carats.
