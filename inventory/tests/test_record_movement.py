@@ -6,6 +6,7 @@ from django.urls import reverse
 from inventory import ledger_jobs, services
 from inventory.models import Movement, StockDocument
 from inventory.tests.conftest import KARIGAR, SUPPLIER
+from stock.models import Vendor
 
 pytestmark = pytest.mark.django_db
 D = Decimal
@@ -128,6 +129,29 @@ def test_the_karigar_desk_is_offered_only_karigars_it_has_used(client, admin_use
     ledger_jobs.job_work_out(admin_user_, shelf["onyx"], parties["karigar"], "2026/0431", 1, D("1"))
     body = _body(client, karigar_user, shelf["ruby"])
     assert KARIGAR in body and SUPPLIER not in body
+
+
+def _new_karigar(**changes):
+    return {"reason": "Job Work Out", "karigar": "new", "new_code": "rmk", "new_name": "Ramesh Karigar",
+            "challan_no": "2026/0500", "pcs": "1", "ct": "1", **changes}
+
+
+def test_settings_and_supplier_sight_may_add_a_karigar_with_the_challan(client, admin_user_, shelf):
+    assert "＋ New karigar…" in _body(client, admin_user_, shelf["onyx"])
+    response = _post(client, admin_user_, shelf["onyx"], _new_karigar())
+    assert response.status_code == 302
+    assert StockDocument.objects.get(number="2026/0500").vendor == Vendor.objects.get(code="RMK", name="Ramesh Karigar")
+
+
+def test_a_refused_challan_creates_no_karigar(client, admin_user_, shelf):
+    response = _post(client, admin_user_, shelf["onyx"], _new_karigar(ct="99"))
+    assert response.status_code == 200 and "Not enough in" in response.content.decode()
+    assert not Vendor.objects.filter(code="RMK").exists()
+
+
+def test_only_settings_and_supplier_sight_are_offered_a_new_karigar(client, karigar_user, production_user, shelf):
+    assert "＋ New karigar" not in _body(client, karigar_user, shelf["onyx"])
+    assert "＋ New karigar" not in _body(client, production_user, shelf["onyx"])        # suppliers, but no settings
 
 
 def test_client_view_reaches_neither_the_page_nor_the_post(client, admin_user_, shelf):

@@ -10,6 +10,7 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -20,7 +21,7 @@ from stock.masking import mask
 from stock.models import Vendor
 from stock.services import ServiceError
 
-from . import inputs, ledger, ledger_jobs, ledger_single, services
+from . import dia_services, inputs, ledger, ledger_jobs, ledger_single, services
 from .ledger_purchase import PURCHASE_RIGHTS
 from .models import Movement, Pouch, StockDocument
 from .views import _client, _everything, _page
@@ -158,8 +159,10 @@ def _record(user, pouch, reason, post):
     when = inputs.day(post.get("occurred_on")) or timezone.localdate()
     back, note = inputs.day(post.get("expected_back"), "Expected back"), (post.get("note") or "").strip()
     if reason == Reason.JOB_WORK_OUT:
-        return ledger_jobs.job_work_out(user, pouch, _vendor(post.get("karigar")), post.get("challan_no"),
-                                        pcs, ct, when, back, note)
+        with transaction.atomic():           # a new karigar stands or falls with its challan
+            karigar = (dia_services.save_supplier(user, None, post.get("new_code"), post.get("new_name"), "", "")
+                       if post.get("karigar") == "new" else _vendor(post.get("karigar")))
+            return ledger_jobs.job_work_out(user, pouch, karigar, post.get("challan_no"), pcs, ct, when, back, note)
     if reason == Reason.MEMO_OUT:
         return ledger_jobs.memo_out(user, pouch, _customer(post.get("customer")), post.get("memo_no"),
                                     pcs, ct, when, back, note)

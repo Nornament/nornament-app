@@ -75,7 +75,12 @@
           <div class="unit"><input class="inp tnum" name="ct" inputmode="decimal" value="{{ form.ct|default:'' }}"><span class="u">ct</span></div></div>
       </div></div>
       <div class="fld" data-for="Job Work Out"><label>Karigar</label><select class="inp" name="karigar"><option value="">—</option>
+        {% if caps.inv_masters and caps.view_vendor %}<option value="new"{% if form.karigar == 'new' %} selected{% endif %}>＋ New karigar…</option>{% endif %}
         {% for k in karigars %}{% if 'karigar_name' in k %}<option value="{{ k.pk }}"{% if form.karigar == k.pk|stringformat:"s" %} selected{% endif %}>{{ k.karigar_name }}</option>{% endif %}{% endfor %}</select></div>
+      {% if caps.inv_masters and caps.view_vendor %}<div data-for="Job Work Out"><div id="newkarigar" hidden><div class="two">
+        <div class="fld"><label>Karigar code</label><input class="inp mono" name="new_code" maxlength="32" value="{{ form.new_code|default:'' }}"></div>
+        <div class="fld"><label>Karigar name</label><input class="inp" name="new_name" maxlength="120" value="{{ form.new_name|default:'' }}"></div>
+      </div></div></div>{% endif %}
       <div class="fld" data-for="Job Work Out"><label>Delivery challan no. <span style="color:var(--critical)">*</span></label>
         <input class="inp mono" name="challan_no" maxlength="40" value="{{ form.challan_no|default:'' }}"></div>
       <div class="fld" data-for="Job Work In"><label>Open challan</label>
@@ -143,6 +148,9 @@
   }
   form.elements.reason.addEventListener('change', show);
   show();
+  var karigar = form.elements.karigar, fresh = document.getElementById('newkarigar');
+  function newKarigar() { fresh.hidden = karigar.value !== 'new'; }
+  if (karigar && fresh) { karigar.addEventListener('change', newKarigar); newKarigar(); }
 })();
 </script>
 {% endblock %}
