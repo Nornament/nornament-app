@@ -1,0 +1,110 @@
+{% extends "inventory_base.html" %}{% load inventory_extras %}
+{% block title %}Assortments · Diamonds{% endblock %}
+{% block crumb %}<b>Diamonds</b> &nbsp;›&nbsp; Assortments{% endblock %}
+{% block content %}
+{% include "inventory/diamonds/_dsub.html" %}
+<div class="dbanner"><h2>Assortments</h2></div>
+{% if denied %}
+<div class="banner crit"><div class="banner-ic">✕</div><div><h4>Not permitted for {{ role_label }}</h4></div></div>
+{% else %}
+
+{% if doc %}
+<div class="filterbar">
+  <div class="fsel"><label>Assortment</label>
+    <form method="get" style="display:contents">{% if as_role %}<input type="hidden" name="as" value="{{ as_role }}">{% endif %}
+      <select class="inp" name="doc" onchange="this.form.submit()">
+        {% for d in posted %}<option value="{{ d.pk }}"{% if d.pk == doc.pk %} selected{% endif %}>{{ d.number }} — {{ d.occurred_on|date:"d M Y" }} ({% if d.status == 'reversed' %}reversed{% else %}balanced{% endif %})</option>{% endfor %}
+      </select></form></div>
+  <div class="fsel"><label>Posted by</label><div class="ro2">{{ by }}</div></div>
+  <div class="fsel"><label>Reason</label><div class="ro2">{{ doc.note|default:"—" }}</div></div>
+  <div class="fsel"><label>Balance</label><div class="ro2">
+    {% if doc.status == 'reversed' %}<span class="chip crit"><span class="dot"></span>reversed</span>
+    {% else %}<span class="chip good"><span class="dot"></span>balances</span>{% endif %}</div></div>
+</div>
+
+<div class="card" style="overflow:hidden;margin-bottom:14px">
+  <div class="card-h"><span class="card-t">Ledger — {{ doc.number }}</span><span class="spacer"></span>
+    {% if can_reverse %}<form method="post" action="{% url 'inventory:dia_assort_reverse' doc.pk %}" class="inline">{% csrf_token %}
+      <button class="btn sm" onclick="return confirm('Reverse {{ doc.number|escapejs }}?')">Reverse</button></form>{% endif %}</div>
+  <div style="overflow:auto"><table class="led">
+    <thead><tr><th>Code</th><th>Movement</th><th>Note</th>
+      <th class="r">Debit (ct)</th><th class="r">Credit (ct)</th><th class="r">Running</th></tr></thead>
+    <tbody>{% for r in ledger %}<tr>
+      <td class="mono"><b>{{ r.code }}</b></td>
+      <td><span class="chip {{ r.tone }}"><span class="dot"></span>{{ r.movement }}</span></td>
+      <td class="hint">{{ r.note }}</td>
+      <td class="r">{% if 'debit' in r %}<b>{{ r.debit|ct }}</b>{% endif %}</td>
+      <td class="r">{% if 'credit' in r %}<b>{{ r.credit|ct }}</b>{% endif %}</td>
+      <td class="r bal">{{ r.running|ct }}</td></tr>{% endfor %}
+      <tr class="ledtot"><td colspan="3"><b>Totals</b></td>
+        <td class="r"><b>{{ totals.debit|ct }}</b></td><td class="r"><b>{{ totals.credit|ct }}</b></td>
+        <td class="r"><b>{{ totals.diff|ct }}</b></td></tr>
+    </tbody></table></div>
+</div>
+{% endif %}
+
+{% if can_post %}
+{% if error %}<div class="banner crit"><div class="banner-ic">!</div><div><h4>{{ error }}</h4></div></div>{% endif %}
+<form method="post" id="assort" class="card" style="overflow:hidden">{% csrf_token %}
+  <div class="card-h"><span class="card-t">＋ New assortment</span><span class="spacer"></span>
+    <button class="btn sm" type="button" id="adddest">＋ Add destination</button></div>
+  <div class="card-b"><div class="filterbar" style="margin:0">
+    <div class="fsel"><label>Source line</label><select class="inp" name="source"><option value="">—</option>
+      {% for s in sources %}<option value="{{ s.pk }}"{% if form.source == s.pk|stringformat:"s" %} selected{% endif %}>{{ s.label }} — {{ s.ct|ct }} ct</option>{% endfor %}</select></div>
+    <div class="fsel"><label>Take out</label>
+      <div class="unit"><input class="inp tnum" name="take_out" inputmode="decimal" value="{{ form.take_out|default:'' }}"><span class="u">ct</span></div></div>
+    <div class="fsel"><label>Date</label><input class="inp" type="date" name="occurred_on" value="{{ form.occurred_on|default:today }}"></div>
+    <div class="fsel"><label>Reason</label><input class="inp" name="note" value="{{ form.note|default:'' }}"></div>
+  </div></div>
+  <div style="overflow:auto"><table class="led" id="dests">
+    <thead><tr><th>Shape</th><th>Colour</th><th>Clarity</th><th>Size</th><th class="r">Carats</th>
+      {% if 'cost_rate' in money %}<th class="r">Cost / ct</th>{% endif %}</tr></thead>
+    <tbody>{% for d in dests %}<tr>
+      <td><select class="inp" name="shape"><option value=""></option>{% for v in shapes %}<option{% if v == d.shape %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></td>
+      <td><select class="inp" name="colour"><option value=""></option>{% for v in colours %}<option{% if v == d.colour %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></td>
+      <td><select class="inp" name="clarity"><option value=""></option>{% for v in clarities %}<option{% if v == d.clarity %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></td>
+      <td><input class="inp mono" name="size_text" maxlength="40" value="{{ d.size_text }}" placeholder="as the source" style="width:110px"></td>
+      <td class="r"><input class="inp tnum" name="ct" inputmode="decimal" value="{{ d.ct }}" style="width:90px"></td>
+      {% if 'cost_rate' in money %}<td class="r"><input class="inp tnum" name="cost" inputmode="decimal" value="{{ d.cost }}" placeholder="carried" style="width:100px"></td>{% endif %}
+    </tr>{% endfor %}</tbody>
+    <tfoot><tr class="ledtot"><td colspan="4"><b>Sorting loss</b></td>
+      <td class="r"><input class="inp tnum" name="loss" inputmode="decimal" value="{{ form.loss|default:'' }}" style="width:90px"></td>
+      {% if 'cost_rate' in money %}<td></td>{% endif %}</tr></tfoot>
+  </table></div>
+  <div class="card-b" style="border-top:1px solid var(--border)">
+    <div id="balanced" hidden><span class="chip good"><span class="dot"></span>balances</span></div>
+    <div id="unbalanced" hidden><div class="banner crit" style="margin:0"><div class="banner-ic">!</div><div>
+      <h4><span id="diff"></span> ct unaccounted — cannot post</h4></div></div></div>
+    <button class="btn pri" id="postassort" style="margin-top:10px">Post assortment</button>
+  </div>
+</form>
+<script>
+/* The assortment's balance line: taken out against destinations plus the sorting loss, to 4 places. */
+(function () {
+  var form = document.getElementById('assort'), body = form.querySelector('#dests tbody');
+  function num(v) { v = parseFloat(String(v || '').replace(/,/g, '')); return isFinite(v) ? v : 0; }
+  function trim(v) { return v.toFixed(4).replace(/\.?0+$/, '') || '0'; }
+  function check() {
+    var into = num(form.elements.loss.value);
+    body.querySelectorAll('[name=ct]').forEach(function (input) { into += num(input.value); });
+    var diff = Math.round((num(form.elements.take_out.value) - into) * 10000) / 10000;
+    document.getElementById('diff').textContent = trim(diff);
+    document.getElementById('balanced').hidden = diff !== 0;
+    document.getElementById('unbalanced').hidden = diff === 0;
+    document.getElementById('postassort').disabled = diff !== 0;
+  }
+  document.getElementById('adddest').addEventListener('click', function () {
+    var tr = body.lastElementChild.cloneNode(true);
+    tr.querySelectorAll('input').forEach(function (input) { input.value = ''; });
+    tr.querySelectorAll('select').forEach(function (select) { select.selectedIndex = 0; });
+    body.appendChild(tr);
+    check();
+  });
+  form.addEventListener('input', check);
+  form.addEventListener('change', check);
+  check();
+})();
+</script>
+{% endif %}
+{% endif %}
+{% endblock %}
