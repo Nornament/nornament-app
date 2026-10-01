@@ -138,3 +138,20 @@ def test_assorting_needs_the_right_and_an_override_needs_sight_of_cost(productio
     with pytest.raises(PermissionDenied):
         post_assortment(blind, diamonds["round"], D("2.00"), dests, D("0.05"))
     post_assortment(blind, diamonds["round"], D("2.00"), _dests(), D("0.05"))   # a carried cost needs no sight of it
+
+
+def test_a_blank_destination_size_keeps_a_per_stone_band(accounts_user, diamonds):
+    rnd = diamonds["round"]
+    (mm,) = dia_services.open_lines(accounts_user, [
+        {"category": rnd.category, "code": rnd.code, "batch_no": "B-772", "size_text": "2.7*2.1 - 2.9*1.8",
+         "band": dia_services.term("band", "carat band"), "ct_lo": D("0.07"), "ct_hi": D("0.07"), "ct": D("0.14")}])
+    (child,) = _new(post_assortment(accounts_user, mm, D("0.14"), [Destination("Round", "E-F", "VVS-VS", "", D("0.14"))]))
+    assert (child.size_text, child.band.value, child.ct_lo, child.ct_hi) == (
+        "2.7*2.1 - 2.9*1.8", "carat band", D("0.07"), D("0.07"))
+
+
+def test_a_destination_in_the_source_grade_is_refused(accounts_user, diamonds):
+    for size in ("", "+6-12"):
+        with pytest.raises(ServiceError, match="stays on the source"):
+            post_assortment(accounts_user, diamonds["round"], D("1"), [Destination("Round", "F-G-H", "VS-SI", size, D("1"))])
+    assert not StockDocument.objects.exists() and DiamondLine.objects.count() == 3

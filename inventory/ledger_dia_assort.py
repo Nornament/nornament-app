@@ -75,13 +75,17 @@ def post_assortment(user, source, take_out, destinations, loss=None, occurred_on
         lines.append(ledger.Line(source, Reason.WASTAGE, Movement.OUT, None, loss, note="Sorting loss"))
     costs = []
     for d in destinations:
-        size = (d.size_text or "").strip() or source.size_text
-        sized = dia_services.sized(size)
-        line = dia_services.new_line(
-            category=source.category, code=dia_services.code_for(user, d.shape, d.colour, d.clarity),
-            batch_no=source.batch_no, size_text=size, band=dia_services.term(DiamondTerm.BAND, sized.band),
-            ct_lo=sized.ct_lo, ct_hi=sized.ct_hi,
-        )
+        size = (d.size_text or "").strip()
+        if size:
+            sized = dia_services.sized(size)
+            sizing = {"size_text": size, "band": dia_services.term(DiamondTerm.BAND, sized.band),
+                      "ct_lo": sized.ct_lo, "ct_hi": sized.ct_hi}
+        else:   # the source's size as it stands: a band set per stone cannot be re-derived without pieces
+            sizing = {"size_text": source.size_text, "band": source.band, "ct_lo": source.ct_lo, "ct_hi": source.ct_hi}
+        code = dia_services.code_for(user, d.shape, d.colour, d.clarity)
+        if (code.pk, sizing["size_text"]) == (source.code_id, source.size_text):
+            raise ServiceError("Weight that stays in grade stays on the source — leave it out of the destinations.")
+        line = dia_services.new_line(category=source.category, code=code, batch_no=source.batch_no, **sizing)
         lines.append(ledger.Line(line, Reason.ASSORT_IN, Movement.IN, None, d.ct, note=f"from {source.ref}"))
         rate = d.cost_per_ct if d.cost_per_ct is not None else carried
         if rate is not None:
