@@ -14,7 +14,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from accounts.capabilities import INV_PURCHASE, ROLE_GROUPS
+from accounts.capabilities import ROLE_GROUPS
 from stock.masking import mask
 from stock.models import Vendor
 from stock.services import ServiceError, require
@@ -120,7 +120,8 @@ def purchase(request):
 @login_required
 @require_POST
 def purchase_reverse(request, pk):
-    require(request.user, INV_PURCHASE, "Only a role that records purchases can reverse one.")
+    for permission in PURCHASE_RIGHTS:
+        require(request.user, permission, "Only a role that records purchases can reverse one.")
     doc = get_object_or_404(StockDocument, pk=pk, kind=Kind.DIA_PURCHASE, reverses__isnull=True)
     try:
         reversal = ledger.reverse_document(request.user, doc)

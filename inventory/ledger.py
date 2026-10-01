@@ -81,6 +81,12 @@ def _when(day):
     return timezone.make_aware(datetime.combine(day, time(12)))
 
 
+def _not_future(kind, day):
+    """A diamond document is dated the day it happened, which cannot be ahead of today (owner, 2026-10-02)."""
+    if kind in DIAMOND_KINDS and day is not None and day > timezone.localdate():
+        raise ServiceError("A date can't be in the future.")
+
+
 def next_number(prefix):
     """``SPL-000001``: one above the highest number with this prefix.
 
@@ -101,6 +107,7 @@ def open_document(user, kind, number="", **fields):
     """
     number = (number or "").strip()
     inputs.fits(StockDocument, number=number, **fields)
+    _not_future(kind, fields.get("occurred_on"))
     if not number:
         if kind not in PREFIX:
             what = "delivery challan no." if kind == Kind.JOB_WORK else "memo no."
@@ -305,6 +312,7 @@ def post(user, document, lines, occurred_on=None):
         raise ServiceError(f"{document} is {document.get_status_display().lower()}; it takes no more entries.")
     if not lines and document.reverses_id is None:
         raise ServiceError("Nothing to post.")
+    _not_future(document.kind, occurred_on)
     return _write(user, document, lines, occurred_on)
 
 

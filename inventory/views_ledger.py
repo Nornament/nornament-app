@@ -33,6 +33,8 @@ REASON_TONE = {Reason.MEMO_IN: "good", Reason.JOB_WORK_IN: "good", Reason.MEMO_O
                Reason.JOB_WORK_OUT: "warn", Reason.RECOUNT_ADJUSTMENT: "info"}
 PERIODS = [("", "All time"), ("12", "Last 12 months"), ("3", "Last 3 months")]
 TRANSFER = "Transfer to another batch"
+#: reasons only the diamond ledgers post: a pouch's ledger never filters by them
+DIAMOND_ONLY = (Reason.RETURNED_UNUSED, Reason.ASSORT_OUT, Reason.ASSORT_IN)
 #: the card's reasons — the prototype's twelve in its order, then the two it left out — each
 #: with the rights that may post it (any one). Purchase needs all of PURCHASE_RIGHTS; it and
 #: Transfer open their own screens.
@@ -113,7 +115,8 @@ def _movements_page(request, obj, form=None, error=None):
     return _page(
         request, "inventory/movements.html", everything, tab="tx", pouch_ref=obj.ref, row=row,
         ledger=list(reversed(rows)), ledger_total=total, reason=reason, months=months,
-        reasons=Movement.Reason.choices, periods=PERIODS,
+        reasons=[(value, label) for value, label in Movement.Reason.choices if value not in DIAMOND_ONLY],
+        periods=PERIODS,
         in_stock=bool((held.on_ct or 0) > 0 or (held.on_pcs or 0) > 0),
         record=record, form=form, error=error, today=timezone.localdate().isoformat(),
         chosen=form.get("reason") or request.GET.get("record") or (record[0][0] if record else ""),

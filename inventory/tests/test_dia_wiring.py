@@ -74,3 +74,11 @@ def test_settings_counts_each_suppliers_purchases(client, accounts_user, diamond
 def test_the_diamond_movements_and_stock_take_tabs_stay_locked(client, accounts_user, diamonds):
     body = _search(client, accounts_user)
     assert "Movements 🔒" in body and "Stock take 🔒" in body
+
+
+def test_the_stones_pouch_ledger_filters_by_stones_reasons_only(client, admin_user_, shelf):
+    client.force_login(admin_user_)
+    body = client.get(reverse("inventory:movements", args=[shelf["onyx"].ref])).content.decode()
+    assert 'value="Sale"' in body
+    for reason in ("Returned Unused", "Assort Out", "Assort In"):
+        assert f'value="{reason}"' not in body, reason

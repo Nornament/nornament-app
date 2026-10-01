@@ -68,6 +68,8 @@ def post_assortment(user, source, take_out, destinations, loss=None, occurred_on
     held = dia_services.stocked_lines(DiamondLine.objects.filter(pk=source.pk)).get()
     cost = dia_services.price(held, dia_services.rate_table())[0]
     carried = (cost * take_out / (take_out - loss)).quantize(PLACES) if cost is not None else None
+    if carried is not None and carried >= 10 ** 10:              # the column holds ten digits before the point
+        raise ServiceError("The carried cost per carat is too large to keep; check the sorting loss.")
     document = ledger.open_document(user, StockDocument.Kind.DIA_ASSORT,
                                     occurred_on=occurred_on or timezone.localdate(), note=(note or "").strip())
     lines = [ledger.Line(source, Reason.ASSORT_OUT, Movement.OUT, None, take_out - loss, note="source parcel")]

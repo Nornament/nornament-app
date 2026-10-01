@@ -223,3 +223,30 @@ def test_the_diamond_ledger_screens_have_their_names():
                        ("inventory:dia_assort_reverse", [1]), ("inventory:dia_purchase", []),
                        ("inventory:dia_purchase_reverse", [1])]:
         assert reverse(name, args=args)
+
+
+def test_a_diamond_document_cannot_be_dated_in_the_future(admin_user_, diamonds):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from inventory import ledger_dia_assort, ledger_dia_jobs, ledger_dia_purchase
+    from inventory.ledger_purchase import PurchaseHeader
+
+    tomorrow = timezone.localdate() + timedelta(days=1)
+    card = ledger_dia_jobs.open_card(admin_user_, None)
+    attempts = [
+        lambda: ledger_dia_jobs.open_card(admin_user_, None, opened_on=tomorrow),
+        lambda: ledger_dia_jobs.post_entry(admin_user_, card, "issue", diamonds["round"], D("1"), occurred_on=tomorrow),
+        lambda: ledger_dia_assort.post_assortment(
+            admin_user_, diamonds["round"], D("1"),
+            [ledger_dia_assort.Destination("Round", "E-F", "VVS-VS", "", D("1"))], occurred_on=tomorrow),
+        lambda: ledger_dia_purchase.post_dia_purchase(
+            admin_user_, PurchaseHeader(supplier=diamonds["supplier"], occurred_on=tomorrow, invoice_no="DIA-1"),
+            [ledger_dia_purchase.DiaPurchaseLine("Natural Diamond", "Round", "F-G-H", "VS-SI", "+6-12", None,
+                                                 D("1"), D("100"))]),
+    ]
+    for attempt in attempts:
+        with pytest.raises(ServiceError, match="A date can't be in the future"):
+            attempt()
+    assert StockDocument.objects.count() == 1 and not Movement.objects.filter(document__isnull=False).exists()

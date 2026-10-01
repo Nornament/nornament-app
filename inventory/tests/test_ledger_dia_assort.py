@@ -155,3 +155,11 @@ def test_a_destination_in_the_source_grade_is_refused(accounts_user, diamonds):
         with pytest.raises(ServiceError, match="stays on the source"):
             post_assortment(accounts_user, diamonds["round"], D("1"), [Destination("Round", "F-G-H", "VS-SI", size, D("1"))])
     assert not StockDocument.objects.exists() and DiamondLine.objects.count() == 3
+
+
+def test_a_carried_cost_too_large_to_keep_is_refused(accounts_user, diamonds):
+    rnd = diamonds["round"]
+    dia_services.set_rate(accounts_user, rnd.code, "+6-12", D("9000000000"), None, date(2026, 9, 2))
+    with pytest.raises(ServiceError, match="too large"):
+        post_assortment(accounts_user, rnd, D("2"), [Destination("Round", "E-F", "VVS-VS", "", D("1"))], D("1"))
+    assert not StockDocument.objects.exists() and DiamondLine.objects.count() == 3

@@ -154,3 +154,10 @@ def test_a_reversed_purchase_leaves_its_lines_at_zero(accounts_user, diamonds):
     doc = post_dia_purchase(accounts_user, _header(diamonds["supplier"]), _lines())
     ledger.reverse_document(accounts_user, doc)
     assert [_line(line.pk).on_ct for line in _bought(doc)] == [D("0"), D("0")]
+
+
+def test_a_cost_per_carat_too_large_to_keep_is_refused(accounts_user, diamonds):
+    big = [DiaPurchaseLine("Natural Diamond", "Round", "F-G-H", "VS-SI", "+6-12", None, D("1"), D("9999999999"))]
+    with pytest.raises(ServiceError, match="too large"):
+        post_dia_purchase(accounts_user, _header(diamonds["supplier"], currency="USD", fx_rate=D("83")), big)
+    assert not StockDocument.objects.exists() and DiamondLine.objects.count() == 3

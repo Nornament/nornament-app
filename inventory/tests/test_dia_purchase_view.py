@@ -106,3 +106,17 @@ def test_the_diamond_purchase_tab(client, accounts_user, production_user, diamon
     client.force_login(production_user)
     body = client.get(reverse("inventory:diamonds")).content.decode()
     assert "<button disabled>Purchase 🔒</button>" in body
+
+
+def test_reversing_a_purchase_needs_every_purchase_right(client, accounts_user, diamonds):
+    from django.contrib.auth.models import Group, Permission
+
+    from accounts.models import User
+
+    _post(client, accounts_user, diamonds)
+    doc = StockDocument.objects.get(kind=StockDocument.Kind.DIA_PURCHASE)
+    Group.objects.get(name="ACCOUNTS").permissions.remove(Permission.objects.get(codename="view_cost"))
+    client.force_login(User.objects.get(pk=accounts_user.pk))
+    assert client.post(reverse("inventory:dia_purchase_reverse", args=[doc.pk])).status_code == 403
+    doc.refresh_from_db()
+    assert doc.status == StockDocument.Status.CLOSED

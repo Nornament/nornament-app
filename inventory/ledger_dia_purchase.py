@@ -74,8 +74,11 @@ def post_dia_purchase(user, header, lines):
             batch_no=(line.batch_no or "").strip(), size_text=size,
             band=dia_services.term(DiamondTerm.BAND, sized.band), ct_lo=sized.ct_lo, ct_hi=sized.ct_hi,
         )
+        rate = (line.cost_per_ct * fx + per_ct).quantize(PLACES)
+        if rate >= 10 ** 10:                                     # the column holds ten digits before the point
+            raise ServiceError("That cost per carat is too large to keep; check the cost and rate.")
         moves.append(ledger.Line(fresh, Movement.Reason.PURCHASE, Movement.IN, line.pcs, line.ct))
-        costs.append(DiamondLineCost(line=fresh, cost_rate=(line.cost_per_ct * fx + per_ct).quantize(PLACES),
+        costs.append(DiamondLineCost(line=fresh, cost_rate=rate,
                                      effective_from=header.occurred_on, set_by=by, document=document))
     ledger.post(user, document, moves, header.occurred_on)
     DiamondLineCost.objects.bulk_create(costs)
