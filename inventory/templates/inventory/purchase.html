@@ -1,0 +1,125 @@
+{% extends "inventory_base.html" %}{% load inventory_extras %}
+{% block title %}Record a purchase{% endblock %}
+{% block crumb %}Stock control &nbsp;›&nbsp; <b>Purchase</b>{% endblock %}
+{% block content %}
+<div class="shelfbar"><h1>Record a purchase</h1><span class="spacer"></span>
+  <span class="chip info"><span class="dot"></span>Stones</span></div>
+{% if error %}<div class="banner crit"><div class="banner-ic">!</div><div><h4>{{ error }}</h4></div></div>{% endif %}
+
+<form method="post" id="purchase">{% csrf_token %}
+<div class="tx-cols">
+  <div class="card"><div class="card-h"><span class="card-t">The purchase</span></div>
+    <div class="card-b">
+      <div class="two">
+        <div class="fld"><label>Supplier <span style="color:var(--critical)">*</span></label>
+          <select class="inp" name="supplier"><option value="">—</option>
+            {% if caps.inv_masters %}<option value="new"{% if form.supplier == 'new' %} selected{% endif %}>＋ New supplier…</option>{% endif %}
+            {% for s in suppliers %}{% if 'vendor_name' in s %}<option value="{{ s.pk }}"{% if form.supplier == s.pk|stringformat:"s" %} selected{% endif %}>{{ s.vendor_name }}</option>{% endif %}{% endfor %}
+          </select></div>
+        <div class="fld"><label>Purchase date <span style="color:var(--critical)">*</span></label>
+          <input class="inp" type="date" name="occurred_on" value="{{ form.occurred_on|default:today }}"></div>
+      </div>
+      <div id="newsupplier" hidden><div class="two">
+        <div class="fld"><label>Supplier code</label><input class="inp mono" name="new_code" maxlength="32" value="{{ form.new_code|default:'' }}"></div>
+        <div class="fld"><label>Supplier name</label><input class="inp" name="new_name" maxlength="120" value="{{ form.new_name|default:'' }}"></div>
+      </div></div>
+      <div class="two">
+        <div class="fld"><label>Invoice / bill no.</label>
+          <input class="inp mono" name="invoice_no" maxlength="40" placeholder="e.g. 2026/0442" value="{{ form.invoice_no|default:'' }}"></div>
+        <div class="fld"><label>Currency</label><select class="inp" name="currency">
+          <option{% if form.currency != 'USD' %} selected{% endif %}>INR</option>
+          <option{% if form.currency == 'USD' %} selected{% endif %}>USD</option></select></div>
+      </div>
+      <div id="fx" hidden><div class="fld"><label>Rate to INR <span style="color:var(--critical)">*</span></label>
+        <div class="unit"><input class="inp tnum" name="fx_rate" inputmode="decimal" value="{{ form.fx_rate|default:'' }}"><span class="u">₹ / $</span></div></div></div>
+      <div class="fld"><label>Landed extras — freight, duty, cutting</label>
+        <div class="unit"><input class="inp tnum" name="landed_extras" inputmode="decimal" placeholder="0" value="{{ form.landed_extras|default:'' }}"><span class="u">₹</span></div></div>
+
+      <div class="grp-t" style="margin:16px 0 10px">Lines in this purchase</div>
+      <div style="overflow:auto"><table class="pt" id="lines"><thead><tr>
+        <th>Batch</th><th>Pouch</th><th>Stone</th><th>Shape</th><th>Colour</th>
+        <th class="r">Pieces</th><th class="r">Weight (ct)</th><th class="r">Cost / ct</th><th class="r">Cost value</th></tr></thead>
+        <tbody>{% for l in lines %}<tr>
+          <td><input class="inp mono" name="batch" list="batches" value="{{ l.batch }}" style="width:88px"></td>
+          <td><input class="inp mono" name="pouch_no" maxlength="16" value="{{ l.pouch_no }}" style="width:58px"></td>
+          <td><input class="inp" name="stone_name" maxlength="120" value="{{ l.stone_name }}" style="width:130px"></td>
+          <td><input class="inp" name="shape" maxlength="80" value="{{ l.shape }}" style="width:90px"></td>
+          <td><input class="inp" name="colour" maxlength="80" value="{{ l.colour }}" style="width:90px"></td>
+          <td class="r"><input class="inp tnum" name="pcs" inputmode="numeric" placeholder="uncountable" value="{{ l.pcs }}" style="width:96px"></td>
+          <td class="r"><input class="inp tnum" name="ct" inputmode="decimal" value="{{ l.ct }}" style="width:84px"></td>
+          <td class="r"><input class="inp tnum" name="cost" inputmode="decimal" value="{{ l.cost }}" style="width:90px"></td>
+          <td class="r"><b class="lineval">—</b></td></tr>{% endfor %}</tbody></table></div>
+      <button class="btn sm" type="button" id="addline" style="margin-top:10px">＋ Add line</button>
+
+      <div class="cons" style="margin-top:14px"><b>What posting will do</b>
+        <span class="ok">✓</span> create <span id="w-n">0</span> new pouches<br>
+        <span class="ok">✓</span> post an <code>in</code> movement on each — reason <code>Purchase</code><br>
+        <span class="ok">✓</span> write a <code>cost</code> price row dated <span id="w-date"></span><br>
+        <span class="ok">✓</span> total cost <b id="w-total">₹0</b> across <span id="w-ct">0.00</span> ct<br>
+        <span class="ok">✓</span> value each at landed cost — <b id="w-extra">₹0</b> spread by weight<br>
+        <span style="color:var(--warnink)">!</span> selling price is <b>not</b> set here — that is a separate decision on the price list
+      </div>
+      <div class="fld" style="margin-top:12px"><label>Note</label><input class="inp" name="note" value="{{ form.note|default:'' }}"></div>
+      <button class="btn pri" style="width:100%;justify-content:center">Post purchase</button>
+    </div></div>
+
+  <div>
+    <div class="card"><div class="card-h"><span class="card-t">Price list</span></div>
+      <div class="card-b">{% for label, source in price_list %}
+        <div class="f" style="grid-template-columns:1fr auto"><div class="k">{{ label }}</div><div class="v">{{ source }}</div></div>{% endfor %}
+      </div></div>
+    <div class="card" style="margin-top:14px"><div class="card-h"><span class="card-t">Stock control</span></div>
+      <div class="card-b">{% for reason in stock_control %}<span class="chip" style="margin:0 4px 5px 0">{{ reason }}</span>{% endfor %}</div></div>
+  </div>
+</div>
+</form>
+<datalist id="batches">{% for code in next_numbers %}<option value="{{ code }}">{% endfor %}</datalist>
+{{ next_numbers|json_script:"next-pouch" }}
+<script>
+/* Totals as typed, the next free pouch no. per batch, and the fields USD and a new supplier need. */
+(function () {
+  var form = document.getElementById('purchase'), body = form.querySelector('#lines tbody');
+  var next = JSON.parse(document.getElementById('next-pouch').textContent);
+  function num(v) { v = parseFloat(String(v || '').replace(/,/g, '')); return isFinite(v) ? v : 0; }
+  function inr(v) { return '₹' + Math.round(v).toLocaleString('en-IN'); }
+  function field(tr, name) { return tr.querySelector('[name=' + name + ']'); }
+  function total() {
+    var usd = form.currency.value === 'USD', fx = usd ? num(form.fx_rate.value) : 1, n = 0, ct = 0, cost = 0;
+    body.querySelectorAll('tr').forEach(function (tr) {
+      var w = num(field(tr, 'ct').value), c = num(field(tr, 'cost').value) * fx;
+      tr.querySelector('.lineval').textContent = w && c ? inr(w * c) : '—';
+      if (w) { n += 1; ct += w; cost += w * c; }
+    });
+    document.getElementById('w-n').textContent = n;
+    document.getElementById('w-ct').textContent = ct.toFixed(2);
+    document.getElementById('w-total').textContent = inr(cost);
+    document.getElementById('w-extra').textContent = inr(num(form.landed_extras.value));
+    document.getElementById('w-date').textContent = form.occurred_on.value;
+    document.getElementById('fx').hidden = !usd;
+    document.getElementById('newsupplier').hidden = form.supplier.value !== 'new';
+  }
+  function suggest(tr) {
+    var code = field(tr, 'batch').value.trim().toUpperCase(), pouch = field(tr, 'pouch_no');
+    if (pouch.value || !(code in next)) return;
+    var n = next[code];
+    body.querySelectorAll('tr').forEach(function (other) {
+      var no = parseInt(field(other, 'pouch_no').value, 10);
+      if (other !== tr && field(other, 'batch').value.trim().toUpperCase() === code && no >= n) n = no + 1;
+    });
+    pouch.value = n;
+  }
+  form.addEventListener('input', total);
+  form.addEventListener('change', function (e) {
+    if (e.target.name === 'batch') suggest(e.target.closest('tr'));
+    total();
+  });
+  document.getElementById('addline').addEventListener('click', function () {
+    var tr = body.lastElementChild.cloneNode(true);
+    tr.querySelectorAll('input').forEach(function (input) { input.value = ''; });
+    body.appendChild(tr);
+    total();
+  });
+  total();
+})();
+</script>
+{% endblock %}

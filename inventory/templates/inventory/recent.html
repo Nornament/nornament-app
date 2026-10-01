@@ -1,0 +1,18 @@
+{% extends "inventory_base.html" %}{% load inventory_extras %}
+{% block title %}Movements{% endblock %}
+{% block crumb %}Stock control &nbsp;›&nbsp; <b>Movements</b>{% endblock %}
+{% block content %}
+<div class="shelfbar"><h1>Movements</h1><span class="spacer"></span>
+  <form method="get"><select class="chip" name="kind" onchange="this.form.submit()"><option value="">All kinds ▾</option>
+    {% for value, label in kinds %}<option value="{{ value }}"{% if value == kind %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></form></div>
+<div class="card" style="overflow:hidden"><div style="overflow:auto"><table class="led">
+  <thead><tr><th>Date</th><th>Document</th><th>Kind</th><th>Counterparty</th><th class="r">Lines</th><th>Status</th></tr></thead>
+  <tbody>{% for d in rows %}<tr>
+    <td>{{ d.occurred_on|date:"d M Y" }}</td>
+    <td class="mono"><a href="{% url 'inventory:document' d.pk %}"><b>{{ d.number }}</b></a></td>
+    <td>{{ d.kind }}</td>
+    <td>{% if 'karigar_name' in d %}{{ d.karigar_name }}{% elif 'customer_name' in d %}{{ d.customer_name }}{% elif 'vendor_name' in d %}{{ d.vendor_name }}{% else %}<span class="hint">—</span>{% endif %}</td>
+    <td class="r">{{ d.lines }}</td>
+    <td><span class="chip {{ d.tone }}"><span class="dot"></span>{{ d.status }}</span></td></tr>
+  {% empty %}<tr><td colspan="6" class="hint">No documents yet.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

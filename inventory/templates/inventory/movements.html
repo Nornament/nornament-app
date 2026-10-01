@@ -10,8 +10,8 @@
       <span class="chip">{{ ledger_total }} movement{{ ledger_total|pluralize }}</span></div></div>
   <div class="head-act">
     <a class="btn gho" href="{% url 'inventory:pouch' row.ref %}">← Pouch</a>
-    <button class="btn gho" disabled title="Coming soon">⤴ Split 🔒</button>
-    <button class="btn pri" disabled title="Coming soon">＋ Record movement 🔒</button></div>
+    {% if caps.inv_assort %}<a class="btn gho" href="{% url 'inventory:split' row.ref %}">⤴ Split</a>{% endif %}
+    {% if record %}<a class="btn pri" href="#record">＋ Record movement</a>{% endif %}</div>
 </div>
 
 <div class="tx-top">
@@ -31,7 +31,7 @@
         <span class="chip mono">◈ {{ row.batch_code }}</span><span style="color:var(--muted)">›</span>
         <span class="chip mono">◆ pouch {{ row.pouch_no|default:"?" }}</span><span style="color:var(--muted)">·</span>
         <span class="chip">▤ box {{ row.carton|default:"—" }}</span></div>
-      <button class="btn sm" style="margin-top:11px" disabled title="Coming soon">⇄ Transfer to another batch 🔒</button>
+      {% if caps.inv_assort %}<a class="btn sm" style="margin-top:11px" href="{% url 'inventory:transfer' row.ref %}">⇄ Transfer to another batch</a>{% endif %}
     </div></div>
 </div>
 
@@ -49,26 +49,108 @@
         <th>Counterparty / ref</th><th class="r">Balance after</th><th>By</th></tr></thead>
       <tbody>{% for m in ledger %}<tr>
         <td>{{ m.when|date:"d M Y" }}<div class="hint">{{ m.when|date:"H:i" }}</div></td>
-        <td><span class="chip {{ m.tone }}">{% if m.tone %}<span class="dot"></span>{% endif %}{{ m.reason }}</span>{% if m.note %}<div class="hint">{{ m.note }}</div>{% endif %}</td>
-        <td class="dir {{ m.dir }}">{% if m.dir == 'in' %}＋{% else %}−{% endif %}</td>
+        <td><span class="chip {{ m.tone }}">{% if m.tone %}<span class="dot"></span>{% endif %}{{ m.reason }}</span>{% if m.reversal %}<div class="hint">↺ reversal</div>{% endif %}{% if m.note %}<div class="hint">{{ m.note }}</div>{% endif %}</td>
+        <td class="dir {{ m.cls }}">{{ m.sym }}</td>
         <td class="r">{{ m.pcs|default_if_none:"—" }}</td><td class="r">{{ m.ct|ct }}</td>
-        <td>{{ m.vendor_name }}{% if m.ref %}<div class="chal">{{ m.ref }}</div>{% endif %}</td>
+        <td>{% if 'karigar_name' in m %}{{ m.karigar_name }}{% elif 'customer_name' in m %}{{ m.customer_name }}{% elif 'vendor_name' in m %}{{ m.vendor_name }}{% endif %}
+          {% if m.doc_pk %}<div class="chal"><a href="{% url 'inventory:document' m.doc_pk %}">{{ m.number }}</a>{% if m.ref %} · {{ m.ref }}{% endif %}</div>{% elif m.ref %}<div class="chal">{{ m.ref }}</div>{% endif %}</td>
         <td class="r">{{ m.bal_ct|ct }} ct<div class="hint tnum">{% if row.countable %}{{ m.bal_pcs }} pcs{% else %}no pcs{% endif %}</div></td>
         <td class="hint">{{ m.by }}</td></tr>
       {% empty %}<tr><td colspan="8" class="hint">No movements in this period.</td></tr>{% endfor %}</tbody></table></div>
   </div>
 
-  <div><div class="card"><div class="card-h"><span class="card-t">Record movement</span><span class="lock" style="margin-left:auto">🔒</span></div>
-    <div class="card-b"><fieldset disabled style="border:0">
-      <div class="fld"><label>Reason</label><select class="inp">{% for value, label in reasons %}<option>{{ label }}</option>{% endfor %}</select></div>
-      <div class="two">
-        <div class="fld"><label>Pieces out</label><div class="unit"><input class="inp tnum"{% if not row.countable %} placeholder="uncountable"{% endif %}><span class="u">pcs</span></div></div>
-        <div class="fld"><label>Weight out</label><div class="unit"><input class="inp tnum"><span class="u">ct</span></div></div></div>
-      <div class="fld"><label>Karigar</label><select class="inp"><option>—</option></select></div>
-      <div class="fld"><label>Delivery challan no. <span style="color:var(--critical)">*</span></label><input class="inp mono"></div>
-      <div class="two"><div class="fld"><label>Date</label><input class="inp" type="date"></div>
-        <div class="fld"><label>Expected back</label><input class="inp" type="date"></div></div>
-      <button class="btn pri" style="width:100%;justify-content:center">Post movement</button>
-    </fieldset></div></div></div>
+  <div><div class="card" id="record"><div class="card-h"><span class="card-t">Record movement</span></div>
+    <div class="card-b">
+    {% if record %}
+    <form method="post" action="{% url 'inventory:movement_post' row.ref %}" id="recform">{% csrf_token %}
+      {% if error %}<div class="banner crit"><div class="banner-ic">!</div><div><h4>{{ error }}</h4></div></div>{% endif %}
+      <div class="fld"><label>Reason</label><select class="inp" name="reason">
+        {% for value, word in record %}<option value="{{ value }}" data-word="{{ word }}"{% if value == chosen %} selected{% endif %}>{{ value }}</option>{% endfor %}</select></div>
+      <div data-for="Purchase"><a class="btn" href="{% url 'inventory:purchase' %}">＋ Record a purchase</a></div>
+      <div data-for="Transfer to another batch"><a class="btn" href="{% url 'inventory:transfer' row.ref %}">⇄ Transfer to another batch</a></div>
+      <div data-for="{{ qty_reasons }}"><div class="two">
+        <div class="fld"><label>Pieces <span class="qword">out</span></label>
+          <div class="unit"><input class="inp tnum" name="pcs" inputmode="numeric" value="{{ form.pcs|default:'' }}"{% if not row.countable %} disabled data-locked placeholder="uncountable"{% endif %}><span class="u">pcs</span></div></div>
+        <div class="fld"><label>Weight <span class="qword">out</span></label>
+          <div class="unit"><input class="inp tnum" name="ct" inputmode="decimal" value="{{ form.ct|default:'' }}"><span class="u">ct</span></div></div>
+      </div></div>
+      <div class="fld" data-for="Job Work Out"><label>Karigar</label><select class="inp" name="karigar"><option value="">—</option>
+        {% if caps.inv_masters and caps.view_vendor %}<option value="new"{% if form.karigar == 'new' %} selected{% endif %}>＋ New karigar…</option>{% endif %}
+        {% for k in karigars %}{% if 'karigar_name' in k %}<option value="{{ k.pk }}"{% if form.karigar == k.pk|stringformat:"s" %} selected{% endif %}>{{ k.karigar_name }}</option>{% endif %}{% endfor %}</select></div>
+      {% if caps.inv_masters and caps.view_vendor %}<div data-for="Job Work Out"><div id="newkarigar" hidden><div class="two">
+        <div class="fld"><label>Karigar code</label><input class="inp mono" name="new_code" maxlength="32" value="{{ form.new_code|default:'' }}"></div>
+        <div class="fld"><label>Karigar name</label><input class="inp" name="new_name" maxlength="120" value="{{ form.new_name|default:'' }}"></div>
+      </div></div></div>{% endif %}
+      <div class="fld" data-for="Job Work Out"><label>Delivery challan no. <span style="color:var(--critical)">*</span></label>
+        <input class="inp mono" name="challan_no" maxlength="40" value="{{ form.challan_no|default:'' }}"></div>
+      <div class="fld" data-for="Job Work In"><label>Open challan</label>
+        <select class="inp" name="challan">
+          {% if caps.inv_job %}{% for d in challans %}<option value="{{ d.pk }}"{% if form.challan == d.pk|stringformat:"s" %} selected{% endif %}>{{ d.number }}{% if 'karigar_name' in d %} · {{ d.karigar_name }}{% endif %} · {{ d.ct|ct }} ct out</option>{% endfor %}{% endif %}
+        </select></div>
+      <div class="fld" data-for="Consumed in Production|Wastage / Loss in Process"><label>Open challan</label>
+        <select class="inp" name="challan">
+          {% if caps.inv_move %}<option value="">— from the shelf —</option>{% endif %}
+          {% if caps.inv_job %}{% for d in challans %}<option value="{{ d.pk }}"{% if form.challan == d.pk|stringformat:"s" %} selected{% endif %}>{{ d.number }}{% if 'karigar_name' in d %} · {{ d.karigar_name }}{% endif %} · {{ d.ct|ct }} ct out</option>{% endfor %}{% endif %}
+        </select></div>
+      <div class="fld" data-for="Memo Out|Sale|Sales Return"><label>Customer</label>
+        <input class="inp" name="customer" list="customers" placeholder="customer code" value="{{ form.customer|default:'' }}">
+        <datalist id="customers">{% for c in customers %}<option value="{{ c.code }}">{% if 'customer_name' in c %}{{ c.customer_name }}{% endif %}</option>{% endfor %}</datalist></div>
+      <div class="fld" data-for="Memo Out"><label>Memo no. <span style="color:var(--critical)">*</span></label>
+        <input class="inp mono" name="memo_no" maxlength="40" value="{{ form.memo_no|default:'' }}"></div>
+      <div class="fld" data-for="Memo In|Sale"><label>Open memo</label>
+        <select class="inp" name="memo"><option value="">— a direct sale —</option>
+          {% for d in memos %}<option value="{{ d.pk }}"{% if form.memo == d.pk|stringformat:"s" %} selected{% endif %}>{{ d.number }}{% if 'customer_name' in d %} · {{ d.customer_name }}{% endif %} · {{ d.ct|ct }} ct out</option>{% endfor %}</select></div>
+      <div class="fld" data-for="Purchase Return"><label>Supplier</label><select class="inp" name="supplier"><option value="">—</option>
+        {% for s in suppliers %}{% if 'vendor_name' in s %}<option value="{{ s.pk }}"{% if form.supplier == s.pk|stringformat:"s" %} selected{% endif %}>{{ s.vendor_name }}</option>{% endif %}{% endfor %}</select></div>
+      <div class="fld" data-for="Sale|Sales Return|Purchase Return"><label>Invoice / ref no.</label>
+        <input class="inp mono" name="ref" maxlength="40" value="{{ form.ref|default:'' }}"></div>
+      <div data-for="{{ qty_reasons }}"><div class="two">
+        <div class="fld"><label>Date</label><input class="inp" type="date" name="occurred_on" value="{{ form.occurred_on|default:today }}"></div>
+        <div class="fld" data-for="Job Work Out|Memo Out"><label>Expected back</label><input class="inp" type="date" name="expected_back" value="{{ form.expected_back|default:'' }}"></div>
+      </div></div>
+      <div class="fld" data-for="{{ qty_reasons }}"><label>Note</label><input class="inp" name="note" value="{{ form.note|default:'' }}"></div>
+      <div class="cons"><b>Checks that will run</b>
+        <span data-for="Job Work Out|Sale|Memo Out|Consumed in Production|Wastage / Loss in Process|Breakage|Purchase Return|Sample">
+          {% if row.countable %}<span class="ok">✓</span> <code>{{ row.pcs }} − out pcs ≥ 0</code><br>{% else %}<span style="color:var(--warnink)">!</span> uncountable — weight only<br>{% endif %}
+          <span class="ok">✓</span> <code>{{ row.ct|ct }} ct − out ≥ 0</code><br></span>
+        <span data-for="Job Work Out"><span class="ok">✓</span> <code>challan_no</code> present<br>
+          <span style="color:var(--warning)">!</span> status → <code>Out on Job Work</code><br></span>
+        <span data-for="Memo Out"><span class="ok">✓</span> <code>memo_no</code> present<br>
+          <span style="color:var(--warning)">!</span> status → <code>Out on Memo</code><br></span>
+        <span data-for="Job Work In|Memo In|Consumed in Production|Wastage / Loss in Process|Sale"><span class="ok">✓</span> against a challan or memo: <code>≤ outstanding</code><br></span>
+        <span data-for="Sales Return"><span class="ok">✓</span> <code>weight &gt; 0</code><br></span>
+        <span data-for="Recount Adjustment"><span class="ok">✓</span> posts <code>counted − balance</code>, in or out<br>
+          {% if not row.countable %}<span style="color:var(--warnink)">!</span> uncountable — weight only<br>{% endif %}</span>
+        <span data-for="Purchase|Transfer to another batch">checked on its own screen</span>
+      </div>
+      <div data-for="{{ qty_reasons }}"><button class="btn pri" style="width:100%;justify-content:center">Post movement</button></div>
+    </form>
+    {% else %}<p class="hint">No movement here is yours to post.</p>{% endif %}
+    </div></div></div>
 </div>
+<script>
+/* Show the chosen reason's fields and checks; the server ignores the rest. A hidden block's
+   own inputs are disabled too — a disabled control is never submitted, so switching reason
+   cannot carry a stray value (a memo chosen under Memo In, say) into a post it does not belong to. */
+(function () {
+  var form = document.getElementById('recform');
+  if (!form) return;
+  function show() {
+    var chosen = form.elements.reason.selectedOptions[0];
+    form.querySelectorAll('[data-for]').forEach(function (el) {
+      var on = el.dataset.for.split('|').indexOf(chosen.value) >= 0;
+      el.hidden = !on;
+      el.querySelectorAll('input, select, textarea, button').forEach(function (field) {
+        if (!field.dataset.locked) field.disabled = !on;
+      });
+    });
+    form.querySelectorAll('.qword').forEach(function (el) { el.textContent = chosen.dataset.word; });
+  }
+  form.elements.reason.addEventListener('change', show);
+  show();
+  var karigar = form.elements.karigar, fresh = document.getElementById('newkarigar');
+  function newKarigar() { fresh.hidden = karigar.value !== 'new'; }
+  if (karigar && fresh) { karigar.addEventListener('change', newKarigar); newKarigar(); }
+})();
+</script>
 {% endblock %}

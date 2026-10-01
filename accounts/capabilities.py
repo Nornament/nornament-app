@@ -27,6 +27,10 @@ INV_PURCHASE = "accounts.inv_purchase"
 INV_JOB = "accounts.inv_job"
 INV_ASSORT = "accounts.inv_assort"
 
+#: everything that moves stock that is not job work, a purchase or an assortment:
+#: sales, returns, memos, losses, samples, recounts (inventory part 2)
+INV_MOVE = "accounts.inv_move"
+
 ALL = (
     VIEW_SALE,
     VIEW_COST,
@@ -40,6 +44,7 @@ ALL = (
     INV_PURCHASE,
     INV_JOB,
     INV_ASSORT,
+    INV_MOVE,
 )
 
 #: legacy ``app.has_cap()`` argument -> permission, so ported logic reads the same
@@ -77,7 +82,7 @@ ROLE_GROUPS = {
         "name": "Accounts",
         "caps": (
             VIEW_COST, VIEW_SALE, MANAGE_MATERIALS, VIEW_VENDOR, VIEW_MARGIN, EDIT_BOM, ADJUST_STOCK,
-            INV_MASTERS, INV_PURCHASE, INV_JOB, INV_ASSORT,
+            INV_MASTERS, INV_PURCHASE, INV_JOB, INV_ASSORT, INV_MOVE,
         ),
         "is_system": False,
     },

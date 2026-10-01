@@ -6,30 +6,19 @@ rate annotated.
 """
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Case, F, OuterRef, Subquery, Sum, When
+from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 
 from accounts.capabilities import INV_MASTERS, VIEW_COST, VIEW_SALE
 from stock.services import ServiceError, log, require
 
-from .models import Movement, Pouch, PriceEntry
+from .models import Movement, Pouch, PriceEntry, balance
 
 DETAIL_FIELDS = ("treatment", "origin", "purchase_date", "supplier")
 
 
 def _by(user):
     return user if getattr(user, "is_authenticated", False) else None
-
-
-def _signed(field):
-    # ponytail: Django 5.2 won't infer a mixed IntegerField/PositiveIntegerField
-    # Case output; the model's own field type settles it.
-    output_field = Movement._meta.get_field(field)
-    return Case(
-        When(movements__direction=Movement.OUT, then=-F(f"movements__{field}")),
-        default=F(f"movements__{field}"),
-        output_field=output_field,
-    )
 
 
 def stocked(queryset=None):
@@ -43,7 +32,7 @@ def stocked(queryset=None):
     # ordered here, not by Meta: the aggregate drops Meta.ordering, and every
     # screen groups in arrival order, so batches by code and pouches as imported
     return queryset.select_related("batch__box_colour", "supplier").annotate(
-        on_pcs=Sum(_signed("pcs")), on_ct=Sum(_signed("ct")), rate=Subquery(latest)
+        on_pcs=balance("pcs"), on_ct=balance("ct"), rate=Subquery(latest)
     ).order_by("batch__code", "pk")
 
 
@@ -137,27 +126,39 @@ def add_price(user, pouch, kind, rate, effective_from):
     return entry
 
 
-@transaction.atomic
-def recount(user, pouch, pcs, ct, note=""):
-    """Bring the ledger to a counted figure: one adjustment per quantity that differs.
+def recount_deltas(pouch, pcs, ct):
+    """``(field, direction, quantity)`` for each counted figure that differs from the ledger.
 
-    Pieces and carats can move in opposite directions (a recount finds more
-    pieces but less weight), so each gets its own movement. A figure of ``None``
-    means "not counted", never "zero".
+    A figure of ``None`` means "not counted", never "zero". Pieces and carats
+    can move in opposite directions (a recount finds more pieces but less
+    weight), so each is its own adjustment.
     """
-    require(user, INV_MASTERS, "Only a role that edits inventory records can recount.")
     _check_quantities(pcs, ct)
     held = stocked(Pouch.objects.filter(pk=pouch.pk)).get()
-    moves = []
+    deltas = []
     for field, counted, current in (("pcs", pcs, held.on_pcs), ("ct", ct, held.on_ct)):
         if counted is None or counted == (current or 0):
             continue
         delta = counted - (current or 0)
-        quantities = {"pcs": None, "ct": None, field: abs(delta)}
-        moves.append(Movement.objects.create(
-            pouch=pouch, reason=Movement.Reason.RECOUNT_ADJUSTMENT,
-            direction=Movement.IN if delta > 0 else Movement.OUT, note=note, recorded_by=_by(user), **quantities,
-        ))
+        deltas.append((field, Movement.IN if delta > 0 else Movement.OUT, abs(delta)))
+    return deltas
+
+
+@transaction.atomic
+def recount(user, pouch, pcs, ct, note=""):
+    """The importer's recount: bring the ledger to a counted figure, under the masters right.
+
+    The Record movement form's Recount Adjustment posts the same differences on
+    a document, through ``ledger_single.post_recount``.
+    """
+    require(user, INV_MASTERS, "Only a role that edits inventory records can recount.")
+    moves = [
+        Movement.objects.create(
+            pouch=pouch, reason=Movement.Reason.RECOUNT_ADJUSTMENT, direction=direction, note=note,
+            recorded_by=_by(user), **{"pcs": None, "ct": None, field: quantity},
+        )
+        for field, direction, quantity in recount_deltas(pouch, pcs, ct)
+    ]
     if moves:
         log(user, "INSERT", "inv_movement", pouch.pk, f"recount of {pouch}: {len(moves)} adjustment(s)")
     return moves

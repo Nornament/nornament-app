@@ -12,10 +12,13 @@ the prototype named but never built is shown locked, never as a dead link.{% end
 <div class="nav-h">Stock control</div>
 <nav class="nav">
   {% if caps.inv_masters %}<a class="{% if tab == 'import' %}on{% endif %}" href="{% url 'inventory:import_home' %}"><span class="ic">⇅</span>Import stones</a>{% endif %}
-  <span class="locked"><span class="ic">＋</span>Purchases<span class="ct">🔒</span></span>
-  <span class="locked"><span class="ic">⇄</span>Movements<span class="ct">🔒</span></span>
-  <span class="locked"><span class="ic">↗</span>Job work out<span class="ct">🔒</span></span>
-  <span class="locked"><span class="ic">↘</span>Memo out<span class="ct">🔒</span></span>
+  {% if caps.inv_purchase and caps.view_cost and caps.view_vendor %}<a class="{% if tab == 'purchase' %}on{% endif %}" href="{% url 'inventory:purchase' %}"><span class="ic">＋</span>Purchases</a>
+  {% else %}<span class="locked"><span class="ic">＋</span>Purchases<span class="ct">🔒</span></span>{% endif %}
+  <a class="{% if tab == 'recent' %}on{% endif %}" href="{% url 'inventory:recent' %}"><span class="ic">⇄</span>Movements</a>
+  {% if caps.inv_job %}<a class="{% if tab == 'job_work' %}on{% endif %}" href="{% url 'inventory:job_work_list' %}"><span class="ic">↗</span>Job work out</a>
+  {% else %}<span class="locked"><span class="ic">↗</span>Job work out<span class="ct">🔒</span></span>{% endif %}
+  {% if caps.inv_move %}<a class="{% if tab == 'memo' %}on{% endif %}" href="{% url 'inventory:memo_list' %}"><span class="ic">↘</span>Memo out</a>
+  {% else %}<span class="locked"><span class="ic">↘</span>Memo out<span class="ct">🔒</span></span>{% endif %}
   <span class="locked"><span class="ic">⊙</span>Stock takes<span class="ct">🔒</span></span>
   <span class="locked"><span class="ic">⤴</span>Splits &amp; merges<span class="ct">🔒</span></span>
   <span class="locked"><span class="ic">⇉</span>Transfers<span class="ct">🔒</span></span>

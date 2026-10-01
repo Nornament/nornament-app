@@ -14,7 +14,7 @@ from mediahub.models import MediaAsset
 from stock.enums import MediaKind
 from stock.masking import mask
 
-from . import rules, services
+from . import ledger, rules, services
 
 #: what a client is never sent: where it is filed, what it cost, what is wrong with it
 CLIENT_HIDDEN = {
@@ -163,3 +163,10 @@ def decoder(batch, labels):
         {"char": batch.seq, "label": "batch no.", "value": "sequence within colour", "doubt": False},
         {"char": box.code, "label": "box colour", "value": box.label, "doubt": not box.confirmed},
     ]
+
+
+def out_tile(user):
+    """The shelf's "Out on job work / memo": carats on open documents, and their value
+    under the stock value's own gate."""
+    summary = ledger.out_summary()
+    return mask(user, {"out_ct": summary["ct"], "documents": summary["documents"], "pouch_value": summary["value"]})

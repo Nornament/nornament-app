@@ -2280,6 +2280,7 @@ CAPABILITY_MATRIX = [
     ("inv_purchase", "Record purchases", "Stones bought in"),
     ("inv_job", "Job cards", "Issue to and receive from karigars"),
     ("inv_assort", "Assort", "Split and merge pouches"),
+    ("inv_move", "Record stock movements", "Stones: sales, returns, memos, losses, samples, recounts"),
 ]
 
 

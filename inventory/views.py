@@ -1,6 +1,5 @@
 """The inventory screens. Thin: services write, rows mask, templates draw."""
 import os
-from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
@@ -24,14 +23,9 @@ from stock.views import _batch_workbook, _store_workbook
 
 from . import rows, services
 from .importers import plan, stones
-from .models import ORIGINS, TREATMENTS, Batch, BoxColour, CodePart, Movement, Pouch, PriceEntry
+from .models import ORIGINS, TREATMENTS, Batch, BoxColour, CodePart, Pouch, PriceEntry
 
 BATCH_CAP = 40
-
-#: the prototype's chip colours per reason
-REASON_TONE = {"Memo In": "good", "Job Work In": "good", "Memo Out": "info", "Job Work Out": "warn",
-               "Recount Adjustment": "info"}
-PERIODS = [("", "All time"), ("12", "Last 12 months"), ("3", "Last 3 months")]
 
 
 def _client(request):
@@ -70,7 +64,8 @@ def set_view(request):
 @login_required
 def shelf(request):
     everything = _everything(request)
-    return _page(request, "inventory/shelf.html", everything, tab="shelf", colours=rows.by_colour(everything))
+    return _page(request, "inventory/shelf.html", everything, tab="shelf", colours=rows.by_colour(everything),
+                 out=None if _client(request) else rows.out_tile(request.user))
 
 
 @login_required
@@ -225,39 +220,6 @@ def photo(request, media_id):
     except storage.StorageNotConfigured:
         return JsonResponse({"error": "media storage is not configured"}, status=503)
     return redirect(url)
-
-
-@login_required
-def movements(request, ref):
-    if _client(request):
-        return redirect("inventory:pouch", ref=ref)
-    obj = get_object_or_404(Pouch, ref=ref)
-    everything = _everything(request)
-    row = next(r for r in everything if r["pk"] == obj.pk)
-    ledger, pcs, ct = [], 0, 0
-    for move in obj.movements.select_related("counterparty", "recorded_by").order_by("occurred_at", "pk"):
-        sign = 1 if move.direction == Movement.IN else -1
-        pcs += sign * (move.pcs or 0)
-        ct += sign * (move.ct or 0)
-        ledger.append(mask(request.user, {
-            "when": move.occurred_at, "reason": move.reason, "tone": REASON_TONE.get(move.reason, ""),
-            "note": move.note, "dir": move.direction, "pcs": move.pcs, "ct": move.ct,
-            "vendor_name": move.counterparty.name if move.counterparty_id else "",
-            "ref": move.challan_no or move.ref, "bal_pcs": pcs, "bal_ct": ct,
-            "by": (move.recorded_by.full_name or move.recorded_by.get_username()) if move.recorded_by_id else "system",
-        }))
-    total = len(ledger)
-    reason, months = request.GET.get("reason", ""), request.GET.get("months", "")
-    if reason:
-        ledger = [m for m in ledger if m["reason"] == reason]
-    if months.isdigit():
-        since = timezone.now() - timedelta(days=31 * int(months))
-        ledger = [m for m in ledger if m["when"] >= since]
-    held = services.stocked(Pouch.objects.filter(pk=obj.pk)).get()
-    return _page(request, "inventory/movements.html", everything, tab="tx", pouch_ref=obj.ref, row=row,
-                 ledger=list(reversed(ledger)), ledger_total=total, reason=reason, months=months,
-                 reasons=Movement.Reason.choices, periods=PERIODS,
-                 in_stock=bool((held.on_ct or 0) > 0 or (held.on_pcs or 0) > 0))
 
 
 @login_required
