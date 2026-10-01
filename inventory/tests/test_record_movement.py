@@ -212,3 +212,19 @@ def test_a_hand_built_purchase_or_transfer_post_is_refused_with_nothing_written(
         assert response.status_code == 200
         assert "not posted from the shelf" in response.content.decode()
     assert Movement.objects.count() == before
+
+
+def test_open_challans_reach_only_a_login_with_the_job_card_right(client, admin_user_, graphic_user, shelf, parties):
+    """A role edited to hold Record stock movements without Job cards must not get challan numbers in the page."""
+    from django.contrib.auth.models import Permission
+
+    ledger_jobs.job_work_out(admin_user_, shelf["onyx"], parties["karigar"], "2026/0431", 4, D("3"))
+    graphic_user.user_permissions.add(Permission.objects.get(codename="inv_move"))
+    import re
+
+    def job_work_in_options(user):
+        body = _body(client, user, shelf["onyx"])
+        return dict(re.findall(r'data-for="([^"]*)"><label>Open challan</label>(.*?)</select>', body, re.S))["Job Work In"]
+
+    assert "2026/0431" not in job_work_in_options(graphic_user)     # the ledger rows may name it; the picker may not
+    assert "2026/0431" in job_work_in_options(admin_user_)

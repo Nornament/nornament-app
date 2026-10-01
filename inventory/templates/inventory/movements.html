@@ -85,7 +85,7 @@
         <input class="inp mono" name="challan_no" maxlength="40" value="{{ form.challan_no|default:'' }}"></div>
       <div class="fld" data-for="Job Work In"><label>Open challan</label>
         <select class="inp" name="challan">
-          {% for d in challans %}<option value="{{ d.pk }}"{% if form.challan == d.pk|stringformat:"s" %} selected{% endif %}>{{ d.number }}{% if 'karigar_name' in d %} · {{ d.karigar_name }}{% endif %} · {{ d.ct|ct }} ct out</option>{% endfor %}
+          {% if caps.inv_job %}{% for d in challans %}<option value="{{ d.pk }}"{% if form.challan == d.pk|stringformat:"s" %} selected{% endif %}>{{ d.number }}{% if 'karigar_name' in d %} · {{ d.karigar_name }}{% endif %} · {{ d.ct|ct }} ct out</option>{% endfor %}{% endif %}
         </select></div>
       <div class="fld" data-for="Consumed in Production|Wastage / Loss in Process"><label>Open challan</label>
         <select class="inp" name="challan">
