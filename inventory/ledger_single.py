@@ -7,7 +7,7 @@ from accounts.capabilities import INV_MOVE
 from stock.services import ServiceError, require
 
 from . import ledger, services
-from .models import Movement, StockDocument
+from .models import Movement, Pouch, StockDocument
 
 Reason = Movement.Reason
 
@@ -55,6 +55,7 @@ def post_recount(user, pouch, pcs, ct, occurred_on=None, note=""):
     require(user, INV_MOVE, "Only a role that records stock movements can post a recount.")
     if pcs is None and ct is None:
         raise ServiceError("Enter the counted pieces or weight.")
+    pouch = Pouch.objects.select_for_update().get(pk=pouch.pk)      # lock, then read the balance
     deltas = services.recount_deltas(pouch, pcs, ct)
     if not deltas:
         return None

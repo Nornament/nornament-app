@@ -26,7 +26,18 @@ def test_the_split_screen_starts_from_the_whole_balance(client, accounts_user, s
     for text in ("Split pouch", "Source pouch", "＋ Add pouch", "Wastage / Loss in Process", "Post split",
                  "ct unaccounted — cannot post", "balances"):
         assert text in body, text
-    assert 'name="out_ct" value="12.50"' in body and 'name="pouch_no" value="3"' in body
+    assert 'name="out_ct" value="12.5"' in body and 'name="pouch_no" value="3"' in body
+
+
+def test_the_default_take_out_is_the_exact_balance_never_rounded(client, accounts_user, shelf):
+    from inventory import ledger
+    from inventory.models import Movement
+
+    sale = ledger.open_document(accounts_user, StockDocument.Kind.SINGLE)
+    ledger.post(accounts_user, sale, [ledger.Line(shelf["onyx"], Movement.Reason.SALE, Movement.OUT, None, D("0.0055"))])
+    client.force_login(accounts_user)
+    body = client.get(reverse("inventory:split", args=[shelf["onyx"].ref])).content.decode()
+    assert 'name="out_ct" value="12.4945"' in body
 
 
 def test_the_split_page_carries_what_the_balance_script_needs_for_pieces(client, accounts_user, shelf):

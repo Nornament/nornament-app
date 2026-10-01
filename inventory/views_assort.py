@@ -46,7 +46,7 @@ def split(request, ref):
     blank = {"pouch_no": ledger.next_pouch_no(source.batch), "pcs": "", "ct": "", "size_text": source.size_text,
              "remarks": ""}
     form = {"out_pcs": row["pcs"] if row["pcs"] is not None else "",
-            "out_ct": f"{row['ct']:.2f}" if row["ct"] is not None else ""}
+            "out_ct": ledger._ct(row["ct"]) if row["ct"] is not None else ""}
     parts, error = [blank], None
     if request.method == "POST":
         form, parts = request.POST, _typed_parts(request.POST) or [blank]
