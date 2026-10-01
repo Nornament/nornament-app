@@ -1957,7 +1957,7 @@ EOF
 - Produces:
   - `ledger_purchase.PURCHASE_RIGHTS = (INV_PURCHASE, VIEW_COST, VIEW_VENDOR)` (what the purchase screen and the "Purchase" reason require);
   - dataclass `PurchaseHeader(supplier, occurred_on, invoice_no="", currency="INR", fx_rate=None, landed_extras=Decimal("0"), note="")`;
-  - dataclass `PurchaseLine(batch, pouch_no, stone_name, shape, colour, pcs, ct, cost_per_ct)`;
+  - dataclass `PurchaseLine(batch, pouch_no, stone_name, shape, colour, pcs, ct, cost_per_ct)` — `batch` is a `Batch`, or a batch code (`str`) for a batch the purchase creates (owner, 2026-10-01);
   - `ledger_purchase.post_purchase(user, header, lines) -> StockDocument` (inv_purchase + view_cost).
 
 - [ ] **Step 1: Write the failing tests**
@@ -2014,6 +2014,22 @@ def test_a_purchase_opens_new_pouches_with_cost_and_landed_valuation(accounts_us
     assert services.latest_price(three, PriceEntry.PURCHASE).rate == D("1800")
     assert _held(four).rate == D("2500")
     assert not PriceEntry.objects.filter(kind=PriceEntry.LIST).exists()           # selling price is not set here
+
+
+def test_a_purchase_can_file_into_a_new_batch(accounts_user, shelf):
+    from inventory.models import Batch
+
+    line = PurchaseLine(batch="sp14b", pouch_no="1", stone_name="Tanzanite", shape="Oval", colour="Blue",
+                        pcs=3, ct=D("4.20"), cost_per_ct=D("1800"))
+    post_purchase(accounts_user, _header(shelf["supplier"]), [line])
+    batch = Batch.objects.get(code="SP14B")
+    assert (batch.family, batch.cls, batch.seq, batch.box_colour_id) == ("S", "P", "14", "B")
+    assert Pouch.objects.filter(batch=batch, pouch_no="1").exists()
+    bad = PurchaseLine(batch="TANZ-1", pouch_no="1", stone_name="", shape="", colour="", pcs=1, ct=D("1"),
+                       cost_per_ct=D("1"))
+    with pytest.raises(ServiceError, match="does not read as"):
+        post_purchase(accounts_user, _header(shelf["supplier"], invoice_no="2026/0443"), [bad])
+    assert not Batch.objects.filter(code="TANZ-1").exists()
 
 
 def test_a_usd_purchase_needs_its_rate_and_is_costed_in_inr(accounts_user, shelf):
@@ -2107,7 +2123,8 @@ from accounts.capabilities import INV_PURCHASE, VIEW_COST, VIEW_VENDOR
 from stock.models import Vendor
 from stock.services import ServiceError, require
 
-from . import ledger
+from . import ledger, rules
+from .importers import plan as importer_plan
 from .models import Batch, Movement, PriceEntry, StockDocument
 
 ZERO, PLACES = Decimal("0"), Decimal("0.0001")
@@ -2128,7 +2145,7 @@ class PurchaseHeader:
 
 @dataclass
 class PurchaseLine:
-    batch: Batch
+    batch: Batch | str          # a code: the purchase files into a new batch it creates
     pouch_no: str
     stone_name: str
     shape: str
@@ -2165,11 +2182,27 @@ def _check(header, lines):
             raise ServiceError("A rate must be positive.")
 
 
+def _filed(batch):
+    """A batch, or a code for one: an existing batch, else a new one when the code reads as a batch code
+    (created the way the importer creates one; inside the purchase's transaction, so a refusal leaves none)."""
+    if isinstance(batch, Batch):
+        return batch
+    code = (batch or "").strip().upper()
+    found = Batch.objects.filter(code=code).first()
+    if found:
+        return found
+    if not rules.parse_batch_code(code):
+        raise ServiceError(f"{code or '(blank)'} does not read as family · class · number · box colour.")
+    return importer_plan._batch(code, {})
+
+
 @transaction.atomic
 def post_purchase(user, header, lines):
     """New pouches only: a line on an existing batch + pouch no. is refused (known limit)."""
     require(user, INV_PURCHASE, "Only a role that records purchases can post one.")
     require(user, VIEW_COST, "A purchase writes a cost you may not see.")
+    for line in lines:
+        line.batch = _filed(line.batch)
     _check(header, lines)
     usd = header.currency == "USD"
     fx = header.fx_rate if usd else Decimal("1")
@@ -3101,9 +3134,14 @@ def test_usd_needs_its_rate(client, accounts_user, shelf):
     assert "USD needs the rate" in _post(client, accounts_user, shelf, currency="USD").content.decode()
 
 
-def test_a_purchase_files_into_an_existing_batch(client, accounts_user, shelf):
-    body = _post(client, accounts_user, shelf, batch=["ZZ99Q", "SL01G"]).content.decode()
-    assert "Batch ZZ99Q does not exist" in body
+def test_a_purchase_files_into_a_valid_batch_code_and_refuses_any_other(client, accounts_user, shelf):
+    from inventory.models import Batch
+
+    body = _post(client, accounts_user, shelf, batch=["TANZ-1", "SL01G"]).content.decode()
+    assert "TANZ-1 does not read as family · class · number · box colour." in body
+    assert not Batch.objects.filter(code="TANZ-1").exists()
+    _post(client, accounts_user, shelf, batch=["SP14B", "SL01G"])
+    assert Batch.objects.filter(code="SP14B").exists()       # a new batch, created with the purchase
 
 
 def test_a_new_supplier_is_created_with_the_purchase(client, accounts_user, shelf):
@@ -3177,10 +3215,8 @@ def _lines(rows):
     lines = []
     for row in rows:
         code = (row["batch"] or "").strip().upper()
-        if code not in batches:
-            raise ServiceError(f"Batch {code or '(blank)'} does not exist; a purchase files into an existing batch.")
         lines.append(ledger_purchase.PurchaseLine(
-            batch=batches[code], pouch_no=row["pouch_no"] or "", stone_name=(row["stone_name"] or "").strip(),
+            batch=batches.get(code, code),           # a new code: the purchase creates the batch pouch_no=row["pouch_no"] or "", stone_name=(row["stone_name"] or "").strip(),
             shape=(row["shape"] or "").strip(), colour=(row["colour"] or "").strip(),
             pcs=inputs.whole(row["pcs"], "Pieces"), ct=inputs.decimal(row["ct"], "Weight"),
             cost_per_ct=inputs.decimal(row["cost"], "Cost / ct"),
@@ -4593,7 +4629,7 @@ Append to `docs/superpowers/specs/2026-10-01-inventory-stones-ledger-design.md`:
 - **A reversal is its own document** — the same kind, numbered `REV-…`, `reverses` set, closed when posted; the original becomes Reversed and its number is free again. A reversal cannot itself be reversed. **Undo last entry** posts its reversing movement on the same open document.
 - **A split takes an explicit "Take out" quantity** (the whole balance by default); the parent keeps the rest. The loss posts as a Wastage / Loss in Process out on the parent; the Split out carries only what went into new pouches. New pouches also copy category, treatment, origin, purchase date and countability.
 - **A transfer keeps its from and to on the document** (`from_batch`, `from_pouch_no`, `to_batch`, `to_pouch_no`), so reversing it files the pouch back — refused if it has been re-filed since or its old number is taken. An empty pouch cannot be transferred.
-- **A purchase files into an existing batch** and needs the purchase right with sight of cost and suppliers; "＋ New supplier…" uses Settings' supplier save (Edit settings right). Landed valuation = cost per ct in INR + extras ÷ the purchase's total carats, both rows dated the purchase date.
+- **A purchase files into an existing batch, or creates a new one** when the code reads as family · class · number · box colour (owner, 2026-10-01), and needs the purchase right with sight of cost and suppliers; "＋ New supplier…" uses Settings' supplier save (Edit settings right). Landed valuation = cost per ct in INR + extras ÷ the purchase's total carats, both rows dated the purchase date.
 - **A document's customer is SET_NULL**, as `stock.Sale`'s is, so the CRM can still delete a customer.
 - **Karigar names are gated as `karigar_name` (inv_job), customer names as `customer_name` (view_sale).** A login without sight of suppliers is offered as karigars only those already named on a challan, so the Karigar desk never sees a supplier list.
 - **The document page and the rail's Movements are readable by every internal login, masked;** the Job work out list needs Job cards, the Memo out list needs Record stock movements.
@@ -4630,7 +4666,7 @@ The spec did not pin these down; Task 12 records them in the spec.
 2. **A reversal is a new document** of the same kind, numbered `REV-000001`, with `reverses` set and closed on post; the original becomes Reversed (freeing its number). A reversal cannot itself be reversed. **Undo last entry** posts its reversing movement on the same open document; undoing the only entry leaves the document closed at zero.
 3. **Split has a "Take out" quantity** (pieces and carats, defaulting to the whole balance) as the assortment's debit; the parent keeps the rest. The loss is a Wastage / Loss in Process out on the parent; the Split out carries what went into new pouches. New pouches also copy category, treatment, origin, purchase date and countability (beyond the spec's seven); size and remarks are typed per row (size prefilled from the parent).
 4. **Transfers store `from_batch`, `from_pouch_no`, `to_batch`, `to_pouch_no` on the document**, so a reversal can re-file the pouch (refused if re-filed since or the old number is taken). The Transfer movement's note carries `SL01G · 1 → SP14B · 3`. An empty pouch is not transferable (the movement needs a quantity).
-5. **Purchase lines file into existing batches only** (new batches still come from the importer). The screen needs `inv_purchase` + `view_cost` + `view_vendor` (`PURCHASE_RIGHTS`); the service enforces `inv_purchase` + `view_cost` as the spec says. "＋ New supplier…" calls `dia_services.save_supplier` (needs `inv_masters`) inside the purchase's transaction.
+5. **Purchase lines file into an existing batch, or a new one the purchase creates** when the code is a valid batch code (owner's ruling, 2026-10-01; created with the importer's `_batch`, inside the purchase's transaction). The screen needs `inv_purchase` + `view_cost` + `view_vendor` (`PURCHASE_RIGHTS`); the service enforces `inv_purchase` + `view_cost` as the spec says. "＋ New supplier…" calls `dia_services.save_supplier` (needs `inv_masters`) inside the purchase's transaction.
 6. **Landed valuation** = cost per ct × fx (INR) + landed extras ÷ total carats of the purchase, rounded to 4 places; purchase and valuation rows are dated the purchase date. USD with no rate, or any rate ≤ 0, is refused.
 7. **`StockDocument.customer` is `SET_NULL`** (as `stock.Sale.customer`), so the CRM's customer delete is never blocked by a memo; `vendor` is `PROTECT` like the existing vendor links.
 8. **Masking keys:** `karigar_name` → `inv_job`, `customer_name` → `view_sale`, added to `stock/masking.py`; landed extras use `cost_amount`, values out use `pouch_value`, a purchase's cost uses `purchase_rate`. The karigar dropdown shows every supplier only to a login with `view_vendor`; otherwise only vendors already named on a challan, so the Karigar desk never sees a supplier list.
