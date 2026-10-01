@@ -1,6 +1,9 @@
 from django.urls import path
 
-from . import views, views_dia_import, views_dia_settings, views_diamonds
+from . import (
+    views, views_assort, views_dia_import, views_dia_settings, views_diamonds, views_documents, views_ledger,
+    views_lists, views_purchase,
+)
 
 app_name = "inventory"
 
@@ -16,7 +19,18 @@ urlpatterns = [
     path("pouches/<str:ref>/save/", views.pouch_save, name="pouch_save"),
     path("pouches/<str:ref>/price/", views.pouch_price, name="pouch_price"),
     path("pouches/<str:ref>/photos/", views.pouch_photos, name="pouch_photos"),
-    path("pouches/<str:ref>/movements/", views.movements, name="movements"),
+    path("pouches/<str:ref>/movements/", views_ledger.movements, name="movements"),
+    path("pouches/<str:ref>/movements/post/", views_ledger.movement_post, name="movement_post"),
+    path("pouches/<str:ref>/split/", views_assort.split, name="split"),
+    path("pouches/<str:ref>/transfer/", views_assort.transfer, name="transfer"),
+    path("purchases/new/", views_purchase.purchase, name="purchase"),
+    path("documents/<int:pk>/", views_documents.document, name="document"),
+    path("documents/<int:pk>/settle/", views_documents.document_settle, name="document_settle"),
+    path("documents/<int:pk>/undo/", views_documents.document_undo, name="document_undo"),
+    path("documents/<int:pk>/reverse/", views_documents.document_reverse, name="document_reverse"),
+    path("job-work/", views_lists.job_work_list, name="job_work_list"),
+    path("memos/", views_lists.memo_list, name="memo_list"),
+    path("movements/", views_lists.recent, name="recent"),
     path("photos/<int:media_id>/", views.photo, name="photo"),
     path("diamonds/", views_diamonds.search, name="diamonds"),
     path("diamonds/settings/", views_dia_settings.settings_page, name="dia_settings"),

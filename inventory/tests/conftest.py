@@ -77,3 +77,19 @@ def diamonds(admin_user_):
     dia_services.set_rate(admin_user_, round_code, "+6-12", Decimal("16517"), Decimal("21013"), date(2026, 9, 1))
     supplier = Vendor.objects.create(code="KOT", name=DIA_SUPPLIER, city="Mumbai", terms="Advance")
     return {"round": lines[0], "princess": lines[1], "polki": lines[2], "supplier": supplier}
+
+
+KARIGAR = "Mahesh Karigar"
+CUSTOMER = "Kalyan Retail"
+
+
+@pytest.fixture
+def parties(db):
+    """A karigar (a supplier-list entry, as part 1 keeps them) and a CRM customer."""
+    from crm.models import Customer
+    from stock.models import Vendor
+
+    return {
+        "karigar": Vendor.objects.create(code="MAH", name=KARIGAR, city="Johari Bazar"),
+        "customer": Customer.objects.create(customer_code="C-881", name=CUSTOMER),
+    }
