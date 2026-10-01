@@ -242,6 +242,8 @@ def commit(plan, user, import_batch=None):
                 "category": dia_services.term(DiamondTerm.CATEGORY, row.category),
                 "band": dia_services.term(DiamondTerm.BAND, sized.band),
                 "shape_override": _term(DiamondTerm.SHAPE, sized.shape) if sized.shape and code.shape_id is None else None,
+                "colour_override": _term(DiamondTerm.COLOUR, row.colour)
+                if row.colour and row.colour != (code.colour.value if code.colour else "") else None,
             })
             continue
         line = item.existing

@@ -152,3 +152,8 @@ The owner supplied `Dia_Stock_Nitesh.xlsx` in place of `DIAMOND 31.xlsx`. It is 
 - **A re-import moves a line's carat range only to another range** (a per-stone reading replaces a per-stone reading); it never adds or removes one, so band and range always agree.
 - **A rate dated in the future waits for its day**: the rate card and prices use only rows effective today or earlier.
 - **A row that only "skip" can clear** (no item code, rate out of range) is offered only skip on the review page, and keeps its own problem even when its key is also ambiguous.
+
+## Changed after the real-data walkthrough (2026-10-01)
+
+- **The IVY export sets sale prices only.** Cost comes from the diamond register (the owner's ruling of 2026-09-30); loading the IVY export once overwrote the register's costs, because a later rate row won. The loader now ignores IVY's cost column, and the Settings button says "Load sale rates from IVY export".
+- **A line keeps its own colour** (`DiamondLine.colour_override`) when the file gives it a colour different from its item code's — fancy lots under one code (DFO is Mix on one line, Orange on five). Set when a line opens, like the shape override; Search, the filters and the Settings "In use" counts read the line's colour.

@@ -86,8 +86,8 @@ def test_rates_load_from_an_ivy_export_upload(client, accounts_user, diamonds):
     book = ivy_workbook([("DRFGH VS SI", "+2", 15000, 19000), ("DXYZ VVS VS", "+2", 1, 1)])
     response = client.post(reverse("inventory:dia_rates_ivy"),
                            {"workbook": SimpleUploadedFile("ivy.xlsx", book.getvalue())}, follow=True)
-    assert "1 rates loaded; 1 codes in the export are not diamond lines here." in response.content.decode()
-    assert DiamondRate.objects.filter(code_id="DRFGH VS-SI", size_text="+2", cost_rate=15000).exists()
+    assert "1 sale rates loaded; 1 codes in the export are not diamond lines here." in response.content.decode()
+    assert DiamondRate.objects.filter(code_id="DRFGH VS-SI", size_text="+2", sale_rate=19000, cost_rate=None).exists()
 
 
 def test_the_expansion_card_lists_every_range_and_nothing_else(client, accounts_user, diamonds):
