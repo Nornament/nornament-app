@@ -46,11 +46,16 @@ def test_a_split_balances_and_carries_the_parent_across(accounts_user, shelf):
 
 
 def test_an_unbalanced_split_is_refused(accounts_user, shelf):
-    with pytest.raises(ServiceError, match="0.50 ct unaccounted"):
+    with pytest.raises(ServiceError, match="0.5 ct unaccounted"):
         _split(accounts_user, shelf, loss_ct=None)
     with pytest.raises(ServiceError, match="1 pcs unaccounted"):
         _split(accounts_user, shelf, loss_pcs=None)
     assert not StockDocument.objects.exists()
+
+
+def test_a_real_shortfall_is_never_rounded_to_zero(accounts_user, shelf):
+    with pytest.raises(ServiceError, match="0.0001 ct unaccounted"):
+        _split(accounts_user, shelf, loss_ct=D("0.4999"))
 
 
 def test_a_split_cannot_take_more_than_the_pouch_holds(accounts_user, shelf):
@@ -126,6 +131,23 @@ def test_a_reversed_transfer_files_the_pouch_back(accounts_user, shelf):
     ledger.reverse_document(accounts_user, doc)
     onyx.refresh_from_db()
     assert (onyx.batch, onyx.pouch_no) == (shelf["batch"], "1")
+
+
+def test_a_reversed_transfer_is_refused_once_the_pouch_has_moved_again(accounts_user, shelf):
+    onyx = shelf["onyx"]
+    doc = ledger_assort.transfer_pouch(accounts_user, onyx, _other(), "1")
+    third = Batch.objects.create(code="SP15B", box_colour_id="B", family="S", cls="P", seq="15")
+    ledger_assort.transfer_pouch(accounts_user, onyx, third, "1")
+    with pytest.raises(ServiceError, match="re-filed since"):
+        ledger.reverse_document(accounts_user, doc)
+
+
+def test_a_reversed_transfer_is_refused_once_its_old_slot_is_taken(accounts_user, shelf):
+    onyx, batch = shelf["onyx"], shelf["batch"]
+    doc = ledger_assort.transfer_pouch(accounts_user, onyx, _other(), "1")
+    services.open_pouch(accounts_user, batch, {"pouch_no": "1"}, pcs=1, ct=D("1"), rate=None)
+    with pytest.raises(ServiceError, match="taken since"):
+        ledger.reverse_document(accounts_user, doc)
 
 
 def test_split_and_transfer_need_the_assort_right(production_user, shelf):

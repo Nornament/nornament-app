@@ -55,7 +55,7 @@ def split_pouch(user, source, out_pcs, out_ct, parts, loss_pcs=None, loss_ct=Non
     numbers = _free_numbers(source.batch, parts)
     unaccounted = out_ct - sum((part.ct or 0 for part in parts), loss_ct or 0)
     if unaccounted:
-        raise ServiceError(f"{unaccounted:.2f} ct unaccounted — a split must balance.")
+        raise ServiceError(f"{ledger._ct(unaccounted)} ct unaccounted — a split must balance.")
     if source.countable:
         short = (out_pcs or 0) - sum((part.pcs or 0 for part in parts), loss_pcs or 0)
         if short:
