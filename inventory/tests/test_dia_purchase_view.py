@@ -54,6 +54,16 @@ def test_usd_needs_its_rate(client, accounts_user, diamonds):
     assert "USD needs the rate" in _post(client, accounts_user, diamonds, currency="USD").content.decode()
 
 
+def test_a_fancy_colour_line_posts_with_a_blank_clarity(client, accounts_user, diamonds):
+    """code_for's ruling (clarity optional only for a Fancy colour), reachable from the screen."""
+    response = _post(client, accounts_user, diamonds, category=["Natural Diamond"], shape=["Round"],
+                     colour=["Fancy Yellow"], clarity=[""], size_text=["+6"], batch_no=[""],
+                     pcs=[""], ct=["1"], cost=["50000"])
+    assert response["Location"] == reverse("inventory:dia_purchase")
+    doc = StockDocument.objects.get(kind=StockDocument.Kind.DIA_PURCHASE)
+    assert doc.movements.count() == 1
+
+
 def test_a_new_supplier_stands_or_falls_with_its_purchase(client, admin_user_, diamonds):
     _post(client, admin_user_, diamonds, supplier="new", new_code="SRT", new_name="Surat Diamonds",
           clarity=["VS-SI", ""])

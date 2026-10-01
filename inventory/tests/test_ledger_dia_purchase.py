@@ -11,7 +11,7 @@ from accounts.models import User
 from inventory import dia_services, ledger
 from inventory.ledger_dia_purchase import DiaPurchaseLine, post_dia_purchase
 from inventory.ledger_purchase import PurchaseHeader
-from inventory.models import DiamondLine, DiamondRate, Movement, StockDocument
+from inventory.models import DiamondCode, DiamondLine, DiamondRate, Movement, StockDocument
 from stock.services import ServiceError
 
 pytestmark = pytest.mark.django_db
@@ -118,6 +118,27 @@ def test_a_size_that_reads_as_no_band_is_banded_per_stone(accounts_user, diamond
     line = DiaPurchaseLine("Natural Diamond", "Round", "F-G-H", "VS-SI", "mixed", 8, D("2"), D("16000"))
     (fresh,) = _bought(post_dia_purchase(accounts_user, _header(diamonds["supplier"]), [line]))
     assert (fresh.band.value, fresh.ct_lo, fresh.ct_hi) == ("carat band", D("0.250"), D("0.250"))
+
+
+def test_a_fancy_colour_line_may_leave_clarity_blank(accounts_user, diamonds):
+    """code_for's own ruling: clarity is optional only for a Fancy colour. A second line with the
+    same shape and colour lands on the code the first line made, confirmed, with no clarity."""
+    line = DiaPurchaseLine("Natural Diamond", "Round", "Fancy Yellow", "", "+6", None, D("1"), D("50000"))
+    (fresh,) = _bought(post_dia_purchase(accounts_user, _header(diamonds["supplier"]), [line]))
+    assert (fresh.code_id, fresh.code.confirmed, fresh.code.clarity, fresh.band.value) == (
+        "D Round Fancy Yellow", True, None, "+6-11")
+    line2 = DiaPurchaseLine("Natural Diamond", "Round", "Fancy Yellow", "", "+6", None, D("1"), D("51000"))
+    (second,) = _bought(post_dia_purchase(accounts_user, _header(diamonds["supplier"], invoice_no="2026/0443"),
+                                          [line2]))
+    assert second.code_id == fresh.code_id
+    assert DiamondCode.objects.filter(item_code="D Round Fancy Yellow").count() == 1
+
+
+def test_a_non_fancy_colour_still_needs_a_clarity(accounts_user, diamonds):
+    line = DiaPurchaseLine("Natural Diamond", "Round", "F-G-H", "", "+6", None, D("1"), D("50000"))
+    with pytest.raises(ServiceError, match="needs category, shape, colour, clarity and size"):
+        post_dia_purchase(accounts_user, _header(diamonds["supplier"]), [line])
+    assert not StockDocument.objects.exists() and DiamondLine.objects.count() == 3
 
 
 def test_a_purchase_needs_the_right_and_sight_of_cost_and_suppliers(production_user, accounts_user, diamonds):

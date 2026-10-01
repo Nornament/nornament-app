@@ -36,8 +36,10 @@ class DiaPurchaseLine:
 
 def _check(lines):
     for line in lines:
-        described = (line.category, line.shape, line.colour, line.clarity, line.size_text)
-        if not all((value or "").strip() for value in described):
+        required = (line.category, line.shape, line.colour, line.size_text)
+        colour = (line.colour or "").strip()
+        clarity_needed = not colour.startswith("Fancy")          # the controller ruling, code_for's own test
+        if not all((value or "").strip() for value in required) or (clarity_needed and not (line.clarity or "").strip()):
             raise ServiceError("A purchase line needs category, shape, colour, clarity and size.")
         if line.ct is None or line.ct <= 0:
             raise ServiceError("A weight must be positive.")
