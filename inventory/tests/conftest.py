@@ -143,3 +143,17 @@ def dia_docs(admin_user_, diamonds, parties):
                                              Decimal("2"), Decimal("23456"))],
     )
     return {**diamonds, **parties, "card": card, "assort": assort, "purchase": purchase}
+
+
+@pytest.fixture
+def finder_docs(admin_user_, ledger_docs, dia_docs):
+    """Every stones and diamond document the ledger fixtures make, plus a split of the onyx and a
+    transfer of the ruby. The two fixtures share keys (``purchase``, ``supplier``), so each keeps
+    its own dict."""
+    from inventory.ledger_assort import SplitPart, split_pouch, transfer_pouch
+    from inventory.models import Batch
+
+    split = split_pouch(admin_user_, ledger_docs["onyx"], 2, Decimal("1"), [SplitPart("7", 2, Decimal("1"))])
+    to = Batch.objects.create(code="SL02G", box_colour_id="G", family="S", cls="L", seq="02")
+    transfer = transfer_pouch(admin_user_, ledger_docs["ruby"], to, "5")
+    return {"stones": ledger_docs, "dia": dia_docs, "split": split, "transfer": transfer}

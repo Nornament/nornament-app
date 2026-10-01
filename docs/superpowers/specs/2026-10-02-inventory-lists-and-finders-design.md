@@ -36,3 +36,15 @@ Stock takes (5d), Price list — cost / selling (5b), Merge (5c), Client lookboo
 ## Testing
 
 `inventory/tests/`, earlier parts' conventions: each screen as an allowed login and in client view; the masking walk and every-screen check extended to the new pages; the search matching rules (each kind of match, the 50 cap, the minimum length); each filter's list matches the rail's live count; the line ledger's running balance equals the engine's on-hand; the Movements list's kind filter; the Suppliers link live vs padlocked by right.
+
+## Changed while planning
+
+- **Routes.** `search/`, `quality/<check>/` (misfiled, no_pouch_no, no_photo, no_size), `splits/`, `transfers/`, `diamonds/movements/`, `diamonds/lines/<ref>/`.
+- **The search box** is a small form in the top bar on both sides. It is not the shell's `.search` box, which the phone layout hides, so it works on a phone too. In client view it stays padlocked, and the results page redirects to the shelf. On the diamond side, which has no client view, it is always live.
+- **Matching.** A pouch ref, a batch code, a line ref and a batch no. match exactly. A stone name and an item code match by "contains". Case never matters. "Batch · pouch no." is read with or without the `·` (`SL01G · 1`, `SL01G 1`, `SL01G·1`). An item code is read the register's way (`drfgh vs si` finds `DRFGH VS-SI`). Each group shows the first 50 and says "first 50 of N". Pouches and lines with nothing on hand are found too.
+- **Data-quality filters** share one predicate per check with the rail's counts (`rows.CHECKS`), so a list always holds exactly the rail's count. They use the batch page's pouch table (now one include) with a Batch column in front. Money shows as on the batch page, by the cost right. An unknown check is 404.
+- **Splits & merges and Transfers.** A reversal is not listed on its own; the document it undid carries a Reversed chip. "Carats out" includes the split's loss. The pouches are named as they are filed now. Newest first is by when the document was posted.
+- **Diamond Movements.** It lists the newest 100 documents and leaves out reversals, as the two stones lists do. A job card opens on Job cards (`?card=`), an assortment on Assortments (`?doc=`, which only the Assort right can read), and a purchase on Purchases, because a purchase has no page of its own. A line's ledger shows its movements newest first, as the pouch ledger does. On that ledger a reversal's number links to the document it reversed. Value is the cost value only (own cost first, else the rate card), shown with the cost right; the sale side is not shown. Diamond pages ignore the stones' Internal / Client flag, as diamond Search does, and carry an admin's "Viewing as".
+- **Search stock** gains a Line column: each `NRD-` ref links to its ledger, carrying the preview.
+- **Suppliers** is padlocked in client view as well.
+- **Three earlier assertions changed.** They checked padlocks this part removes: the stones Transfers item and the diamond Movements tab (twice). They now check the link.

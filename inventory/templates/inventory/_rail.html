@@ -29,7 +29,8 @@ the prototype named but never built is shown locked, never as a dead link.{% end
 <nav class="nav">
   {% if not client_view %}<span class="locked"><span class="ic">₹</span>Price list — cost<span class="ct">🔒</span></span>{% endif %}
   <span class="locked"><span class="ic">₹</span>Price list — selling<span class="ct">🔒</span></span>
-  <span class="locked"><span class="ic">⌗</span>Suppliers<span class="ct">🔒</span></span>
+  {% if caps.inv_masters and caps.view_vendor and not client_view %}<a href="{% url 'inventory:dia_settings' %}#suppliers"><span class="ic">⌗</span>Suppliers</a>
+  {% else %}<span class="locked"><span class="ic">⌗</span>Suppliers<span class="ct">🔒</span></span>{% endif %}
   <span class="locked"><span class="ic">◐</span>Client lookbook<span class="ct">🔒</span></span>
 </nav>
 

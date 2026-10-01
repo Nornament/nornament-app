@@ -36,3 +36,17 @@ def test_the_diamond_movements_tab_is_live_and_stock_take_stays_locked(client, a
     assert f'href="{reverse("inventory:dia_movements")}">Movements</a>' in body and "Stock take 🔒" in body
     previewed = client.get(reverse("inventory:diamonds"), {"as": "SALES"}).content.decode()       # only an admin previews
     assert f'href="{reverse("inventory:dia_movements")}?as=SALES">Movements</a>' in previewed
+
+
+def test_suppliers_opens_the_supplier_card_for_whoever_keeps_suppliers(client, accounts_user, production_user,
+                                                                       sales_user, shelf):
+    target = f'href="{reverse("inventory:dia_settings")}#suppliers"'
+    body = _shelf(client, accounts_user)
+    assert target in body and 'Suppliers<span class="ct">🔒' not in body
+    assert 'id="suppliers"' in client.get(reverse("inventory:dia_settings")).content.decode()
+    client.post(reverse("inventory:set_view"), {"view": "client"})
+    body = client.get(reverse("inventory:shelf")).content.decode()
+    assert target not in body and 'Suppliers<span class="ct">🔒' in body
+    for user in (production_user, sales_user):          # Production sees suppliers but does not edit settings
+        body = _shelf(client, user)
+        assert target not in body and 'Suppliers<span class="ct">🔒' in body, user
