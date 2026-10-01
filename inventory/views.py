@@ -64,7 +64,8 @@ def set_view(request):
 @login_required
 def shelf(request):
     everything = _everything(request)
-    return _page(request, "inventory/shelf.html", everything, tab="shelf", colours=rows.by_colour(everything))
+    return _page(request, "inventory/shelf.html", everything, tab="shelf", colours=rows.by_colour(everything),
+                 out=None if _client(request) else rows.out_tile(request.user))
 
 
 @login_required

@@ -1,0 +1,21 @@
+{% extends "inventory_base.html" %}{% load inventory_extras %}
+{% block title %}{{ title }}{% endblock %}
+{% block crumb %}Stock control &nbsp;›&nbsp; <b>{{ title }}</b>{% endblock %}
+{% block content %}
+<div class="shelfbar"><h1>{{ title }}</h1><span class="spacer"></span>
+  {% if closed %}<a class="chip" href="?">Open only</a>{% else %}<a class="chip" href="?closed=1">Show closed</a>{% endif %}</div>
+<div class="card" style="overflow:hidden"><div style="overflow:auto"><table class="led">
+  <thead><tr><th>{{ number_label }}</th><th>{{ party_label }}</th><th>Date</th><th>Expected back</th>
+    <th class="r">Pcs out</th><th class="r">Carats out</th><th class="r">Outstanding</th>
+    {% if 'pouch_value' in money %}<th class="r">Value</th>{% endif %}<th>Status</th></tr></thead>
+  <tbody>{% for d in rows %}<tr>
+    <td class="mono"><a href="{% url 'inventory:document' d.pk %}"><b>{{ d.number }}</b></a></td>
+    <td>{% if 'karigar_name' in d %}{{ d.karigar_name }}{% elif 'customer_name' in d %}{{ d.customer_name }}{% else %}<span class="hint">—</span>{% endif %}</td>
+    <td>{{ d.occurred_on|date:"d M Y" }}</td>
+    <td>{{ d.expected_back|date:"d M Y"|default:"—" }}{% if d.overdue %} <span class="chip crit"><span class="dot"></span>overdue</span>{% endif %}</td>
+    <td class="r">{{ d.sent_pcs|default:"—" }}</td><td class="r">{{ d.sent_ct|ct }}</td>
+    <td class="r">{% if d.open %}{{ d.owed_ct|ct }} ct{% if d.owed_pcs %}<div class="hint">{{ d.owed_pcs }} pcs</div>{% endif %}{% else %}—{% endif %}</td>
+    {% if 'pouch_value' in d %}<td class="r">{% if d.open %}{{ d.pouch_value|rupees }}{% else %}—{% endif %}</td>{% endif %}
+    <td><span class="chip {{ d.tone }}"><span class="dot"></span>{{ d.status }}</span></td></tr>
+  {% empty %}<tr><td colspan="9" class="hint">Nothing {% if closed %}here{% else %}out{% endif %}.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}
