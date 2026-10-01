@@ -180,6 +180,13 @@ def new_pouch(batch, **fields):
     return Pouch.objects.create(ref=f"NRN-{services._last_ref_number() + 1:06d}", batch=batch, **fields)
 
 
+def _ct(value):
+    """Up to 4 places (the column's own precision), trimming trailing zeros: a real
+    shortfall like 0.0001 ct must never print as a misleadingly-rounded 0.00."""
+    text = f"{value:.4f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
 def _check(document, pouch, line, owed):
     if line.reverses is not None:
         return                      # a reversal repeats a movement that passed these once
@@ -194,7 +201,7 @@ def _check(document, pouch, line, owed):
         if (line.pcs or 0) > pcs or (line.ct or 0) > ct:
             pieces = f" and {pcs} pcs" if pouch.countable else ""
             raise ServiceError(f"Settling cannot exceed what is outstanding: {document.number} has "
-                               f"{ct:.2f} ct{pieces} of {pouch} out.")
+                               f"{_ct(ct)} ct{pieces} of {pouch} out.")
         owed[pouch.pk] = (pcs - (line.pcs or 0), ct - (line.ct or 0))
 
 
@@ -203,7 +210,7 @@ def _check_balances(pks):
         if (pouch.on_ct or 0) < 0 or (pouch.countable and (pouch.on_pcs or 0) < 0):
             pieces = f" and {pouch.on_pcs or 0} pcs" if pouch.countable else ""
             raise ServiceError(f"Not enough in {pouch}: this would leave it below zero "
-                               f"({pouch.on_ct or 0:.2f} ct{pieces}).")
+                               f"({_ct(pouch.on_ct or 0)} ct{pieces}).")
 
 
 def _settle_status(document):
@@ -228,6 +235,8 @@ def post(user, document, lines, occurred_on=None):
     """
     if document.status != Status.OPEN:
         raise ServiceError(f"{document} is {document.get_status_display().lower()}; it takes no more entries.")
+    if not lines and document.reverses_id is None:
+        raise ServiceError("Nothing to post.")
     locked = Pouch.objects.select_for_update().filter(pk__in={line.pouch.pk for line in lines})
     pouches = {pouch.pk: pouch for pouch in locked}
     owed = outstanding(document) if document.kind in OPENABLE else {}
@@ -271,8 +280,8 @@ def reverse_document(user, document, note=""):
         raise ServiceError(f"{document} is itself a reversal; it cannot be reversed.")
     moves = list(document.movements.filter(reverses__isnull=True, reversal__isnull=True).select_related("pouch"))
     created = [m.pouch_id for m in moves if m.direction == Movement.IN and m.reason in CREATING]
-    moved = (Movement.objects.filter(pouch__in=created).exclude(document=document)
-             .select_related("pouch__batch").first())
+    moved = (Movement.objects.filter(pouch__in=created, reverses__isnull=True, reversal__isnull=True)
+             .exclude(document=document).select_related("pouch__batch").first())
     if moved:
         raise ServiceError(f"{moved.pouch} has moved since; reverse its later movements first.")
     if document.kind == Kind.TRANSFER:

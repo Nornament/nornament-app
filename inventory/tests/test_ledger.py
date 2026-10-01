@@ -66,6 +66,12 @@ def test_a_post_writes_every_movement_or_none(admin_user_, shelf):
     assert not doc.movements.exists() and _held(onyx).on_ct == D("12.5")
 
 
+def test_an_empty_post_is_refused_so_it_cannot_silently_close_a_document(admin_user_):
+    doc = ledger.open_document(admin_user_, K.SINGLE)
+    with pytest.raises(ServiceError, match="Nothing to post"):
+        ledger.post(admin_user_, doc, [])
+
+
 def test_pieces_cannot_go_below_zero_either(admin_user_, shelf):
     with pytest.raises(ServiceError, match="below zero"):
         _single(admin_user_, shelf["onyx"], R.SALE, OUT, "1", pcs=21)
@@ -150,6 +156,17 @@ def test_a_created_pouch_that_moved_since_blocks_the_reversal(admin_user_, shelf
     _single(admin_user_, fresh, R.SALE, OUT, "1", pcs=1)
     with pytest.raises(ServiceError, match="has moved since"):
         ledger.reverse_document(admin_user_, doc)
+
+
+def test_reversing_the_later_movement_first_unblocks_the_creating_documents_reversal(admin_user_, shelf):
+    doc = ledger.open_document(admin_user_, K.PURCHASE, "B-9")
+    fresh = ledger.new_pouch(shelf["batch"], pouch_no="9", stone_name="Tanzanite")
+    ledger.post(admin_user_, doc, [Line(fresh, R.PURCHASE, IN, 6, D("10"))])
+    sale = _single(admin_user_, fresh, R.SALE, OUT, "1", pcs=1)
+    ledger.reverse_document(admin_user_, sale)
+    reversal = ledger.reverse_document(admin_user_, doc)
+    held = _held(fresh)
+    assert reversal.reverses == doc and (held.on_pcs, held.on_ct) == (0, D("0"))
 
 
 def test_a_reversed_purchase_leaves_its_pouch_at_zero(admin_user_, shelf):
