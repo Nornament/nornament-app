@@ -4,7 +4,7 @@
 {% block content %}
 <div class="dbanner"><h2>Split pouch</h2></div>
 {% if error %}<div class="banner crit"><div class="banner-ic">!</div><div><h4>{{ error }}</h4></div></div>{% endif %}
-<form method="post" id="split">{% csrf_token %}
+<form method="post" id="split" data-countable="{{ row.countable|yesno:'1,0' }}">{% csrf_token %}
 <div class="filterbar">
   <div class="fsel"><label>Source pouch</label><div class="ro2 mono">{{ row.batch_code }} · {{ row.pouch_no|default:"?" }} — {{ row.stone_name|default:"Unidentified" }}</div></div>
   <div class="fsel"><label>Balance</label><div class="ro2">{% if row.countable %}{{ row.pcs|grouped }} pcs · {% endif %}{{ row.ct|ct }} ct</div></div>
@@ -33,7 +33,8 @@
   <div class="card-b" style="border-top:1px solid var(--border)">
     <div id="balanced" hidden><span class="chip good"><span class="dot"></span>balances</span></div>
     <div id="unbalanced" hidden><div class="banner crit" style="margin:0"><div class="banner-ic">!</div><div>
-      <h4><span id="diff"></span> ct unaccounted — cannot post</h4></div></div></div>
+      <h4 id="ctline"><span id="diff"></span> ct unaccounted — cannot post</h4>
+      <h4 id="pcsline" hidden><span id="pcsdiff"></span> pcs unaccounted — cannot post</h4></div></div></div>
     <div class="fld" style="margin-top:12px"><label>Note</label><input class="inp" name="note" value="{{ form.note|default:'' }}"></div>
     <button class="btn pri" id="postsplit">Post split</button>
   </div>
@@ -43,15 +44,31 @@
 /* The assortment's balance line: what comes out against what goes in plus the loss. */
 (function () {
   var form = document.getElementById('split'), body = form.querySelector('#parts tbody');
+  var countable = form.dataset.countable === '1';
   function num(v) { v = parseFloat(String(v || '').replace(/,/g, '')); return isFinite(v) ? v : 0; }
+  /* Up to 4 places, trailing zeros trimmed — the server's ledger._ct wording. */
+  function trimmed(v) {
+    var text = v.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+    return text === '' || text === '-' ? '0' : text;
+  }
   function check() {
-    var into = num(form.elements.loss_ct.value);
-    body.querySelectorAll('[name=ct]').forEach(function (input) { into += num(input.value); });
-    var diff = Math.round((num(form.elements.out_ct.value) - into) * 10000) / 10000;
-    document.getElementById('diff').textContent = diff.toFixed(2);
-    document.getElementById('balanced').hidden = diff !== 0;
-    document.getElementById('unbalanced').hidden = diff === 0;
-    document.getElementById('postsplit').disabled = diff !== 0;
+    var intoCt = num(form.elements.loss_ct.value);
+    body.querySelectorAll('[name=ct]').forEach(function (input) { intoCt += num(input.value); });
+    var ctDiff = Math.round((num(form.elements.out_ct.value) - intoCt) * 10000) / 10000;
+    var pcsDiff = 0;
+    if (countable) {
+      var intoPcs = num(form.elements.loss_pcs.value);
+      body.querySelectorAll('[name=pcs]').forEach(function (input) { intoPcs += num(input.value); });
+      pcsDiff = Math.round(num(form.elements.out_pcs.value) - intoPcs);
+    }
+    var ok = ctDiff === 0 && pcsDiff === 0;
+    document.getElementById('diff').textContent = trimmed(ctDiff);
+    document.getElementById('ctline').hidden = ctDiff === 0;
+    document.getElementById('pcsdiff').textContent = trimmed(pcsDiff);
+    document.getElementById('pcsline').hidden = !countable || pcsDiff === 0;
+    document.getElementById('balanced').hidden = !ok;
+    document.getElementById('unbalanced').hidden = ok;
+    document.getElementById('postsplit').disabled = !ok;
   }
   document.getElementById('addpouch').addEventListener('click', function () {
     var last = body.lastElementChild, tr = last.cloneNode(true);

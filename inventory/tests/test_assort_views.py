@@ -29,6 +29,16 @@ def test_the_split_screen_starts_from_the_whole_balance(client, accounts_user, s
     assert 'name="out_ct" value="12.50"' in body and 'name="pouch_no" value="3"' in body
 
 
+def test_the_split_page_carries_what_the_balance_script_needs_for_pieces(client, accounts_user, shelf):
+    client.force_login(accounts_user)
+    countable = client.get(reverse("inventory:split", args=[shelf["onyx"].ref])).content.decode()
+    assert 'data-countable="1"' in countable and "pcs unaccounted — cannot post" in countable
+    for name in ('name="out_pcs"', 'name="pcs"', 'name="loss_pcs"'):
+        assert name in countable, name
+    uncountable = client.get(reverse("inventory:split", args=[shelf["ruby"].ref])).content.decode()
+    assert 'data-countable="0"' in uncountable
+
+
 def test_a_balanced_split_posts_and_lands_on_its_document(client, accounts_user, shelf):
     response = _split(client, accounts_user, shelf["onyx"])
     doc = StockDocument.objects.get(kind=StockDocument.Kind.SPLIT)
