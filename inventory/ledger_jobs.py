@@ -43,9 +43,14 @@ def _goods_out(user, kind, reason, number, pouch, pcs, ct, occurred_on, expected
 
 @transaction.atomic
 def job_work_out(user, pouch, karigar, challan_no, pcs, ct, occurred_on=None, expected_back=None, note=""):
-    """Goods out to a karigar on a delivery challan; the same open challan may take more pouches."""
+    """Goods out to a karigar on a delivery challan; the same open challan may take more pouches.
+
+    ``karigar`` must be one of ``karigar_choices(user)``: the masked choice list is the only
+    rule, enforced here rather than trusted to the form, so a hand-built post cannot name a
+    vendor the Karigar desk has never been shown — and so, later, see it as a karigar.
+    """
     require(user, INV_JOB, "Only a role that posts job cards can send goods out on job work.")
-    if karigar is None:
+    if karigar is None or karigar.pk not in {choice["pk"] for choice in karigar_choices(user)}:
         raise ServiceError("Choose the karigar.")
     return _goods_out(user, Kind.JOB_WORK, Reason.JOB_WORK_OUT, challan_no, pouch, pcs, ct,
                       occurred_on, expected_back, note, {"vendor": karigar})

@@ -122,3 +122,46 @@ def test_client_view_reaches_neither_the_page_nor_the_post(client, admin_user_, 
     assert client.get(reverse("inventory:movements", args=[shelf["onyx"].ref])).status_code == 302
     assert client.post(reverse("inventory:movement_post", args=[shelf["onyx"].ref]), {"reason": "Sale"}).status_code == 302
     assert not Movement.objects.filter(reason="Sale").exists()
+
+
+def test_the_shelf_default_is_hidden_from_a_login_without_inv_move(client, karigar_user, shelf):
+    """The Karigar desk (inv_job only) may only settle Consumed/Wastage against a challan; it
+    must never be offered the direct-from-the-shelf option it is not allowed to post."""
+    assert "— from the shelf —" not in _body(client, karigar_user, shelf["onyx"])
+
+
+def test_consumed_without_a_challan_is_refused_on_the_form_not_a_403(client, karigar_user, shelf):
+    """The Karigar desk has inv_job but not inv_move: posting Consumed with no challan chosen
+    used to fall through to the inv_move-gated shelf path and come back as a bare 403, losing
+    what was typed. It must be a plain refusal on the form instead."""
+    response = _post(client, karigar_user, shelf["onyx"], {"reason": "Consumed in Production", "pcs": "1", "ct": "1"})
+    assert response.status_code == 200
+    assert "Choose the open challan to settle against." in response.content.decode()
+    assert not Movement.objects.filter(reason="Consumed in Production").exists()
+
+
+def test_the_karigar_desk_settles_consumed_against_its_own_challan(client, admin_user_, karigar_user, shelf, parties):
+    onyx = shelf["onyx"]
+    job = ledger_jobs.job_work_out(admin_user_, onyx, parties["karigar"], "2026/0431", 4, D("3"))
+    response = _post(client, karigar_user, onyx,
+                     {"reason": "Consumed in Production", "pcs": "4", "ct": "3", "challan": job.pk})
+    assert response.status_code == 302
+    job.refresh_from_db()
+    assert job.status == StockDocument.Status.CLOSED
+    assert services.stocked().get(pk=onyx.pk).on_ct == D("9.5")
+
+
+def test_reasons_off_the_card_are_a_403_and_nothing_is_written(client, admin_user_, shelf):
+    before = Movement.objects.count()
+    for reason in ("Opening Balance", "Split", "Merge"):
+        assert _post(client, admin_user_, shelf["onyx"], {"reason": reason, "ct": "1"}).status_code == 403
+    assert Movement.objects.count() == before
+
+
+def test_a_hand_built_purchase_or_transfer_post_is_refused_with_nothing_written(client, admin_user_, shelf):
+    before = Movement.objects.count()
+    for reason in ("Purchase", "Transfer to another batch"):
+        response = _post(client, admin_user_, shelf["onyx"], {"reason": reason, "ct": "1"})
+        assert response.status_code == 200
+        assert "not posted from the shelf" in response.content.decode()
+    assert Movement.objects.count() == before

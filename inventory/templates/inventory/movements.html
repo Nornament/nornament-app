@@ -70,7 +70,7 @@
       <div data-for="Transfer to another batch"><a class="btn" href="{% url 'inventory:transfer' row.ref %}">⇄ Transfer to another batch</a></div>
       <div data-for="{{ qty_reasons }}"><div class="two">
         <div class="fld"><label>Pieces <span class="qword">out</span></label>
-          <div class="unit"><input class="inp tnum" name="pcs" inputmode="numeric" value="{{ form.pcs|default:'' }}"{% if not row.countable %} disabled placeholder="uncountable"{% endif %}><span class="u">pcs</span></div></div>
+          <div class="unit"><input class="inp tnum" name="pcs" inputmode="numeric" value="{{ form.pcs|default:'' }}"{% if not row.countable %} disabled data-locked placeholder="uncountable"{% endif %}><span class="u">pcs</span></div></div>
         <div class="fld"><label>Weight <span class="qword">out</span></label>
           <div class="unit"><input class="inp tnum" name="ct" inputmode="decimal" value="{{ form.ct|default:'' }}"><span class="u">ct</span></div></div>
       </div></div>
@@ -79,8 +79,10 @@
       <div class="fld" data-for="Job Work Out"><label>Delivery challan no. <span style="color:var(--critical)">*</span></label>
         <input class="inp mono" name="challan_no" value="{{ form.challan_no|default:'' }}"></div>
       <div class="fld" data-for="Job Work In|Consumed in Production|Wastage / Loss in Process"><label>Open challan</label>
-        <select class="inp" name="challan"><option value="">— from the shelf —</option>
-          {% for d in challans %}<option value="{{ d.pk }}"{% if form.challan == d.pk|stringformat:"s" %} selected{% endif %}>{{ d.number }}{% if 'karigar_name' in d %} · {{ d.karigar_name }}{% endif %} · {{ d.ct|ct }} ct out</option>{% endfor %}</select></div>
+        <select class="inp" name="challan">
+          {% if caps.inv_move %}<option value="">— from the shelf —</option>{% endif %}
+          {% if caps.inv_job %}{% for d in challans %}<option value="{{ d.pk }}"{% if form.challan == d.pk|stringformat:"s" %} selected{% endif %}>{{ d.number }}{% if 'karigar_name' in d %} · {{ d.karigar_name }}{% endif %} · {{ d.ct|ct }} ct out</option>{% endfor %}{% endif %}
+        </select></div>
       <div class="fld" data-for="Memo Out|Sale|Sales Return"><label>Customer</label>
         <input class="inp" name="customer" list="customers" placeholder="customer code" value="{{ form.customer|default:'' }}">
         <datalist id="customers">{% for c in customers %}<option value="{{ c.code }}">{% if 'customer_name' in c %}{{ c.customer_name }}{% endif %}</option>{% endfor %}</datalist></div>
@@ -118,14 +120,20 @@
     </div></div></div>
 </div>
 <script>
-/* Show the chosen reason's fields and checks; the server ignores the rest. */
+/* Show the chosen reason's fields and checks; the server ignores the rest. A hidden block's
+   own inputs are disabled too — a disabled control is never submitted, so switching reason
+   cannot carry a stray value (a memo chosen under Memo In, say) into a post it does not belong to. */
 (function () {
   var form = document.getElementById('recform');
   if (!form) return;
   function show() {
     var chosen = form.elements.reason.selectedOptions[0];
     form.querySelectorAll('[data-for]').forEach(function (el) {
-      el.hidden = el.dataset.for.split('|').indexOf(chosen.value) < 0;
+      var on = el.dataset.for.split('|').indexOf(chosen.value) >= 0;
+      el.hidden = !on;
+      el.querySelectorAll('input, select, textarea, button').forEach(function (field) {
+        if (!field.dataset.locked) field.disabled = !on;
+      });
     });
     form.querySelectorAll('.qword').forEach(function (el) { el.textContent = chosen.dataset.word; });
   }

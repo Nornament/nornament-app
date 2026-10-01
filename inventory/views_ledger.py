@@ -163,9 +163,21 @@ def _record(user, pouch, reason, post):
     if reason == Reason.MEMO_OUT:
         return ledger_jobs.memo_out(user, pouch, _customer(post.get("customer")), post.get("memo_no"),
                                     pcs, ct, when, back, note)
-    if reason == Reason.JOB_WORK_IN or (reason in (Reason.CONSUMED, Reason.WASTAGE) and post.get("challan")):
-        how = {Reason.JOB_WORK_IN: "in", Reason.CONSUMED: "consumed", Reason.WASTAGE: "loss"}[reason]
-        return ledger_jobs.settle_job_work(user, _open(post.get("challan"), Kind.JOB_WORK), pouch, how,
+    if reason in (Reason.CONSUMED, Reason.WASTAGE):
+        # two paths share one right each: settled against a challan needs inv_job, straight off
+        # the shelf needs inv_move. A login with only one never sees the other's option in the
+        # card, but a hand-built post is refused here — on the form, not a bare 403 that would
+        # lose what was typed.
+        settling = bool(post.get("challan")) or not user.has_perm(INV_MOVE)
+        if settling:
+            if not user.has_perm(INV_JOB):
+                raise ServiceError("Only a role that posts job cards can settle a challan.")
+            how = {Reason.CONSUMED: "consumed", Reason.WASTAGE: "loss"}[reason]
+            return ledger_jobs.settle_job_work(user, _open(post.get("challan"), Kind.JOB_WORK), pouch, how,
+                                               pcs, ct, when, note).document
+        return ledger_single.post_single(user, pouch, reason, pcs, ct, when, note=note)
+    if reason == Reason.JOB_WORK_IN:
+        return ledger_jobs.settle_job_work(user, _open(post.get("challan"), Kind.JOB_WORK), pouch, "in",
                                            pcs, ct, when, note).document
     if reason == Reason.MEMO_IN or (reason == Reason.SALE and post.get("memo")):
         how = "in" if reason == Reason.MEMO_IN else "sold"

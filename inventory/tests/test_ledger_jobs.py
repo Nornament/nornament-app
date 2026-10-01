@@ -107,13 +107,22 @@ def test_settling_the_wrong_way_or_the_wrong_kind_is_refused(admin_user_, shelf,
         ledger_jobs.settle_memo(admin_user_, doc, shelf["onyx"], "in", 1, D("1"))
 
 
-def test_who_may_post_what(karigar_user, production_user, sales_user, shelf, parties):
-    doc = _out(karigar_user, shelf, parties)                        # the Karigar desk posts job work
+def test_who_may_post_what(admin_user_, karigar_user, production_user, sales_user, shelf, parties):
+    _out(admin_user_, shelf, parties)                               # names the karigar on a challan first
+    doc = _out(karigar_user, shelf, parties)                        # the Karigar desk continues known work
     ledger_jobs.settle_job_work(production_user, doc, shelf["onyx"], "in", 1, D("1"))
     with pytest.raises(PermissionDenied):
         ledger_jobs.memo_out(karigar_user, shelf["ruby"], parties["customer"], "MEMO-1", None, D("1"))
     with pytest.raises(PermissionDenied):
         _out(sales_user, shelf, parties, challan_no="2026/0500")
+
+
+def test_the_karigar_desk_cannot_name_a_vendor_it_has_not_seen(karigar_user, shelf, parties):
+    """A hand-built post must not be able to name a supplier's pk it was never shown, which
+    would then leak that supplier's name back to the desk as a 'karigar' (owner, 2026-10-01)."""
+    with pytest.raises(ServiceError, match="Choose the karigar"):
+        _out(karigar_user, shelf, parties, karigar=shelf["supplier"])
+    assert not StockDocument.objects.filter(kind=StockDocument.Kind.JOB_WORK).exists()
 
 
 def test_karigar_choices_follow_what_the_login_may_see(admin_user_, karigar_user, production_user, shelf, parties):
