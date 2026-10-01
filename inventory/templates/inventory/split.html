@@ -1,0 +1,68 @@
+{% extends "inventory_base.html" %}{% load inventory_extras %}
+{% block title %}Split · {{ row.batch_code }} · {{ row.pouch_no|default:"?" }}{% endblock %}
+{% block crumb %}Shelf &nbsp;›&nbsp; {{ row.box_label }} &nbsp;›&nbsp; <b class="mono">{{ row.batch_code }} · {{ row.pouch_no|default:"?" }}</b> &nbsp;›&nbsp; Split{% endblock %}
+{% block content %}
+<div class="dbanner"><h2>Split pouch</h2></div>
+{% if error %}<div class="banner crit"><div class="banner-ic">!</div><div><h4>{{ error }}</h4></div></div>{% endif %}
+<form method="post" id="split">{% csrf_token %}
+<div class="filterbar">
+  <div class="fsel"><label>Source pouch</label><div class="ro2 mono">{{ row.batch_code }} · {{ row.pouch_no|default:"?" }} — {{ row.stone_name|default:"Unidentified" }}</div></div>
+  <div class="fsel"><label>Balance</label><div class="ro2">{% if row.countable %}{{ row.pcs|grouped }} pcs · {% endif %}{{ row.ct|ct }} ct</div></div>
+  <div class="fsel"><label>Take out — pieces</label>
+    <input class="inp tnum" name="out_pcs" inputmode="numeric" value="{{ form.out_pcs|default:'' }}"{% if not row.countable %} readonly placeholder="uncountable"{% endif %}></div>
+  <div class="fsel"><label>Take out — carats</label>
+    <div class="unit"><input class="inp tnum" name="out_ct" value="{{ form.out_ct|default:'' }}" inputmode="decimal"><span class="u">ct</span></div></div>
+</div>
+
+<div class="card" style="overflow:hidden">
+  <div class="card-h"><span class="card-t">New pouches in {{ row.batch_code }}</span><span class="spacer"></span>
+    <button class="btn sm" type="button" id="addpouch">＋ Add pouch</button></div>
+  <div style="overflow:auto"><table class="led" id="parts">
+    <thead><tr><th>Pouch no.</th><th class="r">Pieces</th><th class="r">Carats</th><th>Size</th><th>Remarks</th></tr></thead>
+    <tbody>{% for p in parts %}<tr>
+      <td><input class="inp mono" name="pouch_no" value="{{ p.pouch_no }}" style="width:80px"></td>
+      <td class="r"><input class="inp tnum" name="pcs" inputmode="numeric" value="{{ p.pcs }}" style="width:80px"{% if not row.countable %} readonly placeholder="—"{% endif %}></td>
+      <td class="r"><input class="inp tnum" name="ct" inputmode="decimal" value="{{ p.ct }}" style="width:90px"></td>
+      <td><input class="inp" name="size_text" value="{{ p.size_text }}" style="width:110px"></td>
+      <td><input class="inp" name="remarks" value="{{ p.remarks }}" style="width:180px"></td></tr>{% endfor %}</tbody>
+    <tfoot><tr class="ledtot"><td><b>Wastage / Loss in Process</b></td>
+      <td class="r"><input class="inp tnum" name="loss_pcs" inputmode="numeric" value="{{ form.loss_pcs|default:'' }}" style="width:80px"{% if not row.countable %} readonly placeholder="—"{% endif %}></td>
+      <td class="r"><input class="inp tnum" name="loss_ct" inputmode="decimal" value="{{ form.loss_ct|default:'' }}" style="width:90px"></td>
+      <td colspan="2"></td></tr></tfoot>
+  </table></div>
+  <div class="card-b" style="border-top:1px solid var(--border)">
+    <div id="balanced" hidden><span class="chip good"><span class="dot"></span>balances</span></div>
+    <div id="unbalanced" hidden><div class="banner crit" style="margin:0"><div class="banner-ic">!</div><div>
+      <h4><span id="diff"></span> ct unaccounted — cannot post</h4></div></div></div>
+    <div class="fld" style="margin-top:12px"><label>Note</label><input class="inp" name="note" value="{{ form.note|default:'' }}"></div>
+    <button class="btn pri" id="postsplit">Post split</button>
+  </div>
+</div>
+</form>
+<script>
+/* The assortment's balance line: what comes out against what goes in plus the loss. */
+(function () {
+  var form = document.getElementById('split'), body = form.querySelector('#parts tbody');
+  function num(v) { v = parseFloat(String(v || '').replace(/,/g, '')); return isFinite(v) ? v : 0; }
+  function check() {
+    var into = num(form.elements.loss_ct.value);
+    body.querySelectorAll('[name=ct]').forEach(function (input) { into += num(input.value); });
+    var diff = Math.round((num(form.elements.out_ct.value) - into) * 10000) / 10000;
+    document.getElementById('diff').textContent = diff.toFixed(2);
+    document.getElementById('balanced').hidden = diff !== 0;
+    document.getElementById('unbalanced').hidden = diff === 0;
+    document.getElementById('postsplit').disabled = diff !== 0;
+  }
+  document.getElementById('addpouch').addEventListener('click', function () {
+    var last = body.lastElementChild, tr = last.cloneNode(true);
+    var no = parseInt(last.querySelector('[name=pouch_no]').value, 10);
+    tr.querySelectorAll('input').forEach(function (input) { if (input.name !== 'size_text') input.value = ''; });
+    if (!isNaN(no)) tr.querySelector('[name=pouch_no]').value = no + 1;
+    body.appendChild(tr);
+    check();
+  });
+  form.addEventListener('input', check);
+  check();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,30 @@
+{% extends "inventory_base.html" %}{% load inventory_extras %}
+{% block title %}Transfer · {{ row.batch_code }} · {{ row.pouch_no|default:"?" }}{% endblock %}
+{% block crumb %}Shelf &nbsp;›&nbsp; {{ row.box_label }} &nbsp;›&nbsp; <b class="mono">{{ row.batch_code }} · {{ row.pouch_no|default:"?" }}</b> &nbsp;›&nbsp; Transfer{% endblock %}
+{% block content %}
+<div class="dbanner"><h2>Transfer to another batch</h2></div>
+{% if error %}<div class="banner crit"><div class="banner-ic">!</div><div><h4>{{ error }}</h4></div></div>{% endif %}
+<form method="post" class="card" id="transfer">{% csrf_token %}<div class="card-b">
+  <div class="filterbar" style="margin:0">
+    <div class="fsel"><label>From</label><div class="ro2 mono">{{ row.batch_code }} · {{ row.pouch_no|default:"?" }}</div></div>
+    <div class="fsel"><label>Quantity</label><div class="ro2">{% if row.countable %}{{ row.pcs|grouped }} pcs · {% endif %}{{ row.ct|ct }} ct — unchanged</div></div>
+    <div class="fsel"><label>Target batch</label><input class="inp mono" name="batch" list="batches" value="{{ form.batch|default:'' }}" required></div>
+    <div class="fsel"><label>Pouch no. there</label><input class="inp mono" name="pouch_no" value="{{ form.pouch_no|default:'' }}" required></div>
+  </div>
+  <div class="fld" style="margin-top:12px"><label>Note</label><input class="inp" name="note" value="{{ form.note|default:'' }}"></div>
+  <div class="hint" style="margin-bottom:10px">Keeps its reference <span class="mono">{{ row.ref }}</span>.</div>
+  <button class="btn pri">Post transfer</button>
+</div></form>
+<datalist id="batches">{% for code in next_numbers %}<option value="{{ code }}">{% endfor %}</datalist>
+{{ next_numbers|json_script:"next-pouch" }}
+<script>
+/* Suggest the next free pouch no. in the batch chosen. */
+(function () {
+  var form = document.getElementById('transfer'), next = JSON.parse(document.getElementById('next-pouch').textContent);
+  form.elements.batch.addEventListener('change', function () {
+    var code = form.elements.batch.value.trim().toUpperCase();
+    if (code in next) form.elements.pouch_no.value = next[code];
+  });
+})();
+</script>
+{% endblock %}

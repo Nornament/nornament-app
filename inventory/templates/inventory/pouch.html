@@ -24,7 +24,7 @@
     {% if client_view %}
       <a class="btn pri" href="{% url 'crm:pipeline_new' 'enquiry' %}?item={{ row.ref|urlencode }}%20{{ row.stone_name|urlencode }}">✉ Enquire</a>
     {% else %}
-      <button class="btn gho" disabled title="Coming soon">⤴ Split pouch 🔒</button>
+      {% if caps.inv_assort %}<a class="btn gho" href="{% url 'inventory:split' row.ref %}">⤴ Split pouch</a>{% endif %}
       <a class="btn" href="{% url 'inventory:movements' row.ref %}">⇄ Movements</a>
       {% if caps.inv_masters %}<button class="btn pri" form="pouchform">Save</button>{% endif %}
     {% endif %}
