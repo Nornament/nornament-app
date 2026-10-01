@@ -56,7 +56,8 @@ def import_review(request, batch_id):
              for kind in (DiamondTerm.SHAPE, DiamondTerm.COLOUR, DiamondTerm.CLARITY)}
     return dia_page(request, "inventory/diamonds/import_review.html", dtab="import", batch=batch, plan=plan,
                     counts=plan.counts(), blocked=[i for i in plan.items if i.problem and i.action != "skip"],
-                    recounts=[i for i in plan.items if i.recount], terms=terms)
+                    recounts=[i for i in plan.items if i.recount], moved=[i for i in plan.items if i.moved],
+                    terms=terms)
 
 
 @login_required

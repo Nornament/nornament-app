@@ -7,6 +7,11 @@ row, and when that is still ambiguous a human decides. Nothing is written until
 ``commit``, which refuses while anything is undecided. Once a line is open,
 Settings owns its category, band and shape: a re-import updates only what the
 file alone knows.
+
+A line the diamond ledgers have moved since (a job card, an assortment, a
+purchase) no longer matches the register by its carats alone — some may be out
+on a card — so a re-import leaves its carats as they are unless the reviewer
+explicitly asks for the file's count (owner, 2026-10-02).
 """
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -16,8 +21,8 @@ from django.db import transaction
 from accounts.capabilities import INV_MASTERS, VIEW_COST
 from stock.services import ServiceError, log, require
 
-from .. import dia_rules, dia_services
-from ..models import DiamondCode, DiamondLine, DiamondRate, DiamondTerm
+from .. import dia_rules, dia_services, ledger
+from ..models import DiamondCode, DiamondLine, DiamondRate, DiamondTerm, Movement
 
 
 @dataclass
@@ -41,6 +46,7 @@ class Item:
     held_ct: object = None
     recount: bool = False
     empty: bool = False
+    moved: bool = False             # a ledger has moved the line and the file counts it differently: a decision
 
 
 @dataclass
@@ -48,6 +54,7 @@ class Plan:
     items: list
     codes: list
     missing: list
+    moved: set = field(default_factory=set)     # pks of the lines a diamond ledger has moved
 
     def counts(self):
         live = [i for i in self.items if i.action != "skip"]
@@ -167,15 +174,20 @@ def analyse(rows, decisions=None):
 
     held = {line.pk: line.on_ct for line in dia_services.stocked_lines(
         DiamondLine.objects.filter(pk__in=[i.existing.pk for i in items if i.existing]))}
+    moved = set(Movement.objects.filter(document__kind__in=ledger.DIAMOND_KINDS)
+                .values_list("diamond", flat=True).distinct())
     for item in items:
         if item.existing is not None:
             item.held_ct = held.get(item.existing.pk)
             item.recount = item.row.ct != (item.held_ct or 0)
+            if item.recount and item.existing.pk in moved:
+                item.moved = True
+                item.recount = decisions.get(f"recount:{item.existing.ref}") == "recount"
 
     sheets = {_sheet(row.src) for row in rows}                # a file of other sheets says nothing of these lines
     missing = [(line, decisions.get(f"missing:{line.ref}", "keep"))
                for line in existing if line.pk not in taken and _sheet(line.src) in sheets]
-    return Plan(items=items, codes=_codes(rows, decisions), missing=missing)
+    return Plan(items=items, codes=_codes(rows, decisions), missing=missing, moved=moved)
 
 
 def read_decisions(post, plan, decisions):
@@ -192,6 +204,11 @@ def read_decisions(post, plan, decisions):
                                "colour": post.get(f"{name}:colour", "").strip(),
                                "clarity": post.get(f"{name}:clarity", "").strip(),
                                "confirmed": bool(post.get(f"{name}:confirmed"))}
+    for item in plan.items:
+        if item.moved:
+            name = f"recount:{item.existing.ref}"
+            if name in post:
+                decisions[name] = "recount" if post.get(name) == "recount" else "keep"
     for line, _ in plan.missing:
         name = f"missing:{line.ref}"
         if name in post:

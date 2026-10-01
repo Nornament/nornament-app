@@ -227,3 +227,42 @@ def test_a_line_keeps_its_own_colour_when_its_code_says_another(admin_user_):
     assert shown == {"FCD.0": "Fancy Mix", "FCD.1": "Fancy Orange"}
     in_use = dia_rows.term_usage(dia_services.stocked_lines())
     assert in_use[DiamondTerm.objects.get(kind="colour", value="Fancy Orange").pk][0] == 1
+
+
+def _issued(user, src, ct=Decimal("1")):
+    """An imported line with ``ct`` out on a job card, and the card."""
+    from inventory import ledger_dia_jobs
+
+    line = DiamondLine.objects.get(src=src)
+    card = ledger_dia_jobs.open_card(user, None)
+    ledger_dia_jobs.post_entry(user, card, "issue", line, ct)
+    return line, card
+
+
+def test_a_reimport_leaves_a_line_moved_on_a_ledger_alone(admin_user_):
+    from inventory import ledger_dia_jobs
+
+    dia_plan.commit(_plan(), admin_user_)
+    line, card = _issued(admin_user_, "FANCY FINAL!3")                 # 3.40 ct held, 1 ct of it on a card
+    plan = _plan()                                                     # the same file again
+    (item,) = [i for i in plan.items if i.existing == line]
+    assert (item.moved, item.recount, plan.counts()["recount"]) == (True, False, 0)
+    assert dia_plan.commit(plan, admin_user_)["recounted"] == 0
+    ledger_dia_jobs.post_entry(admin_user_, card, "unused", line, Decimal("1"))
+    assert dia_services.stocked_lines().get(pk=line.pk).on_ct == Decimal("3.40")
+
+
+def test_a_moved_line_recounts_only_when_told_to(admin_user_):
+    dia_plan.commit(_plan(), admin_user_)
+    line, _ = _issued(admin_user_, "FANCY FINAL!3")
+    plan = _plan()
+    decisions = dia_plan.read_decisions({f"recount:{line.ref}": "recount"}, plan, {})
+    assert dia_plan.commit(_plan(decisions=decisions), admin_user_)["recounted"] == 1
+    assert dia_services.stocked_lines().get(pk=line.pk).on_ct == Decimal("3.40")
+
+
+def test_a_moved_line_missing_from_the_file_is_kept_and_marked(admin_user_):
+    dia_plan.commit(_plan(), admin_user_)
+    line, _ = _issued(admin_user_, "FANCY FINAL!7", Decimal("0.5"))
+    plan = _plan(PLAN_ROWS[:5])                                        # the trillion line is gone from the file
+    assert plan.missing == [(line, "keep")] and line.pk in plan.moved

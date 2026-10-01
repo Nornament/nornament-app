@@ -47,12 +47,21 @@
     </tr>{% endfor %}</tbody></table></div>
 {% endif %}
 
+{% if moved %}
+<div class="card" style="overflow:hidden;margin-bottom:14px"><div class="card-h"><span class="card-t">Lines the ledgers have moved</span><span class="spacer"></span><button class="btn">Save decisions</button></div>
+  <table class="pt"><thead><tr><th>Line</th><th>Item code</th><th class="r">Carats held</th><th class="r">Carats in file</th><th>Decision</th></tr></thead>
+    <tbody>{% for i in moved %}<tr>
+      <td class="mono">{{ i.existing.ref }}</td><td class="mono">{{ i.row.item_code }}</td><td class="r">{{ i.held_ct|ct }}</td><td class="r">{{ i.row.ct|ct }}</td>
+      <td><select class="inp" name="recount:{{ i.existing.ref }}" style="width:260px"><option value="keep"{% if not i.recount %} selected{% endif %}>moved in the app since — leave as is</option><option value="recount"{% if i.recount %} selected{% endif %}>recount to the file</option></select></td>
+    </tr>{% endfor %}</tbody></table></div>
+{% endif %}
+
 {% if plan.missing %}
 <div class="card" style="overflow:hidden;margin-bottom:14px"><div class="card-h"><span class="card-t">Lines in the app but not in this file</span><span class="spacer"></span><button class="btn">Save decisions</button></div>
   <table class="pt"><thead><tr><th>Line</th><th>Item code</th><th>Batch</th><th>Size</th><th>Decision</th></tr></thead>
     <tbody>{% for line, action in plan.missing %}<tr>
       <td class="mono">{{ line.ref }}</td><td class="mono">{{ line.code_id }}</td><td class="mono">{{ line.batch_no|default:"—" }}</td><td class="mono">{{ line.size_text }}</td>
-      <td><select class="inp" name="missing:{{ line.ref }}" style="width:150px"><option value="keep"{% if action == 'keep' %} selected{% endif %}>leave as is</option><option value="zero"{% if action == 'zero' %} selected{% endif %}>recount to 0</option></select></td>
+      <td><select class="inp" name="missing:{{ line.ref }}" style="width:260px"><option value="keep"{% if action == 'keep' %} selected{% endif %}>{% if line.pk in plan.moved %}moved in the app since — {% endif %}leave as is</option><option value="zero"{% if action == 'zero' %} selected{% endif %}>recount to 0</option></select></td>
     </tr>{% endfor %}</tbody></table></div>
 {% endif %}
 </form>
