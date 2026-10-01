@@ -13,6 +13,7 @@ from accounts.context_processors import _role_code
 from stock.masking import mask
 
 from . import dia_rows, dia_search, dia_seed
+from .ledger_purchase import PURCHASE_RIGHTS
 from .models import DiamondTerm
 
 TABLE_CAP = 300
@@ -83,7 +84,7 @@ def search(request):
     table = sorted(shown, key=lambda r: -(r["ct"] or 0))[:TABLE_CAP]
     can = {"cost": user.has_perm(VIEW_COST), "sale": user.has_perm(VIEW_SALE), "margin": user.has_perm(VIEW_MARGIN),
            "job": user.has_perm("accounts.inv_job"), "assort": user.has_perm("accounts.inv_assort"),
-           "purchase": user.has_perm("accounts.inv_purchase")}
+           "purchase": all(user.has_perm(permission) for permission in PURCHASE_RIGHTS)}
     shapes_here = {r["shape"] for r in dia_search.select(everything, f, skip="shape") if r["category"] == f.cat}
     return dia_page(
         request, "inventory/diamonds/search.html", dtab="search", f=f, role=role,

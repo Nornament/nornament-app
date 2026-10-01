@@ -94,3 +94,20 @@ def test_a_row_only_skip_can_clear_offers_only_skip(client, admin_user_, monkeyp
                                 content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     body = client.get(client.post(reverse("inventory:dia_import_home"), {"workbook": upload})["Location"]).content.decode()
     assert "Rate out of range" in body and 'value="skip"' in body and 'value="map"' not in body
+
+
+def test_a_line_moved_on_a_ledger_is_a_decision_on_the_review_page(client, admin_user_, monkeypatch):
+    from inventory import ledger_dia_jobs
+
+    dia_seed.load(DiamondTerm)
+    dia_plan.commit(dia_plan.analyse(diamonds.parse(fancy_workbook())), admin_user_)
+    moved, gone = DiamondLine.objects.get(src="FANCY FINAL!3"), DiamondLine.objects.get(src="FANCY FINAL!7")
+    card = ledger_dia_jobs.open_card(admin_user_, None)
+    for line in (moved, gone):
+        ledger_dia_jobs.post_entry(admin_user_, card, "issue", line, 0.5)
+    client.force_login(admin_user_)
+    review = _upload(client, monkeypatch, fancy_workbook(PLAN_ROWS[:5]))
+    body = client.get(review).content.decode()
+    assert f'name="recount:{moved.ref}"' in body and body.count("moved in the app since") == 2
+    client.post(review, {f"recount:{moved.ref}": "recount"})
+    assert ImportBatch.objects.get(source="DIAMONDS").decisions[f"recount:{moved.ref}"] == "recount"

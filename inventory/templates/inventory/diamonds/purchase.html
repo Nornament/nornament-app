@@ -1,0 +1,125 @@
+{% extends "inventory_base.html" %}{% load inventory_extras %}
+{% block title %}Purchases · Diamonds{% endblock %}
+{% block crumb %}<b>Diamonds</b> &nbsp;›&nbsp; Purchases{% endblock %}
+{% block content %}
+{% include "inventory/diamonds/_dsub.html" %}
+{% if denied %}
+<div class="dbanner"><h2>Purchases</h2></div>
+<div class="banner crit"><div class="banner-ic">✕</div><div><h4>Not permitted for {{ role_label }}</h4></div></div>
+{% else %}
+<div class="dbanner"><h2>Purchase — the only way diamond stock enters</h2></div>
+{% if error %}<div class="banner crit"><div class="banner-ic">!</div><div><h4>{{ error }}</h4></div></div>{% endif %}
+
+<div class="tx-cols">
+  {% if can_post %}
+  <form method="post" id="purchase" class="card">{% csrf_token %}
+    <div class="card-h"><span class="card-t">The purchase</span></div>
+    <div class="card-b">
+      <div class="two">
+        <div class="fld"><label>Supplier <span style="color:var(--critical)">*</span></label>
+          <select class="inp" name="supplier"><option value="">—</option>
+            {% for s in suppliers %}{% if 'vendor_name' in s %}<option value="{{ s.pk }}"{% if form.supplier == s.pk|stringformat:"s" %} selected{% endif %}>{{ s.vendor_name }}{% if s.city %}, {{ s.city }}{% endif %}</option>{% endif %}{% endfor %}
+            {% if caps.inv_masters and caps.view_vendor %}<option value="new"{% if form.supplier == 'new' %} selected{% endif %}>＋ New supplier…</option>{% endif %}
+          </select></div>
+        <div class="fld"><label>Purchase date <span style="color:var(--critical)">*</span></label>
+          <input class="inp" type="date" name="occurred_on" value="{{ form.occurred_on|default:today }}"></div>
+      </div>
+      <div id="newsupplier" hidden><div class="two">
+        <div class="fld"><label>Supplier code</label><input class="inp mono" name="new_code" maxlength="32" value="{{ form.new_code|default:'' }}"></div>
+        <div class="fld"><label>Supplier name</label><input class="inp" name="new_name" maxlength="120" value="{{ form.new_name|default:'' }}"></div>
+      </div></div>
+      <div class="two">
+        <div class="fld"><label>Invoice no.</label>
+          <input class="inp mono" name="invoice_no" maxlength="40" placeholder="2026/0442" value="{{ form.invoice_no|default:'' }}"></div>
+        <div class="fld"><label>Currency</label><select class="inp" name="currency">
+          <option value="INR"{% if form.currency != 'USD' %} selected{% endif %}>INR ₹</option>
+          <option value="USD"{% if form.currency == 'USD' %} selected{% endif %}>USD $</option></select></div>
+      </div>
+      <div id="fx" hidden><div class="fld"><label>Rate to INR <span style="color:var(--critical)">*</span></label>
+        <div class="unit"><input class="inp tnum" name="fx_rate" inputmode="decimal" value="{{ form.fx_rate|default:'' }}"><span class="u">₹ / $</span></div></div></div>
+
+      <div class="grp-t" style="margin:16px 0 9px">Lines — each becomes a stock line</div>
+      <div style="overflow:auto"><table class="pt" id="lines"><thead><tr>
+        <th>Category</th><th>Shape</th><th>Colour</th><th>Clarity</th><th>Size</th><th>Batch</th>
+        <th class="r">Pieces</th><th class="r">Carats</th><th class="r">Cost / ct</th><th class="r">Cost</th></tr></thead>
+        <tbody>{% for l in lines %}<tr>
+          <td><select class="inp" name="category"><option value=""></option>{% for v in categories %}<option{% if v == l.category %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></td>
+          <td><select class="inp" name="shape"><option value=""></option>{% for v in shapes %}<option{% if v == l.shape %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></td>
+          <td><select class="inp" name="colour"><option value=""></option>{% for v in colours %}<option{% if v == l.colour %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></td>
+          <td><select class="inp" name="clarity"><option value=""></option>{% for v in clarities %}<option{% if v == l.clarity %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></td>
+          <td><input class="inp mono" name="size_text" maxlength="40" value="{{ l.size_text }}" style="width:90px"></td>
+          <td><input class="inp mono" name="batch_no" maxlength="40" value="{{ l.batch_no }}" style="width:80px"></td>
+          <td class="r"><input class="inp tnum" name="pcs" inputmode="numeric" value="{{ l.pcs }}" style="width:70px"></td>
+          <td class="r"><input class="inp tnum" name="ct" inputmode="decimal" value="{{ l.ct }}" style="width:80px"></td>
+          <td class="r"><input class="inp tnum" name="cost" inputmode="decimal" value="{{ l.cost }}" style="width:90px"></td>
+          <td class="r"><b class="lineval">—</b></td></tr>{% endfor %}</tbody></table></div>
+      <button class="btn sm" type="button" id="addline" style="margin-top:9px">＋ Add line</button>
+
+      <div class="fld" style="margin-top:12px"><label>Landed extras — freight, duty, certification</label>
+        <div class="unit"><input class="inp tnum" name="landed_extras" inputmode="decimal" placeholder="0" value="{{ form.landed_extras|default:'' }}"><span class="u">₹</span></div></div>
+      <div class="cons"><b>What posting will do</b>
+        <span class="ok">✓</span> create <span id="w-n">0</span> stock lines with sequential references<br>
+        <span class="ok">✓</span> post an <code>in</code> movement on each — reason <code>Purchase</code><br>
+        <span class="ok">✓</span> write <code>cost per carat</code> on each line, dated <span id="w-date"></span><br>
+        <span class="ok">✓</span> total <b id="w-total">₹0</b> across <span id="w-ct">0.00</span> ct<br>
+        <span class="ok">✓</span> landed extras <b id="w-extra">₹0</b> spread by weight<br>
+        <span style="color:var(--warnink)">!</span> sale price is <b>not</b> set here — it is a separate decision by whoever holds the sale right
+      </div>
+      <div class="fld" style="margin-top:12px"><label>Note</label><input class="inp" name="note" value="{{ form.note|default:'' }}"></div>
+      <button class="btn pri" style="width:100%;justify-content:center">Post purchase</button>
+    </div></form>
+  {% endif %}
+
+  <div class="card"><div class="card-h"><span class="card-t">Recent purchases</span></div>
+    <div class="card-b" style="overflow:auto"><table class="pt">
+      <thead><tr><th>Date</th><th>Invoice</th><th>Supplier</th><th class="r">Carats</th><th class="r">Cost</th><th></th></tr></thead>
+      <tbody>{% for r in recent %}<tr>
+        <td>{{ r.occurred_on|date:"d M Y" }}</td>
+        <td class="mono">{{ r.number }}</td>
+        <td>{% if 'vendor_name' in r %}{{ r.vendor_name }}{% else %}—{% endif %}</td>
+        <td class="r tnum">{{ r.ct|ct }}</td>
+        <td class="r">{% if 'cost_amount' in r %}{{ r.cost_amount|rupees }}{% endif %}</td>
+        <td>{% if r.reversed %}<span class="chip {{ r.tone }}"><span class="dot"></span>{{ r.status }}</span>
+          {% elif can_reverse %}<form method="post" action="{% url 'inventory:dia_purchase_reverse' r.pk %}" class="inline">{% csrf_token %}
+            <button class="btn sm gho" onclick="return confirm('Reverse purchase {{ r.number|escapejs }}?')">Reverse</button></form>{% endif %}</td>
+      </tr>{% empty %}<tr><td colspan="6" class="hint">No diamond purchases yet.</td></tr>{% endfor %}</tbody></table></div></div>
+</div>
+
+{% if can_post %}
+<script>
+/* Totals as typed, and the fields USD and a new supplier need. */
+(function () {
+  var form = document.getElementById('purchase'), body = form.querySelector('#lines tbody');
+  function num(v) { v = parseFloat(String(v || '').replace(/,/g, '')); return isFinite(v) ? v : 0; }
+  function inr(v) { return '₹' + Math.round(v).toLocaleString('en-IN'); }
+  function field(tr, name) { return tr.querySelector('[name=' + name + ']'); }
+  function total() {
+    var usd = form.currency.value === 'USD', fx = usd ? num(form.fx_rate.value) : 1, n = 0, ct = 0, cost = 0;
+    body.querySelectorAll('tr').forEach(function (tr) {
+      var w = num(field(tr, 'ct').value), c = num(field(tr, 'cost').value) * fx;
+      tr.querySelector('.lineval').textContent = w && c ? inr(w * c) : '—';
+      if (w) { n += 1; ct += w; cost += w * c; }
+    });
+    document.getElementById('w-n').textContent = n;
+    document.getElementById('w-ct').textContent = ct.toFixed(2);
+    document.getElementById('w-total').textContent = inr(cost);
+    document.getElementById('w-extra').textContent = inr(num(form.landed_extras.value));
+    document.getElementById('w-date').textContent = form.occurred_on.value;
+    document.getElementById('fx').hidden = !usd;
+    document.getElementById('newsupplier').hidden = form.supplier.value !== 'new';
+  }
+  form.addEventListener('input', total);
+  form.addEventListener('change', total);
+  document.getElementById('addline').addEventListener('click', function () {
+    var tr = body.lastElementChild.cloneNode(true);
+    tr.querySelectorAll('input').forEach(function (input) { input.value = ''; });
+    tr.querySelectorAll('select').forEach(function (select) { select.selectedIndex = 0; });
+    body.appendChild(tr);
+    total();
+  });
+  total();
+})();
+</script>
+{% endif %}
+{% endif %}
+{% endblock %}

@@ -3,6 +3,7 @@
 Every write goes through ``dia_services``; this module only reads the form,
 calls the service, and sends the user back to the card they were on.
 """
+from collections import Counter
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
@@ -20,7 +21,7 @@ from stock.models import Vendor
 from stock.services import ServiceError, require
 
 from . import dia_rows, dia_seed, dia_services
-from .models import DiamondCode, DiamondTerm, Movement
+from .models import DiamondCode, DiamondTerm, StockDocument
 from .views_diamonds import dia_page, viewer
 
 CARD_TITLES = [(DiamondTerm.CATEGORY, "Categories"), (DiamondTerm.SHAPE, "Shapes"),
@@ -62,9 +63,10 @@ def settings_page(request):
         code_lines[line.code_id] = code_lines.get(line.code_id, 0) + 1
     rates = [mask(user, {"code": code, "size_text": size_text, "cost_rate": rate["cost"], "sale_rate": rate["sale"]})
              for (code, size_text), rate in sorted(dia_services.rate_table().items())]
-    purchases = {}
-    for vendor_id in Movement.objects.filter(reason=Movement.Reason.PURCHASE).values_list("counterparty_id", flat=True):
-        purchases[vendor_id] = purchases.get(vendor_id, 0) + 1
+    # purchases per supplier: documents, stones and diamond, that stand (not a reversal, not reversed)
+    purchases = Counter(StockDocument.objects.filter(
+        kind__in=(StockDocument.Kind.PURCHASE, StockDocument.Kind.DIA_PURCHASE), reverses__isnull=True,
+    ).exclude(status=StockDocument.Status.REVERSED).values_list("vendor_id", flat=True))
     return dia_page(
         request, "inventory/diamonds/settings.html", dtab="settings", denied=False,
         cards=[(kind, title, by_kind[kind]) for kind, title in CARD_TITLES],

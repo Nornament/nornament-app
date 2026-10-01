@@ -89,15 +89,16 @@ def settle_memo(user, document, pouch, how, pcs, ct, occurred_on=None, note=""):
 
 
 def karigar_choices(user):
-    """Who goods may go to on job work, as this login may see them.
+    """Who goods may go to on job work, or a diamond job card, as this login may see them.
 
     Karigars and suppliers share one list. A login without sight of suppliers
-    (the Karigar desk) is offered only those already named on a challan, so the
-    list never shows it a supplier.
+    (the Karigar desk) is offered only those already named on a challan or a
+    job card, so the list never shows it a supplier.
     """
     vendors = Vendor.objects.filter(is_active=True)
     if not allowed(user, "vendor_name"):
-        vendors = vendors.filter(pk__in=StockDocument.objects.filter(kind=Kind.JOB_WORK).values("vendor"))
+        named = StockDocument.objects.filter(kind__in=(Kind.JOB_WORK, Kind.DIA_JOB)).values("vendor")
+        vendors = vendors.filter(pk__in=named)
     return [mask(user, {"pk": v.pk, "karigar_name": v.name}) for v in vendors.order_by("name")]
 
 

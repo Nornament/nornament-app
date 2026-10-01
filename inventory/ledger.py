@@ -1,10 +1,12 @@
-"""The stones ledger: documents, and the one way their movements are written.
+"""The stock ledger: documents, and the one way their movements are written.
 
-Every action that moves stock — job work, a memo, a purchase, a split, a
-transfer, a one-off sale or loss — opens a ``StockDocument`` and hands its
-movements to ``post``, which writes them in one transaction and runs the checks
-every post shares: quantities above zero, an uncountable pouch by weight only,
-nothing settled beyond what is out, no pouch below zero. Nothing is edited
+Every action that moves stock — stones job work, a memo, a purchase, a split, a
+transfer, a one-off sale or loss; a diamond job card, assortment or purchase —
+opens a ``StockDocument`` and hands its movements to ``post``, which writes them
+in one transaction and runs the checks every post shares: quantities above zero,
+an uncountable pouch by weight only, a diamond line by carats, nothing settled
+beyond what is out, nothing below zero. A movement's owner is a pouch or a
+diamond line; stones and diamonds share this one engine. Nothing is edited
 afterwards; a mistake is undone by posting the opposite movements.
 """
 from collections import defaultdict
@@ -13,37 +15,48 @@ from datetime import datetime, time
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Case, F, Sum, When
+from django.db.models import Case, F, Q, Sum, When
 from django.utils import timezone
 
 from accounts.capabilities import INV_ASSORT, INV_JOB, INV_MOVE, INV_PURCHASE
 from stock.services import ServiceError, log, require
 
-from . import inputs, services
-from .models import Batch, Movement, Pouch, StockDocument
+from . import dia_services, inputs, services
+from .models import Batch, DiamondLine, Movement, Pouch, StockDocument
 
 ZERO = Decimal("0")
 Kind, Status = StockDocument.Kind, StockDocument.Status
 
-#: the kinds that stay open while goods are out with someone
+#: the stones kinds: every stones list and page shows only these
+STONE_KINDS = (Kind.PURCHASE, Kind.JOB_WORK, Kind.MEMO, Kind.SPLIT, Kind.TRANSFER, Kind.SINGLE)
+#: part 4's diamond kinds, shown only on the diamond screens
+DIAMOND_KINDS = (Kind.DIA_JOB, Kind.DIA_ASSORT, Kind.DIA_PURCHASE)
+#: the kinds that close themselves when nothing is outstanding (stones job work and memos)
 OPENABLE = (Kind.JOB_WORK, Kind.MEMO)
-#: the right that posts each kind — and so may undo or reverse it
+#: the kinds whose credits are checked, owner by owner, against what is out on them
+OWED = OPENABLE + (Kind.DIA_JOB,)
+#: the kinds closed by hand, and only at zero (owner, 2026-10-01)
+CLOSABLE = (Kind.DIA_JOB,)
+#: the right that posts each kind — and so may undo, close or reverse it
 RIGHT_FOR_KIND = {
     Kind.PURCHASE: INV_PURCHASE, Kind.JOB_WORK: INV_JOB, Kind.MEMO: INV_MOVE,
     Kind.SPLIT: INV_ASSORT, Kind.TRANSFER: INV_ASSORT, Kind.SINGLE: INV_MOVE,
+    Kind.DIA_JOB: INV_JOB, Kind.DIA_ASSORT: INV_ASSORT, Kind.DIA_PURCHASE: INV_PURCHASE,
 }
 #: automatic numbers; job work and memos carry the challan or memo no. people type
-PREFIX = {Kind.PURCHASE: "PUR-", Kind.SPLIT: "SPL-", Kind.TRANSFER: "TRF-", Kind.SINGLE: "MOV-"}
+PREFIX = {Kind.PURCHASE: "PUR-", Kind.SPLIT: "SPL-", Kind.TRANSFER: "TRF-", Kind.SINGLE: "MOV-",
+          Kind.DIA_JOB: "JC-", Kind.DIA_ASSORT: "AS-", Kind.DIA_PURCHASE: "DP-"}
 REVERSAL_PREFIX = "REV-"
-#: the reasons that bring a pouch into being, so a reversal can find what it created
-CREATING = (Movement.Reason.PURCHASE, Movement.Reason.SPLIT)
+#: the reasons that bring a pouch or a diamond line into being, so a reversal can find what it created
+CREATING = (Movement.Reason.PURCHASE, Movement.Reason.SPLIT, Movement.Reason.ASSORT_IN)
 
 
 @dataclass
 class Line:
-    """One movement to post. ``ref`` defaults to the document's number."""
+    """One movement to post. ``owner`` is a ``Pouch`` or a ``DiamondLine``; ``ref`` defaults to the
+    document's number."""
 
-    pouch: Pouch
+    owner: Pouch | DiamondLine
     reason: str
     direction: str
     pcs: int | None = None
@@ -51,6 +64,10 @@ class Line:
     note: str = ""
     ref: str = ""
     reverses: Movement | None = None
+
+
+def _diamond(owner):
+    return isinstance(owner, DiamondLine)
 
 
 def _by(user):
@@ -62,6 +79,12 @@ def _when(day):
     if day is None or day == timezone.localdate():
         return timezone.now()
     return timezone.make_aware(datetime.combine(day, time(12)))
+
+
+def _not_future(kind, day):
+    """A diamond document is dated the day it happened, which cannot be ahead of today (owner, 2026-10-02)."""
+    if kind in DIAMOND_KINDS and day is not None and day > timezone.localdate():
+        raise ServiceError("A date can't be in the future.")
 
 
 def next_number(prefix):
@@ -84,6 +107,7 @@ def open_document(user, kind, number="", **fields):
     """
     number = (number or "").strip()
     inputs.fits(StockDocument, number=number, **fields)
+    _not_future(kind, fields.get("occurred_on"))
     if not number:
         if kind not in PREFIX:
             what = "delivery challan no." if kind == Kind.JOB_WORK else "memo no."
@@ -107,16 +131,18 @@ def _owed(field):
 
 
 def outstanding(document):
-    """``{pouch pk: (pcs, ct)}`` still out on a job work or memo document."""
-    totals = document.movements.order_by().values("pouch").annotate(pcs=_owed("pcs"), ct=_owed("ct"))
-    return {t["pouch"]: (t["pcs"] or 0, t["ct"] or ZERO) for t in totals}
+    """``{owner pk: (pcs, ct)}`` still out on a job work, a memo or a job card. The owners are
+    diamond lines on a diamond document and pouches on a stones one."""
+    field = "diamond" if document.kind in DIAMOND_KINDS else "pouch"
+    totals = document.movements.order_by().values(field).annotate(pcs=_owed("pcs"), ct=_owed("ct"))
+    return {t[field]: (t["pcs"] or 0, t["ct"] or ZERO) for t in totals}
 
 
 def owed_by_document(documents):
     """``{document pk: [(pouch, pcs, ct)]}`` — what each of these job work or memo documents
     still has out, with the pouches read through ``services.stocked`` so each carries its
-    current valuation ``rate``."""
-    totals = [t for t in Movement.objects.filter(document__in=documents).order_by()
+    current valuation ``rate``. Stones only: a diamond line is never a pouch."""
+    totals = [t for t in Movement.objects.filter(document__in=documents, pouch__isnull=False).order_by()
               .values("document", "pouch").annotate(pcs=_owed("pcs"), ct=_owed("ct"))
               if t["pcs"] or t["ct"]]
     pouches = {p.pk: p for p in services.stocked(Pouch.objects.filter(pk__in={t["pouch"] for t in totals}))}
@@ -127,7 +153,7 @@ def owed_by_document(documents):
 
 
 def out_summary():
-    """Carats out on open job work and memos, valued at each pouch's current rate.
+    """Carats out on open stones job work and memos, valued at each pouch's current rate.
 
     An unvalued pouch adds nothing to the value, as on the shelf's Stock value.
     """
@@ -143,15 +169,17 @@ def out_summary():
 def party(document):
     """The counterparty, under the key that masks it.
 
-    ``karigar_name`` is seen by those who post job work, ``vendor_name`` by those
-    who see suppliers, ``customer_name`` by those who see sales. Callers mask.
+    ``karigar_name`` (stones job work, a diamond job card) is seen by those who
+    post job work, ``vendor_name`` by those who see suppliers, ``customer_name``
+    by those who see sales. Callers mask.
     """
     if document is None:
         return {}
     if document.customer_id:
         return {"customer_name": document.customer.name}
     if document.vendor_id:
-        return {("karigar_name" if document.kind == Kind.JOB_WORK else "vendor_name"): document.vendor.name}
+        karigar = document.kind in (Kind.JOB_WORK, Kind.DIA_JOB)
+        return {("karigar_name" if karigar else "vendor_name"): document.vendor.name}
     return {}
 
 
@@ -189,39 +217,51 @@ def _ct(value):
     return text or "0"
 
 
-def _check(document, pouch, line, owed):
+def _check(document, owner, line, owed):
     if line.reverses is not None:
         return                      # a reversal repeats a movement that passed these once
     inputs.fits(Movement, ref=line.ref)
     if any(value is not None and value < 0 for value in (line.pcs, line.ct)):
         raise ServiceError("A quantity cannot be negative; the reason says which way it moves.")
+    diamond = _diamond(owner)
+    if diamond and not line.ct:
+        raise ServiceError("A diamond movement needs carats above zero; pieces are optional.")
     if not (line.pcs or line.ct):
         raise ServiceError("A movement needs pieces or a weight above zero.")
-    if not pouch.countable and line.pcs is not None:
-        raise ServiceError(f"{pouch} is uncountable: it moves by weight only.")
-    if document.kind in OPENABLE and line.direction != Movement.OUT:
-        pcs, ct = owed.get(pouch.pk, (0, ZERO))
-        if (line.pcs or 0) > pcs or (line.ct or 0) > ct:
-            pieces = f" and {pcs} pcs" if pouch.countable else ""
+    if not diamond and not owner.countable and line.pcs is not None:
+        raise ServiceError(f"{owner} is uncountable: it moves by weight only.")
+    if document.kind in OWED and line.direction != Movement.OUT:
+        pcs, ct = owed.get(owner.pk, (0, ZERO))
+        # a diamond line's pieces ride along unchecked: carats are its quantity
+        if (not diamond and (line.pcs or 0) > pcs) or (line.ct or 0) > ct:
+            pieces = f" and {pcs} pcs" if not diamond and owner.countable else ""
             raise ServiceError(f"Settling cannot exceed what is outstanding: {document.number} has "
-                               f"{_ct(ct)} ct{pieces} of {pouch} out.")
-        owed[pouch.pk] = (pcs - (line.pcs or 0), ct - (line.ct or 0))
+                               f"{_ct(ct)} ct{pieces} of {owner} out.")
+        owed[owner.pk] = (pcs - (line.pcs or 0), ct - (line.ct or 0))
 
 
-def _check_balances(pks):
-    for pouch in services.stocked(Pouch.objects.filter(pk__in=pks)):
+def _check_balances(pouch_pks, line_pks=()):
+    for pouch in services.stocked(Pouch.objects.filter(pk__in=pouch_pks)):
         if (pouch.on_ct or 0) < 0 or (pouch.countable and (pouch.on_pcs or 0) < 0):
             pieces = f" and {pouch.on_pcs or 0} pcs" if pouch.countable else ""
             raise ServiceError(f"Not enough in {pouch}: this would leave it below zero "
                                f"({_ct(pouch.on_ct or 0)} ct{pieces}).")
+    for line in dia_services.stocked_lines(DiamondLine.objects.filter(pk__in=line_pks)):
+        if (line.on_ct or 0) < 0:
+            raise ServiceError(f"Not enough in {line}: this would leave it below zero ({_ct(line.on_ct)} ct).")
 
 
 def _settle_status(document):
-    """Job work and memos close themselves when nothing is outstanding; every other kind —
-    and every reversal — closes when posted."""
-    if document.kind in OPENABLE and document.reverses_id is None:
-        settled = all(pcs == 0 and ct == 0 for pcs, ct in outstanding(document).values())
-        status = Status.CLOSED if settled else Status.OPEN
+    """Job work and memos close themselves when nothing is outstanding. A job card closes only by
+    ``close_document``, but reopens when something is outstanding again (an undo). Every other
+    kind — and every reversal — closes when posted."""
+    if document.kind in OWED and document.reverses_id is None:
+        settled = all(ct == 0 and (pcs == 0 or document.kind in CLOSABLE)
+                      for pcs, ct in outstanding(document).values())
+        if document.kind in OPENABLE:
+            status = Status.CLOSED if settled else Status.OPEN
+        else:
+            status = document.status if settled else Status.OPEN
     else:
         status = Status.CLOSED
     if document.status != status:
@@ -230,24 +270,29 @@ def _settle_status(document):
 
 
 def _write(user, document, lines, occurred_on=None):
-    """Write a document's movements — all of them, or none — check every pouch's balance, and
+    """Write a document's movements — all of them, or none — check every owner's balance, and
     settle the document's status. Shared by ``post`` (an open document only) and ``undo_last``
-    (which may do this on a document its own settlements already closed)."""
-    locked = Pouch.objects.select_for_update().filter(pk__in={line.pouch.pk for line in lines})
-    pouches = {pouch.pk: pouch for pouch in locked}
-    owed = outstanding(document) if document.kind in OPENABLE else {}
+    (which may do this on a document already closed)."""
+    if any(_diamond(line.owner) != (document.kind in DIAMOND_KINDS) for line in lines):
+        raise ServiceError("A pouch moves on a stones document, a diamond line on a diamond one.")
+    pouches = {p.pk: p for p in Pouch.objects.select_for_update().filter(
+        pk__in={line.owner.pk for line in lines if not _diamond(line.owner)})}
+    diamonds = {d.pk: d for d in DiamondLine.objects.select_for_update().filter(
+        pk__in={line.owner.pk for line in lines if _diamond(line.owner)})}
+    owed = outstanding(document) if document.kind in OWED else {}
     for line in lines:
-        _check(document, pouches[line.pouch.pk], line, owed)
+        held = diamonds if _diamond(line.owner) else pouches
+        _check(document, held[line.owner.pk], line, owed)
     at, by = _when(occurred_on), _by(user)
     challan = document.number if document.kind in OPENABLE else ""
     moves = Movement.objects.bulk_create([
-        Movement(pouch=line.pouch, document=document, reason=line.reason, direction=line.direction,
-                 pcs=line.pcs, ct=line.ct, note=line.note, ref=line.ref or document.number,
-                 reverses=line.reverses, counterparty=document.vendor, challan_no=challan,
-                 occurred_at=at, recorded_by=by)
+        Movement(**{"diamond" if _diamond(line.owner) else "pouch": line.owner}, document=document,
+                 reason=line.reason, direction=line.direction, pcs=line.pcs, ct=line.ct, note=line.note,
+                 ref=line.ref or document.number, reverses=line.reverses, counterparty=document.vendor,
+                 challan_no=challan, occurred_at=at, recorded_by=by)
         for line in lines
     ])
-    _check_balances(list(pouches))
+    _check_balances(list(pouches), list(diamonds))
     _settle_status(document)
     log(user, "INSERT", "inv_movement", document.pk, f"{document}: {len(moves)} movement(s)")
     return moves
@@ -259,15 +304,35 @@ def post(user, document, lines, occurred_on=None):
 
     Internal: every caller has already checked the right for its action.
     ``occurred_on`` is the day it happened (``None`` is now). The document is locked and
-    re-read first (document, then pouches, as ``undo_last``), so a caller's stale copy can
-    never post onto a document reversed or closed a moment ago.
+    re-read first (document, then pouches or lines, as ``undo_last``), so a caller's stale
+    copy can never post onto a document reversed or closed a moment ago.
     """
     document.refresh_from_db(from_queryset=StockDocument.objects.select_for_update())
     if document.status != Status.OPEN:
         raise ServiceError(f"{document} is {document.get_status_display().lower()}; it takes no more entries.")
     if not lines and document.reverses_id is None:
         raise ServiceError("Nothing to post.")
+    _not_future(document.kind, occurred_on)
     return _write(user, document, lines, occurred_on)
+
+
+@transaction.atomic
+def close_document(user, document):
+    """Close a job card by hand — only when nothing is outstanding on any line (owner,
+    2026-10-01). Job work and memos close themselves; nothing else is closed by hand."""
+    require(user, RIGHT_FOR_KIND[document.kind], "Only a role that posts this kind of document may close it.")
+    document = StockDocument.objects.select_for_update().get(pk=document.pk)
+    if document.kind not in CLOSABLE:
+        raise ServiceError(f"{document} closes itself when nothing is outstanding.")
+    if document.status != Status.OPEN:
+        raise ServiceError(f"{document} is {document.get_status_display().lower()}; only an open card can close.")
+    out = sum((ct for _, ct in outstanding(document).values()), ZERO)
+    if out:
+        raise ServiceError(f"{document.number} can close only at zero: {_ct(out)} ct outstanding.")
+    document.status = Status.CLOSED
+    document.save(update_fields=["status"])
+    log(user, "UPDATE", "inv_document", document.pk, f"{document} closed")
+    return document
 
 
 def _unfile(document):
@@ -284,27 +349,30 @@ def _unfile(document):
 @transaction.atomic
 def reverse_document(user, document, note=""):
     """Post the opposite of every movement on it not already reversed, on a new document
-    that points back at it, and mark it Reversed. A pouch it created stays, at zero."""
+    that points back at it, and mark it Reversed. A pouch or line it created stays, at zero."""
     require(user, RIGHT_FOR_KIND[document.kind], "Only a role that posts this kind of document may reverse it.")
     document = StockDocument.objects.select_for_update().get(pk=document.pk)
     if document.status == Status.REVERSED:
         raise ServiceError(f"{document} is already reversed.")
     if document.reverses_id:
         raise ServiceError(f"{document} is itself a reversal; it cannot be reversed.")
-    moves = list(document.movements.filter(reverses__isnull=True, reversal__isnull=True).select_related("pouch"))
-    created = [m.pouch_id for m in moves if m.direction == Movement.IN and m.reason in CREATING]
-    moved = (Movement.objects.filter(pouch__in=created, reverses__isnull=True, reversal__isnull=True)
-             .exclude(document=document).select_related("pouch__batch").first())
+    moves = list(document.movements.filter(reverses__isnull=True, reversal__isnull=True)
+                 .select_related("pouch", "diamond"))
+    created = [m for m in moves if m.direction == Movement.IN and m.reason in CREATING]
+    later = (Q(pouch__in=[m.pouch_id for m in created if m.pouch_id])
+             | Q(diamond__in=[m.diamond_id for m in created if m.diamond_id]))
+    moved = (Movement.objects.filter(later, reverses__isnull=True, reversal__isnull=True)
+             .exclude(document=document).select_related("pouch__batch", "diamond").first())
     if moved:
-        raise ServiceError(f"{moved.pouch} has moved since; reverse its later movements first.")
+        raise ServiceError(f"{moved.pouch or moved.diamond} has moved since; reverse its later movements first.")
     if document.kind == Kind.TRANSFER:
         _unfile(document)
     reversal = StockDocument.objects.create(
         kind=document.kind, number=next_number(REVERSAL_PREFIX), vendor=document.vendor,
         customer=document.customer, reverses=document, note=note, created_by=_by(user),
     )
-    post(user, reversal, [Line(m.pouch, m.reason, m.direction, m.pcs, m.ct, note=f"Reverses {document.number}",
-                               reverses=m) for m in moves])
+    post(user, reversal, [Line(m.pouch or m.diamond, m.reason, m.direction, m.pcs, m.ct,
+                               note=f"Reverses {document.number}", reverses=m) for m in moves])
     document.status = Status.REVERSED
     document.save(update_fields=["status"])
     log(user, "REVERSAL", "inv_document", document.pk, f"{document} reversed by {reversal.number}")
@@ -313,17 +381,17 @@ def reverse_document(user, document, note=""):
 
 @transaction.atomic
 def undo_last(user, document):
-    """Reverse the latest entry on a job work or memo — open, or already closed by its own
-    settlements — one wrong line, not the whole challan. Never a reversed document, nor any
-    other kind. Undoing recomputes the status the same way posting does: something outstanding
-    again reopens it; nothing outstanding leaves it closed (owner, 2026-10-01)."""
+    """Reverse the latest entry on a job work, a memo or a job card — open, or already closed
+    — one wrong line, not the whole document. Never a reversed document, nor any other kind.
+    Undoing recomputes the status the same way posting does: something outstanding again
+    reopens it (owner, 2026-10-01)."""
     require(user, RIGHT_FOR_KIND[document.kind], "Only a role that posts this kind of document may undo its entries.")
     document = StockDocument.objects.select_for_update().get(pk=document.pk)
-    if document.kind not in OPENABLE or document.status not in (Status.OPEN, Status.CLOSED):
-        raise ServiceError("Only an open or closed job work or memo has a last entry to undo.")
+    if document.kind not in OWED or document.status not in (Status.OPEN, Status.CLOSED):
+        raise ServiceError("Only an open or closed job work or memo, or a job card, has a last entry to undo.")
     last = (document.movements.filter(reverses__isnull=True, reversal__isnull=True)
-            .select_related("pouch").order_by("-pk").first())
+            .select_related("pouch", "diamond").order_by("-pk").first())
     if last is None:
         raise ServiceError(f"{document} has nothing left to undo.")
-    return _write(user, document, [Line(last.pouch, last.reason, last.direction, last.pcs, last.ct,
+    return _write(user, document, [Line(last.pouch or last.diamond, last.reason, last.direction, last.pcs, last.ct,
                                         note=f"Undoes {last.reason}", reverses=last)])[0]

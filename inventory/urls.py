@@ -1,8 +1,8 @@
 from django.urls import path
 
 from . import (
-    views, views_assort, views_dia_import, views_dia_settings, views_diamonds, views_documents, views_ledger,
-    views_lists, views_purchase,
+    views, views_assort, views_dia_assort, views_dia_import, views_dia_jobs, views_dia_purchase, views_dia_settings,
+    views_diamonds, views_documents, views_ledger, views_lists, views_purchase,
 )
 
 app_name = "inventory"
@@ -46,4 +46,14 @@ urlpatterns = [
     path("diamonds/import/", views_dia_import.import_home, name="dia_import_home"),
     path("diamonds/import/<int:batch_id>/", views_dia_import.import_review, name="dia_import_review"),
     path("diamonds/import/<int:batch_id>/commit/", views_dia_import.import_commit, name="dia_import_commit"),
+    path("diamonds/jobs/", views_dia_jobs.jobs, name="dia_jobs"),
+    path("diamonds/jobs/new/", views_dia_jobs.job_new, name="dia_job_new"),
+    path("diamonds/jobs/<int:pk>/post/", views_dia_jobs.job_post, name="dia_job_post"),
+    path("diamonds/jobs/<int:pk>/close/", views_dia_jobs.job_close, name="dia_job_close"),
+    path("diamonds/jobs/<int:pk>/undo/", views_dia_jobs.job_undo, name="dia_job_undo"),
+    path("diamonds/jobs/<int:pk>/reverse/", views_dia_jobs.job_reverse, name="dia_job_reverse"),
+    path("diamonds/assortments/", views_dia_assort.assorts, name="dia_assorts"),
+    path("diamonds/assortments/<int:pk>/reverse/", views_dia_assort.assort_reverse, name="dia_assort_reverse"),
+    path("diamonds/purchases/", views_dia_purchase.purchase, name="dia_purchase"),
+    path("diamonds/purchases/<int:pk>/reverse/", views_dia_purchase.purchase_reverse, name="dia_purchase_reverse"),
 ]

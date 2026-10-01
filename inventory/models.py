@@ -143,6 +143,10 @@ class StockDocument(models.Model):
         SPLIT = "split", "Split"
         TRANSFER = "transfer", "Transfer"
         SINGLE = "single", "Single"
+        # diamonds (part 4): listed only on the diamond screens, never on a stones one
+        DIA_JOB = "dia_job", "Job card"
+        DIA_ASSORT = "dia_assort", "Assortment"
+        DIA_PURCHASE = "dia_purchase", "Diamond purchase"
 
     class Status(models.TextChoices):
         OPEN = "open", "Open"
@@ -151,7 +155,7 @@ class StockDocument(models.Model):
 
     CURRENCIES = [("INR", "INR"), ("USD", "USD")]
 
-    kind = models.CharField(max_length=10, choices=Kind.choices)
+    kind = models.CharField(max_length=12, choices=Kind.choices)
     number = models.CharField(max_length=40)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
     vendor = models.ForeignKey(
@@ -220,6 +224,10 @@ class Movement(models.Model):
         TRANSFER = "Transfer"
         SAMPLE = "Sample"
         RECOUNT_ADJUSTMENT = "Recount Adjustment"
+        # the diamond ledgers (part 4)
+        RETURNED_UNUSED = "Returned Unused"
+        ASSORT_OUT = "Assort Out"
+        ASSORT_IN = "Assort In"
 
     pouch = models.ForeignKey(Pouch, on_delete=models.PROTECT, related_name="movements", null=True, blank=True)
     diamond = models.ForeignKey(
@@ -424,3 +432,26 @@ class DiamondRate(models.Model):
 
     def __str__(self):
         return f"{self.code_id} {self.size_text or 'any size'}"
+
+
+class DiamondLineCost(models.Model):
+    """A diamond line's own cost per carat, in INR: written by the purchase that brought it in, or
+    carried by weight through an assortment. Latest wins, and it wins over the rate card (owner,
+    2026-10-01). Imported lines have none and keep the rate card. Nothing is overwritten."""
+
+    line = models.ForeignKey(DiamondLine, on_delete=models.PROTECT, related_name="costs")
+    cost_rate = models.DecimalField(max_digits=14, decimal_places=4)
+    effective_from = models.DateField(default=timezone.localdate)
+    set_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    document = models.ForeignKey(
+        StockDocument, null=True, blank=True, on_delete=models.PROTECT, related_name="+",
+        help_text="The purchase or assortment that set it; empty for a manual change.",
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "inv_dia_line_cost"
+        ordering = ["-effective_from", "-pk"]
+
+    def __str__(self):
+        return f"{self.cost_rate}/ct on {self.line_id}"

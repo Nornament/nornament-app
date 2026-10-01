@@ -1,7 +1,9 @@
 <div class="dsub">
   <a class="{% if dtab == 'search' %}on{% endif %}" href="{% url 'inventory:diamonds' %}{% if as_role %}?as={{ as_role }}{% endif %}">Search stock</a>
-  <span title="Coming soon">Job cards 🔒</span>
-  <span title="Coming soon">Assortments 🔒</span>
-  <span title="Coming soon">Purchases 🔒</span>
+  <a class="{% if dtab == 'jobs' %}on{% endif %}" href="{% url 'inventory:dia_jobs' %}{% if as_role %}?as={{ as_role }}{% endif %}">Job cards</a>
+  {% if caps.inv_assort %}<a class="{% if dtab == 'assort' %}on{% endif %}" href="{% url 'inventory:dia_assorts' %}{% if as_role %}?as={{ as_role }}{% endif %}">Assortments</a>
+  {% else %}<span title="Not permitted">Assortments 🔒</span>{% endif %}
+  {% if caps.inv_purchase and caps.view_cost and caps.view_vendor %}<a class="{% if dtab == 'purchase' %}on{% endif %}" href="{% url 'inventory:dia_purchase' %}{% if as_role %}?as={{ as_role }}{% endif %}">Purchases</a>
+  {% else %}<span title="Not permitted">Purchases 🔒</span>{% endif %}
   <a class="{% if dtab == 'settings' %}on{% endif %}" href="{% url 'inventory:dia_settings' %}{% if as_role %}?as={{ as_role }}{% endif %}">Settings</a>
 </div>

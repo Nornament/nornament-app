@@ -68,9 +68,9 @@
 
 <div class="card" style="overflow:hidden">
   <div class="card-h"><span class="card-t">Stock</span><span class="spacer"></span>
-    {% if can.job %}<button class="btn sm" disabled title="Coming soon">⚒ Job card 🔒</button>{% endif %}
-    {% if can.assort %}<button class="btn sm" disabled title="Coming soon">⇅ Assort 🔒</button>{% endif %}
-    {% if can.purchase %}<button class="btn sm pri" disabled title="Coming soon">＋ Purchase 🔒</button>{% endif %}</div>
+    {% if can.job %}<a class="btn sm" href="{% url 'inventory:dia_jobs' %}{% if as_role %}?as={{ as_role }}{% endif %}">⚒ Job card</a>{% endif %}
+    {% if can.assort %}<a class="btn sm" href="{% url 'inventory:dia_assorts' %}{% if as_role %}?as={{ as_role }}{% endif %}">⇅ Assort</a>{% endif %}
+    {% if can.purchase %}<a class="btn sm pri" href="{% url 'inventory:dia_purchase' %}{% if as_role %}?as={{ as_role }}{% endif %}">＋ Purchase</a>{% endif %}</div>
   <div style="overflow:auto;max-height:620px"><table class="pt">
     <thead><tr><th>Category</th><th>Shape</th><th>Colour</th><th>Clarity</th><th>Size</th><th>Batch</th><th class="r">Carats</th>
       {% if 'cost_rate' in money %}<th class="r">Cost / ct</th><th class="r">Cost value</th>{% endif %}

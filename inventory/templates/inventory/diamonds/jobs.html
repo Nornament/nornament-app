@@ -1,0 +1,88 @@
+{% extends "inventory_base.html" %}{% load inventory_extras %}
+{% block title %}Job cards · Diamonds{% endblock %}
+{% block crumb %}<b>Diamonds</b> &nbsp;›&nbsp; Job cards{% endblock %}
+{% block content %}
+{% include "inventory/diamonds/_dsub.html" %}
+<div class="dbanner"><h2>Job cards</h2></div>
+
+<div class="filterbar">
+  <div class="fsel"><label>Job card</label>
+    <form method="get" style="display:contents">
+      {% if as_role %}<input type="hidden" name="as" value="{{ as_role }}">{% endif %}
+      {% if closed %}<input type="hidden" name="closed" value="1">{% endif %}
+      <select class="inp" name="card" onchange="this.form.submit()">
+        {% for c in cards %}<option value="{{ c.pk }}"{% if card and c.pk == card.pk %} selected{% endif %}>{{ c.number }} — {% if c.in_house %}In-house{% elif 'karigar_name' in c %}{{ c.karigar_name }}{% else %}karigar{% endif %} ({{ c.status }})</option>
+        {% empty %}<option value="">No job cards</option>{% endfor %}
+      </select></form></div>
+  {% if card %}
+  <div class="fsel"><label>Karigar</label><div class="ro2">{% if card.in_house %}In-house{% elif 'karigar_name' in card %}{{ card.karigar_name }}{% else %}—{% endif %}</div></div>
+  <div class="fsel"><label>Opened</label><div class="ro2">{{ card.opened|date:"d M Y" }}</div></div>
+  <div class="fsel"><label>Status</label><div class="ro2">
+    {% if card.status == 'reversed' %}<span class="chip crit"><span class="dot"></span>reversed</span>
+    {% elif card.status == 'closed' %}<span class="chip good"><span class="dot"></span>closed</span>
+    {% elif out_text == '0' %}<span class="chip good"><span class="dot"></span>balanced — can close</span>
+    {% else %}<span class="chip warn"><span class="dot"></span>{{ out_text }} ct outstanding</span>{% endif %}</div></div>
+  {% endif %}
+  <div class="fsel"><label>&nbsp;</label>
+    {% if closed %}<a class="chip" href="?{% if as_role %}as={{ as_role }}{% endif %}">Open only</a>
+    {% else %}<a class="chip" href="?closed=1{% if as_role %}&amp;as={{ as_role }}{% endif %}">Show closed</a>{% endif %}</div>
+  {% if may %}
+  <div class="fsel"><label>&nbsp;</label>
+    <details class="inline"><summary class="btn sm pri">＋ New job card</summary>
+      <form method="post" action="{% url 'inventory:dia_job_new' %}" class="ctrow" style="margin-top:8px">{% csrf_token %}
+        <select class="inp" name="karigar" style="width:180px"><option value="">In-house</option>
+          {% for k in karigars %}{% if 'karigar_name' in k %}<option value="{{ k.pk }}">{{ k.karigar_name }}</option>{% endif %}{% endfor %}</select>
+        <input class="inp" type="date" name="opened_on" value="{{ today }}" style="width:150px">
+        <input class="inp" name="note" placeholder="Note" style="width:180px">
+        <button class="btn pri">Open job card</button></form></details></div>
+  {% endif %}
+</div>
+
+{% if card %}
+<div class="card" style="overflow:hidden">
+  <div class="card-h"><span class="card-t">Ledger — {{ card.number }}</span><span class="spacer"></span>
+    {% if read_only %}<span class="hint">read only for {{ role_label }}</span>{% endif %}
+    {% if can_undo %}<form method="post" action="{% url 'inventory:dia_job_undo' card.pk %}" class="inline">{% csrf_token %}
+      <button class="btn sm gho" onclick="return confirm('Undo the last entry on {{ card.number|escapejs }}?')">↺ Undo last entry</button></form>{% endif %}
+    {% if can_close %}<form method="post" action="{% url 'inventory:dia_job_close' card.pk %}" class="inline">{% csrf_token %}
+      <button class="btn sm pri">Close</button></form>{% endif %}
+    {% if can_reverse %}<form method="post" action="{% url 'inventory:dia_job_reverse' card.pk %}" class="inline">{% csrf_token %}
+      <button class="btn sm" onclick="return confirm('Reverse every entry on {{ card.number|escapejs }}?')">Reverse</button></form>{% endif %}
+  </div>
+  <div style="overflow:auto"><table class="led">
+    <thead><tr><th>Date</th><th>Stock control</th><th>Line</th><th>Ref</th>
+      <th class="r">Debit (ct)</th><th class="r">Credit (ct)</th><th class="r">Balance</th><th>By</th></tr></thead>
+    <tbody>{% for r in rows %}<tr>
+      <td>{{ r.when|date:"d M Y" }}</td>
+      <td><span class="chip {{ r.tone }}"><span class="dot"></span>{{ r.label }}</span></td>
+      <td class="mono">{{ r.line }}</td>
+      <td class="chal">{{ r.ref }}</td>
+      <td class="r">{% if r.debit is not None %}<b>{{ r.debit|ct }}</b>{% endif %}</td>
+      <td class="r">{% if r.credit is not None %}<b>{{ r.credit|ct }}</b>{% endif %}</td>
+      <td class="r bal">{{ r.balance|ct }}</td>
+      <td class="hint">{{ r.by }}</td></tr>
+    {% empty %}<tr><td colspan="8" class="hint">No entries yet.</td></tr>{% endfor %}
+      <tr class="ledtot"><td colspan="4"><b>Totals</b></td>
+        <td class="r"><b>{{ totals.debit|ct }}</b></td><td class="r"><b>{{ totals.credit|ct }}</b></td>
+        <td class="r"><b>{{ totals.balance|ct }}</b></td><td></td></tr>
+    </tbody></table></div>
+</div>
+
+{% if can_post %}
+<div class="card" style="margin-top:14px"><div class="card-h"><span class="card-t">Post an entry</span></div>
+  <div class="card-b"><form method="post" action="{% url 'inventory:dia_job_post' card.pk %}" class="filterbar" style="margin:0">{% csrf_token %}
+    <div class="fsel"><label>Stock control</label><select class="inp" name="entry">
+      {% for value, label in entries %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
+    <div class="fsel"><label>Line</label><select class="inp" name="line">
+      <optgroup label="In stock — to issue">{% for l in issue %}<option value="{{ l.pk }}">{{ l.label }} — {{ l.ct|ct }} ct</option>{% endfor %}</optgroup>
+      {% if credit %}<optgroup label="Out on this card — to credit">{% for l in credit %}<option value="{{ l.pk }}">{{ l.label }} — {{ l.ct|ct }} ct out</option>{% endfor %}</optgroup>{% endif %}
+    </select></div>
+    <div class="fsel"><label>Carats</label>
+      <div class="unit"><input class="inp tnum" name="ct" inputmode="decimal" placeholder="0.00"><span class="u">ct</span></div></div>
+    <div class="fsel"><label>Date</label><input class="inp" type="date" name="occurred_on" value="{{ today }}"></div>
+    <div class="fsel"><label>Challan / ref</label><input class="inp mono" name="ref" maxlength="40"></div>
+    <div class="fsel"><label>&nbsp;</label><button class="btn pri">Post</button></div>
+  </form></div></div>
+{% endif %}
+{% endif %}
+{% endblock %}

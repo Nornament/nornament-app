@@ -116,3 +116,30 @@ def ledger_docs(admin_user_, shelf, parties):
     )
     return {**shelf, **parties, "job": job, "memo": memo, "purchase": purchase,
             "bought": purchase.movements.get().pouch}
+
+
+#: a diamond purchase's cost per carat and an assortment's override, findable in a body and nowhere else
+DIA_LINE_COST = "23,456"
+DIA_OVERRIDE = "18,888"
+
+
+@pytest.fixture
+def dia_docs(admin_user_, diamonds, parties):
+    """A job card (karigar), an assortment with a cost override, and a purchase (supplier, cost)."""
+    from datetime import date
+
+    from inventory import ledger_dia_assort, ledger_dia_jobs, ledger_dia_purchase
+    from inventory.ledger_purchase import PurchaseHeader
+
+    card = ledger_dia_jobs.open_card(admin_user_, parties["karigar"])
+    ledger_dia_jobs.post_entry(admin_user_, card, "issue", diamonds["round"], Decimal("1"), ref="CH 2026/0417")
+    assort = ledger_dia_assort.post_assortment(
+        admin_user_, diamonds["polki"], Decimal("3"),
+        [ledger_dia_assort.Destination("Round", "G", "VS1", "+2", Decimal("3"), Decimal("18888"))],
+    )
+    purchase = ledger_dia_purchase.post_dia_purchase(
+        admin_user_, PurchaseHeader(supplier=diamonds["supplier"], occurred_on=date(2026, 8, 7), invoice_no="DIA-7731"),
+        [ledger_dia_purchase.DiaPurchaseLine("Natural Diamond", "Round", "F-G-H", "VS-SI", "+6-12", None,
+                                             Decimal("2"), Decimal("23456"))],
+    )
+    return {**diamonds, **parties, "card": card, "assort": assort, "purchase": purchase}
