@@ -72,12 +72,13 @@
     {% if can.assort %}<a class="btn sm" href="{% url 'inventory:dia_assorts' %}{% if as_role %}?as={{ as_role }}{% endif %}">⇅ Assort</a>{% endif %}
     {% if can.purchase %}<a class="btn sm pri" href="{% url 'inventory:dia_purchase' %}{% if as_role %}?as={{ as_role }}{% endif %}">＋ Purchase</a>{% endif %}</div>
   <div style="overflow:auto;max-height:620px"><table class="pt">
-    <thead><tr><th>Category</th><th>Shape</th><th>Colour</th><th>Clarity</th><th>Size</th><th>Batch</th><th class="r">Carats</th>
+    <thead><tr><th>Line</th><th>Category</th><th>Shape</th><th>Colour</th><th>Clarity</th><th>Size</th><th>Batch</th><th class="r">Carats</th>
       {% if 'cost_rate' in money %}<th class="r">Cost / ct</th><th class="r">Cost value</th>{% endif %}
       {% if 'sale_rate' in money %}<th class="r">Sale / ct</th><th class="r">Sale value</th>{% endif %}
       {% if 'margin' in money %}<th class="r">Margin</th>{% endif %}
       <th>Item code</th><th>Read</th></tr></thead>
     <tbody>{% for r in rows %}<tr>
+      <td class="mono" style="font-size:11px"><a href="{% url 'inventory:dia_line' r.ref %}{% if as_role %}?as={{ as_role }}{% endif %}">{{ r.ref }}</a></td>
       <td>{{ r.category }}</td><td>{{ r.shape }}</td>
       <td>{% if r.colour %}{{ r.colour }}{% else %}<span class="hint">—</span>{% endif %}</td>
       <td>{% if r.clarity %}{{ r.clarity }}{% else %}<span class="hint">—</span>{% endif %}</td>
