@@ -60,6 +60,28 @@ def test_no_diamond_line_goes_below_zero(admin_user_, diamonds):
     assert not doc.movements.exists() and _ct(rnd) == D("3.40")
 
 
+def test_a_pouch_moves_only_on_a_stones_document_and_a_line_only_on_a_diamond_one(admin_user_, shelf, diamonds, parties):
+    card = _card(admin_user_, parties)
+    with pytest.raises(ServiceError, match="A pouch moves on a stones document, a diamond line on a diamond one"):
+        ledger.post(admin_user_, card, [Line(shelf["onyx"], R.JOB_WORK_OUT, OUT, 1, D("1"))])
+    job = ledger.open_document(admin_user_, K.JOB_WORK, "2026/0999", vendor=parties["karigar"])
+    with pytest.raises(ServiceError, match="A pouch moves on a stones document, a diamond line on a diamond one"):
+        ledger.post(admin_user_, job, [Line(diamonds["round"], R.JOB_WORK_OUT, OUT, None, D("1"))])
+    assert not Movement.objects.filter(document__in=[card, job]).exists() and _ct(diamonds["round"]) == D("3.40")
+
+
+def test_a_diamond_reversal_that_would_go_below_zero_is_refused(admin_user_, diamonds):
+    rnd = diamonds["round"]
+    back = ledger.open_document(admin_user_, K.DIA_PURCHASE)
+    ledger.post(admin_user_, back, [Line(rnd, R.SALES_RETURN, IN, None, D("1"))])
+    drain = ledger.open_document(admin_user_, K.DIA_ASSORT)
+    ledger.post(admin_user_, drain, [Line(rnd, R.ASSORT_OUT, OUT, None, D("4.40"))])
+    with pytest.raises(ServiceError, match=r"Not enough in NRD-000001 .* below zero \(-1 ct\)"):
+        ledger.reverse_document(admin_user_, back)
+    back.refresh_from_db()
+    assert back.status == S.CLOSED and not StockDocument.objects.filter(reverses=back).exists()
+
+
 def test_a_job_card_credit_cannot_exceed_what_that_line_has_out(admin_user_, diamonds, parties):
     rnd, princess = diamonds["round"], diamonds["princess"]
     card = _card(admin_user_, parties)

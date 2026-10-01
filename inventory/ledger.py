@@ -266,6 +266,8 @@ def _write(user, document, lines, occurred_on=None):
     """Write a document's movements — all of them, or none — check every owner's balance, and
     settle the document's status. Shared by ``post`` (an open document only) and ``undo_last``
     (which may do this on a document already closed)."""
+    if any(_diamond(line.owner) != (document.kind in DIAMOND_KINDS) for line in lines):
+        raise ServiceError("A pouch moves on a stones document, a diamond line on a diamond one.")
     pouches = {p.pk: p for p in Pouch.objects.select_for_update().filter(
         pk__in={line.owner.pk for line in lines if not _diamond(line.owner)})}
     diamonds = {d.pk: d for d in DiamondLine.objects.select_for_update().filter(
