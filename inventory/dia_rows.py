@@ -9,7 +9,7 @@ from decimal import Decimal
 from stock.masking import mask
 
 from . import dia_services
-from .models import DiamondCode, DiamondLine, DiamondTerm
+from .models import DiamondCode, DiamondLine, DiamondTerm, StockDocument
 
 
 def line_row(user, line, rates):
@@ -54,6 +54,11 @@ def rail_counts():
     by_kind = defaultdict(int)
     for kind in DiamondTerm.objects.values_list("kind", flat=True):
         by_kind[kind] += 1
+    documents = StockDocument.objects.filter(reverses__isnull=True)
     return {"lines": dia_services.stocked_lines().exclude(on_ct=0).count(), "codes": DiamondCode.objects.count(),
             "categories": by_kind["category"], "shapes": by_kind["shape"], "colours": by_kind["colour"],
-            "clarities": by_kind["clarity"], "bands": by_kind["band"]}
+            "clarities": by_kind["clarity"], "bands": by_kind["band"],
+            # the prototype's rail badges: open job cards, and assortments posted and standing
+            "jobs": documents.filter(kind=StockDocument.Kind.DIA_JOB, status=StockDocument.Status.OPEN).count(),
+            "assorts": documents.filter(kind=StockDocument.Kind.DIA_ASSORT)
+                                .exclude(status=StockDocument.Status.REVERSED).count()}
