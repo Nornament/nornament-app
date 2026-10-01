@@ -154,3 +154,7 @@ Each refusal in "Checks on every post" is a `ServiceError` shown as a message on
 - Consumed and Wastage posted from the shelf need Record stock movements; posted against a challan they need Job cards — the form offers only the path the viewer may use.
 - A login without `view_vendor` can only name karigars already on a challan, so the Karigar desk cannot start a challan with a brand-new karigar — Admin/Accounts name it first.
 - The split screen's live balance line checks pieces too, not only carats.
+- Every post locks and re-reads its document first (document, then pouches), so a stale copy cannot settle a document reversed or closed a moment earlier, and two settles of one challan cannot leave it Open at zero.
+- Typed quantities take at most 4 decimal places (more is refused, never rounded); numbers, pouch nos. and pouch fields longer than their column are refused in words, and the inputs carry `maxlength`.
+- Record movement offers the prototype's "＋ New" karigar on Job Work Out to logins holding Edit settings and supplier sight; it is created in the same transaction as the challan, so a refused post leaves no vendor.
+- Invoice and challan numbers are unique per document kind across all suppliers and karigars: two suppliers' "Inv 1" collide, and the second must be typed differently (known limit).
