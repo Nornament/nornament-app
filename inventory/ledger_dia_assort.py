@@ -78,11 +78,11 @@ def post_assortment(user, source, take_out, destinations, loss=None, occurred_on
     costs = []
     for d in destinations:
         size = (d.size_text or "").strip()
-        if size:
+        if size and size != source.size_text:
             sized = dia_services.sized(size)
             sizing = {"size_text": size, "band": dia_services.term(DiamondTerm.BAND, sized.band),
                       "ct_lo": sized.ct_lo, "ct_hi": sized.ct_hi}
-        else:   # the source's size as it stands: a band set per stone cannot be re-derived without pieces
+        else:   # blank or the source's own size: a band set per stone cannot be re-derived without pieces
             sizing = {"size_text": source.size_text, "band": source.band, "ct_lo": source.ct_lo, "ct_hi": source.ct_hi}
         code = dia_services.code_for(user, d.shape, d.colour, d.clarity)
         if (code.pk, sizing["size_text"]) == (source.code_id, source.size_text):

@@ -145,9 +145,10 @@ def test_a_blank_destination_size_keeps_a_per_stone_band(accounts_user, diamonds
     (mm,) = dia_services.open_lines(accounts_user, [
         {"category": rnd.category, "code": rnd.code, "batch_no": "B-772", "size_text": "2.7*2.1 - 2.9*1.8",
          "band": dia_services.term("band", "carat band"), "ct_lo": D("0.07"), "ct_hi": D("0.07"), "ct": D("0.14")}])
-    (child,) = _new(post_assortment(accounts_user, mm, D("0.14"), [Destination("Round", "E-F", "VVS-VS", "", D("0.14"))]))
-    assert (child.size_text, child.band.value, child.ct_lo, child.ct_hi) == (
-        "2.7*2.1 - 2.9*1.8", "carat band", D("0.07"), D("0.07"))
+    for typed in ("", "2.7*2.1 - 2.9*1.8"):           # blank, or the source's own size typed out
+        (child,) = _new(post_assortment(accounts_user, mm, D("0.07"), [Destination("Round", "E-F", "VVS-VS", typed, D("0.07"))]))
+        assert (child.size_text, child.band.value, child.ct_lo, child.ct_hi) == (
+            "2.7*2.1 - 2.9*1.8", "carat band", D("0.07"), D("0.07"))
 
 
 def test_a_destination_in_the_source_grade_is_refused(accounts_user, diamonds):
