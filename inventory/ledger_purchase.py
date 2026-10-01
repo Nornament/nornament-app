@@ -47,7 +47,9 @@ class PurchaseLine:
     cost_per_ct: Decimal | None
 
 
-def _check(header, lines):
+def check_header(header, lines):
+    """What every purchase's header needs, stones or diamonds: a supplier, a line, and INR or USD
+    with its rate to INR."""
     if header.supplier is None:
         raise ServiceError("Choose the supplier.")
     if not lines:
@@ -60,6 +62,10 @@ def _check(header, lines):
         raise ServiceError("A rate must be positive.")
     if (header.landed_extras or ZERO) < 0:
         raise ServiceError("Landed extras cannot be negative.")
+
+
+def _check(header, lines):
+    check_header(header, lines)
     seen = set()
     for line in lines:
         number = (line.pouch_no or "").strip()
