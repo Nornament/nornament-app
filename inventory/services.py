@@ -126,6 +126,34 @@ def add_price(user, pouch, kind, rate, effective_from):
     return entry
 
 
+#: what a group set may write: purchase prices come only from purchases
+GROUP_KINDS = (PriceEntry.VALUATION, PriceEntry.LIST)
+
+
+@transaction.atomic
+def set_group_price(user, pouches, kind, rate, effective_from, described=""):
+    """One dated price per pouch in a filtered group. Nothing is overwritten: each pouch gets its own row."""
+    if kind not in GROUP_KINDS:
+        raise ServiceError("A group sets a valuation or a list price; purchase prices come from purchases.")
+    require(user, INV_MASTERS, "Only a role that edits inventory records can set a price.")
+    require(user, VIEW_SALE if kind == PriceEntry.LIST else VIEW_COST, "A price you may not see is not yours to set.")
+    # zero is refused here, unlike one pouch: a whole group at zero is a slip
+    if rate is None or not rate.is_finite() or rate <= 0 or rate >= 10 ** 10:
+        raise ServiceError("The rate has to be a number above zero, at most ten digits before the point.")
+    if effective_from > timezone.localdate():
+        raise ServiceError("A price cannot take effect in the future: the newest one is the current one.")
+    pouches = list(pouches)
+    if not pouches:
+        raise ServiceError("No pouch matches these filters.")
+    by = _by(user)
+    entries = PriceEntry.objects.bulk_create([
+        PriceEntry(pouch=pouch, kind=kind, rate=rate, effective_from=effective_from, set_by=by) for pouch in pouches
+    ])
+    detail = f"{kind} {rate}/ct on {len(pouches)} pouch{'es' if len(pouches) != 1 else ''}"
+    log(user, "INSERT", "inv_price", entries[0].pk, f"{detail} ({described})" if described else detail)
+    return len(pouches)
+
+
 def recount_deltas(pouch, pcs, ct):
     """``(field, direction, quantity)`` for each counted figure that differs from the ledger.
 
