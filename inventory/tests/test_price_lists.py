@@ -4,10 +4,12 @@ from decimal import Decimal
 
 import pytest
 from django.core.exceptions import PermissionDenied
+from django.urls import reverse
 from django.utils import timezone
 
-from inventory import services
+from inventory import services, views_prices
 from inventory.models import Pouch, PriceEntry
+from inventory.tests.conftest import VALUE
 from stock.models import ActivityLog
 from stock.services import ServiceError
 
@@ -68,3 +70,96 @@ def test_each_kind_needs_inv_masters_and_its_own_right(sales_user, production_us
     with pytest.raises(PermissionDenied):
         services.set_group_price(production_user, _group(), PriceEntry.VALUATION, Decimal("10"), today)
     assert PriceEntry.objects.count() == before
+
+
+COST, SELLING = reverse("inventory:prices_cost"), reverse("inventory:prices_selling")
+
+
+@pytest.fixture
+def priced(admin_user_, shelf):
+    """The shelf with a purchase price and a list price on the onyx, and an empty jade pouch."""
+    services.add_price(admin_user_, shelf["onyx"], PriceEntry.PURCHASE, Decimal("6000"), date(2026, 8, 7))
+    services.add_price(admin_user_, shelf["onyx"], PriceEntry.LIST, Decimal("9500"), date(2026, 9, 1))
+    jade = services.open_pouch(admin_user_, shelf["batch"], {"pouch_no": "9", "stone_name": "Jade", "colour": "Green"},
+                               pcs=0, ct=Decimal("0"), rate=None)
+    return {**shelf, "jade": jade}
+
+
+def _get(client, user, url, **params):
+    client.force_login(user)
+    return client.get(url, params)
+
+
+def test_the_cost_list_shows_purchase_valuation_and_value_with_a_total(client, accounts_user, priced):
+    body = _get(client, accounts_user, COST).content.decode()
+    assert priced["onyx"].ref in body and priced["ruby"].ref in body
+    assert "₹6,000" in body and "₹7,919" in body and VALUE in body
+    assert "1,00,988" in body                                          # 98,987.5 + 2,000
+    assert f'href="{reverse("inventory:dia_settings")}#rates"' in body and "Diamonds price by the rate card →" in body
+    assert 'class="on" href="' + COST + '"' in body
+
+
+def test_the_selling_list_shows_list_price_value_and_margin(client, accounts_user, priced):
+    body = _get(client, accounts_user, SELLING).content.decode()
+    assert "₹9,500" in body and "₹1,18,750" in body                   # 12.5 ct × ₹9,500
+    assert "20.0%" in body                                             # (9,500 − 7,919) / 7,919
+    assert "<th class=\"r\">Margin</th>" in body
+
+
+def test_sales_sees_list_prices_but_no_cost_or_margin_and_no_cost_list(client, sales_user, priced):
+    body = _get(client, sales_user, SELLING).content.decode()
+    assert "₹9,500" in body and "₹1,18,750" in body
+    for secret in ("7,919", VALUE, "6,000", "20.0%", "Margin</th>"):
+        assert secret not in body, secret
+    assert _get(client, sales_user, COST).status_code == 403
+
+
+@pytest.mark.parametrize("fixture", ["karigar_user", "graphic_user", "production_user"])
+def test_a_login_without_the_right_is_refused_both(client, request, priced, fixture):
+    user = request.getfixturevalue(fixture)
+    assert _get(client, user, COST).status_code == 403
+    assert _get(client, user, SELLING).status_code == 403
+
+
+def test_the_filters_narrow_the_list(client, accounts_user, priced):
+    def refs(**params):
+        body = _get(client, accounts_user, COST, **params).content.decode()
+        return {name for name in ("onyx", "ruby", "jade") if priced[name].ref in body}
+
+    assert refs() == {"onyx", "ruby"}                                  # in stock only, by default
+    assert refs(f="1") == {"onyx", "ruby", "jade"}                     # the box unticked: every pouch
+    assert refs(stone="ONYX") == {"onyx"}
+    assert refs(colour="Red") == {"ruby"}
+    assert refs(shape="Oval") == {"onyx"} and refs(quality="A") == {"ruby"} and refs(size_text="14*10") == {"onyx"}
+    assert refs(batch="sl0") == {"onyx", "ruby"} and refs(batch="XX") == set()
+    assert refs(box="G") == {"onyx", "ruby"}
+
+
+def test_paging_keeps_the_filters(client, accounts_user, priced, monkeypatch):
+    monkeypatch.setattr(views_prices, "PAGE", 1)
+    first = _get(client, accounts_user, COST, f="1", batch="SL").content.decode()
+    assert "Page 1 of 3" in first and "?f=1&amp;batch=SL&amp;stock=1&page=2" not in first
+    assert "?f=1&amp;batch=SL&page=2" in first                        # the box unticked stays unticked
+    second = _get(client, accounts_user, COST, f="1", batch="SL", page="2").content.decode()
+    assert "Page 2 of 3" in second
+
+
+def test_the_rail_opens_each_list_by_right(client, accounts_user, sales_user, karigar_user, priced):
+    body = _get(client, accounts_user, reverse("inventory:shelf")).content.decode()
+    assert f'href="{COST}"' in body and f'href="{SELLING}"' in body
+    body = _get(client, sales_user, reverse("inventory:shelf")).content.decode()
+    assert f'href="{COST}"' not in body and "Price list — cost<span class=\"ct\">🔒" in body
+    assert f'href="{SELLING}"' in body
+    body = _get(client, karigar_user, reverse("inventory:shelf")).content.decode()
+    assert "Price list — selling<span class=\"ct\">🔒" in body and f'href="{SELLING}"' not in body
+
+
+def test_client_view_padlocks_both_and_redirects_both(client, admin_user_, priced):
+    client.force_login(admin_user_)
+    client.post(reverse("inventory:set_view"), {"view": "client"})
+    body = client.get(reverse("inventory:shelf")).content.decode()
+    assert COST not in body and SELLING not in body and "Price list — cost" not in body
+    assert "Price list — selling<span class=\"ct\">🔒" in body
+    for url in (COST, SELLING):
+        response = client.get(url)
+        assert response.status_code == 302 and response["Location"] == reverse("inventory:shelf"), url

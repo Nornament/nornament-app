@@ -27,8 +27,10 @@ the prototype named but never built is shown locked, never as a dead link.{% end
 
 <div class="nav-h">Commercial</div>
 <nav class="nav">
-  {% if not client_view %}<span class="locked"><span class="ic">₹</span>Price list — cost<span class="ct">🔒</span></span>{% endif %}
-  <span class="locked"><span class="ic">₹</span>Price list — selling<span class="ct">🔒</span></span>
+  {% if not client_view %}{% if caps.view_cost %}<a class="{% if tab == 'prices_cost' %}on{% endif %}" href="{% url 'inventory:prices_cost' %}"><span class="ic">₹</span>Price list — cost</a>
+  {% else %}<span class="locked"><span class="ic">₹</span>Price list — cost<span class="ct">🔒</span></span>{% endif %}{% endif %}
+  {% if caps.view_sale and not client_view %}<a class="{% if tab == 'prices_selling' %}on{% endif %}" href="{% url 'inventory:prices_selling' %}"><span class="ic">₹</span>Price list — selling</a>
+  {% else %}<span class="locked"><span class="ic">₹</span>Price list — selling<span class="ct">🔒</span></span>{% endif %}
   {% if caps.inv_masters and caps.view_vendor and not client_view %}<a href="{% url 'inventory:dia_settings' %}#suppliers"><span class="ic">⌗</span>Suppliers</a>
   {% else %}<span class="locked"><span class="ic">⌗</span>Suppliers<span class="ct">🔒</span></span>{% endif %}
   <span class="locked"><span class="ic">◐</span>Client lookbook<span class="ct">🔒</span></span>

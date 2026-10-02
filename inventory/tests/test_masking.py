@@ -130,7 +130,7 @@ def test_an_admin_preview_masks_like_the_role(client, admin_user_, diamonds):
 
 def test_every_inventory_screen_is_walked():
     covered = ({name for name, _, _ in SCREENS} | {name for name, _ in DIAMOND_SCREENS} | LEDGER_SCREENS
-               | DIA_LEDGER_SCREENS | FINDER_SCREENS)
+               | DIA_LEDGER_SCREENS | FINDER_SCREENS | PRICE_SCREENS)
     named = set()
     for resolver in get_resolver().url_patterns:
         if isinstance(resolver, URLResolver) and resolver.app_name == "inventory":
@@ -327,6 +327,33 @@ def test_no_stones_screen_lists_or_opens_a_diamond_document(client, accounts_use
 #: part 5a's finders, walked by test_no_finder_shows_a_login_what_it_may_not_see
 FINDER_SCREENS = {"inventory:search", "inventory:quality", "inventory:splits", "inventory:transfers",
                   "inventory:dia_movements", "inventory:dia_line"}
+
+#: part 5b's price lists, walked by test_no_price_list_shows_a_login_what_it_may_not_see
+PRICE_SCREENS = {"inventory:prices_cost", "inventory:prices_selling"}
+
+
+@pytest.mark.parametrize("fixture, secrets", [
+    ("sales_user", ("7,919", VALUE, TOTAL_VALUE, SUPPLIER)),
+    ("karigar_user", ("7,919", VALUE, TOTAL_VALUE, SUPPLIER)),
+    ("production_user", ("7,919", VALUE, TOTAL_VALUE)),
+    ("graphic_user", ("7,919", VALUE, TOTAL_VALUE, SUPPLIER)),
+])
+def test_no_price_list_shows_a_login_what_it_may_not_see(client, shelf, request, fixture, secrets):
+    client.force_login(request.getfixturevalue(fixture))
+    for name in sorted(PRICE_SCREENS):
+        for query in ("", "?f=1"):
+            response = client.get(reverse(name) + query)
+            assert response.status_code in (200, 403), f"{name} returned {response.status_code}"
+            body = response.content.decode()
+            for secret in secrets:
+                assert secret not in body, f"{name}{query} leaked {secret!r} to {fixture}"
+
+
+def test_the_cost_list_shows_cost_to_accounts(client, accounts_user, shelf):
+    client.force_login(accounts_user)
+    body = client.get(reverse("inventory:prices_cost")).content.decode()
+    assert "7,919" in body and VALUE in body and TOTAL_VALUE in body
+
 
 #: what each login may not see on a finder (Production sees suppliers and karigars; the Karigar desk, karigars)
 #: SUPPLIER, CUSTOMER and PURCHASE_COST never render on any finder screen today (none of search, the
