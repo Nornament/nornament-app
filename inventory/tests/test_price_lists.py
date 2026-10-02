@@ -3,7 +3,6 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
-from django.contrib.messages import get_messages
 from django.core.exceptions import PermissionDenied
 from django.urls import reverse
 from django.utils import timezone
@@ -173,7 +172,10 @@ def _set(client, user, url, count, rate="1250", **filters):
 
 
 def _said(response):
-    return [str(m) for m in get_messages(response.wsgi_request)]
+    """Follows the redirect, the way a browser does — the flash is read off the page it lands on
+    (consuming it there), not off the request that queued it, so a later post never inherits it."""
+    followed = response.client.get(response["Location"])
+    return [str(m) for m in followed.context["messages"]]
 
 
 def test_setting_a_list_price_prices_every_filtered_pouch_on_every_page(client, accounts_user, priced, monkeypatch):

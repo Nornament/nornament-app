@@ -109,10 +109,6 @@ def _set(request, mode, kind, f):
     right = MODES[mode][0]
     require(request.user, INV_MASTERS, "Only a role that edits inventory records can set a price.")
     require(request.user, right, "A price you may not see is not yours to set.")
-    # a post that is never followed by the list page leaves its flash unread; without this, Django's
-    # cookie storage would carry that stale message into this post's own, so a second post in a row
-    # (as from a double-click, or this screen's own tests) would show both. One post, one message.
-    request.COOKIES.pop("messages", None)
     back = f"{reverse(f'inventory:prices_{mode}')}?{_query(f)}"
     group = list(_pouches(f))
     if str(len(group)) != (request.POST.get("count") or "").strip():
