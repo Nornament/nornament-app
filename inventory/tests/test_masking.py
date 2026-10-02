@@ -355,6 +355,18 @@ def test_the_cost_list_shows_cost_to_accounts(client, accounts_user, shelf):
     assert "7,919" in body and VALUE in body and TOTAL_VALUE in body
 
 
+@pytest.mark.parametrize("fixture", ["sales_user", "karigar_user", "production_user", "graphic_user"])
+def test_no_price_list_post_writes_for_a_login_without_the_right(client, shelf, request, fixture):
+    from inventory.models import PriceEntry
+
+    client.force_login(request.getfixturevalue(fixture))
+    before = PriceEntry.objects.count()
+    for name in sorted(PRICE_SCREENS):
+        response = client.post(reverse(name), {"f": "1", "stock": "1", "count": "2", "rate": "1"})
+        assert response.status_code == 403, f"{name} returned {response.status_code} to {fixture}"
+    assert PriceEntry.objects.count() == before
+
+
 #: what each login may not see on a finder (Production sees suppliers and karigars; the Karigar desk, karigars)
 #: SUPPLIER, CUSTOMER and PURCHASE_COST never render on any finder screen today (none of search, the
 #: quality filters, splits/transfers or the diamond Movements/line pages show a stones vendor, customer

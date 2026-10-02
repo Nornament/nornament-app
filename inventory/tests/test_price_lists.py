@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
+from django.contrib.messages import get_messages
 from django.core.exceptions import PermissionDenied
 from django.urls import reverse
 from django.utils import timezone
@@ -163,3 +164,66 @@ def test_client_view_padlocks_both_and_redirects_both(client, admin_user_, price
     for url in (COST, SELLING):
         response = client.get(url)
         assert response.status_code == 302 and response["Location"] == reverse("inventory:shelf"), url
+
+
+def _set(client, user, url, count, rate="1250", **filters):
+    client.force_login(user)
+    return client.post(url, {"f": "1", "stock": "1", **filters, "count": str(count), "rate": rate,
+                             "effective_from": timezone.localdate().isoformat()})
+
+
+def _said(response):
+    return [str(m) for m in get_messages(response.wsgi_request)]
+
+
+def test_setting_a_list_price_prices_every_filtered_pouch_on_every_page(client, accounts_user, priced, monkeypatch):
+    monkeypatch.setattr(views_prices, "PAGE", 1)
+    response = _set(client, accounts_user, SELLING, 2, batch="SL")
+    assert response.status_code == 302
+    assert response["Location"] == f"{SELLING}?f=1&batch=SL&stock=1"
+    assert _said(response) == ["List price set on 2 pouches."]
+    assert services.latest_price(priced["ruby"], PriceEntry.LIST).rate == Decimal("1250")
+    assert services.latest_price(priced["onyx"], PriceEntry.LIST).rate == Decimal("1250")
+    assert not priced["jade"].prices.exists()                         # empty, so not in the in-stock group
+
+
+def test_setting_a_valuation_from_the_cost_list_shows_on_the_pouch(client, accounts_user, priced):
+    response = _set(client, accounts_user, COST, 1, rate="8000", stone="onyx")
+    assert _said(response) == ["Valuation set on 1 pouch."]
+    body = client.get(reverse("inventory:pouch", args=[priced["onyx"].ref])).content.decode()
+    assert "₹8,000" in body
+
+
+def test_a_changed_group_or_a_bad_rate_writes_nothing_and_says_why(client, accounts_user, priced):
+    before = PriceEntry.objects.count()
+    response = _set(client, accounts_user, SELLING, 5)
+    assert _said(response) == ["The group changed since the page loaded — check the count and set again."]
+    response = _set(client, accounts_user, SELLING, 2, rate="0")
+    assert _said(response) == ["The rate has to be a number above zero, at most ten digits before the point."]
+    response = _set(client, accounts_user, SELLING, 2, rate="abc")
+    assert "The rate has to be a number" in _said(response)[0]
+    response = _set(client, accounts_user, SELLING, 0, stone="nothing-like-this")
+    assert _said(response) == ["No pouch matches these filters."]
+    assert PriceEntry.objects.count() == before
+
+
+def test_the_form_shows_only_to_who_may_set_and_states_the_count(client, accounts_user, sales_user, priced):
+    body = _get(client, accounts_user, SELLING).content.decode()
+    assert "Set for 2 pouches" in body and 'name="count" value="2"' in body and "Set list price" in body
+    assert "Set valuation" in _get(client, accounts_user, COST).content.decode()
+    assert "Set for" not in _get(client, sales_user, SELLING).content.decode()
+
+
+def test_sales_cannot_set_a_list_price_even_by_posting(client, sales_user, priced):
+    before = PriceEntry.objects.count()
+    assert _set(client, sales_user, SELLING, 2).status_code == 403
+    assert PriceEntry.objects.count() == before
+
+
+def test_client_view_refuses_a_post(client, admin_user_, priced):
+    client.force_login(admin_user_)
+    client.post(reverse("inventory:set_view"), {"view": "client"})
+    before = PriceEntry.objects.count()
+    response = _set(client, admin_user_, SELLING, 2)
+    assert response.status_code == 302 and response["Location"] == reverse("inventory:shelf")
+    assert PriceEntry.objects.count() == before

@@ -4,16 +4,21 @@ The prototype only explains them (cost and selling are different numbers with di
 as dated rows); the rows are ``PriceEntry``, the same ones each pouch's price card shows. Stones only:
 diamonds price by the rate card in diamond Settings.
 """
+from decimal import Decimal, InvalidOperation
+
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import OuterRef, Q, Subquery
 from django.shortcuts import redirect
+from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.utils.http import urlencode
 
 from accounts.capabilities import INV_MASTERS, VIEW_COST, VIEW_SALE
 from stock.masking import allowed, mask
-from stock.services import require
+from stock.services import ServiceError, require
 
 from . import services
 from .models import BoxColour, Pouch, PriceEntry
@@ -98,12 +103,45 @@ def _choices(f):
     return out
 
 
+def _set(request, mode, kind, f):
+    """One price for every pouch the posted filters match, on every page. The count the form showed
+    must still hold, so stock that moved since the page loaded is never priced blind."""
+    right = MODES[mode][0]
+    require(request.user, INV_MASTERS, "Only a role that edits inventory records can set a price.")
+    require(request.user, right, "A price you may not see is not yours to set.")
+    # a post that is never followed by the list page leaves its flash unread; without this, Django's
+    # cookie storage would carry that stale message into this post's own, so a second post in a row
+    # (as from a double-click, or this screen's own tests) would show both. One post, one message.
+    request.COOKIES.pop("messages", None)
+    back = f"{reverse(f'inventory:prices_{mode}')}?{_query(f)}"
+    group = list(_pouches(f))
+    if str(len(group)) != (request.POST.get("count") or "").strip():
+        messages.error(request, "The group changed since the page loaded — check the count and set again.")
+        return redirect(back)
+    try:
+        rate = Decimal(request.POST.get("rate") or "")
+    except InvalidOperation:
+        rate = None
+    when = parse_date(request.POST.get("effective_from") or "") or timezone.localdate()
+    described = ", ".join(f"{key}={value}" for key, value in f.items() if value)
+    try:
+        n = services.set_group_price(request.user, group, kind, rate, when, described=described)
+    except ServiceError as error:
+        messages.error(request, error.messages[0])
+        return redirect(back)
+    what = "Valuation" if kind == PriceEntry.VALUATION else "List price"
+    messages.success(request, f"{what} set on {n} pouch{'es' if n != 1 else ''}.")
+    return redirect(back)
+
+
 @login_required
 def prices(request, mode):
     if _client(request):
         return redirect("inventory:shelf")
     right, kind, title = MODES[mode]
     require(request.user, right, "This price list needs the right to see its prices.")
+    if request.method == "POST":
+        return _set(request, mode, kind, _filters(request.POST))
     f = _filters(request.GET)
     rows = [_row(request.user, pouch) for pouch in _pouches(f)]
     money = "pouch_value" if mode == "cost" else "list_value"

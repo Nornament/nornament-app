@@ -42,4 +42,13 @@
   <span class="hint">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
   {% if page.has_next %}<a class="btn sm" href="?{{ query }}&page={{ page.next_page_number }}">Next ›</a>{% endif %}
 </div>{% endif %}
+
+{% if can_set %}<form method="post" class="card" style="margin-top:14px"><div class="card-b ctrow">{% csrf_token %}
+  {% for name, value in posted %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+  <input type="hidden" name="count" value="{{ count }}">
+  <b>Set {{ set_label }}</b> ₹/ct <input class="inp tnum" name="rate" required inputmode="decimal" style="width:120px">
+  effective from <input class="inp" type="date" name="effective_from" value="{{ today|date:'Y-m-d' }}" max="{{ today|date:'Y-m-d' }}" style="width:150px">
+  <button class="btn pri"{% if not count %} disabled{% endif %}>Set for {{ count|grouped }} pouch{{ count|pluralize:"es" }}</button>
+  <span class="hint">Every pouch these filters match, on every page. Each gets its own dated row; nothing is overwritten.</span>
+</div></form>{% endif %}
 {% endblock %}
