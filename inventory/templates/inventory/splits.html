@@ -1,0 +1,17 @@
+{% extends "inventory_base.html" %}{% load inventory_extras %}
+{% block title %}Splits &amp; merges{% endblock %}
+{% block crumb %}Stock control &nbsp;›&nbsp; <b>Splits &amp; merges</b>{% endblock %}
+{% block content %}
+<div class="shelfbar"><h1>Splits &amp; merges</h1></div>
+<div class="card" style="overflow:hidden"><div style="overflow:auto"><table class="led">
+  <thead><tr><th>Document</th><th>Date</th><th>Source pouch</th><th>New pouches</th><th class="r">Carats out</th><th>By</th><th></th></tr></thead>
+  <tbody>{% for d in rows %}<tr>
+    <td class="mono"><a href="{% url 'inventory:document' d.pk %}"><b>{{ d.number }}</b></a></td>
+    <td>{{ d.occurred_on|date:"d M Y" }}</td>
+    <td class="mono">{{ d.source }}<div class="hint">{{ d.source_ref }}</div></td>
+    <td class="mono">{{ d.made|join:", " }}</td>
+    <td class="r">{{ d.ct|ct }}</td>
+    <td class="hint">{{ d.by }}</td>
+    <td>{% if d.reversed %}<span class="chip crit"><span class="dot"></span>Reversed</span>{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="7" class="hint">No splits yet.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

@@ -1,8 +1,9 @@
 from django.urls import path
 
 from . import (
-    views, views_assort, views_dia_assort, views_dia_import, views_dia_jobs, views_dia_purchase, views_dia_settings,
-    views_diamonds, views_documents, views_ledger, views_lists, views_purchase,
+    views, views_assort, views_dia_assort, views_dia_import, views_dia_jobs, views_dia_movements, views_dia_purchase,
+    views_dia_settings, views_diamonds, views_documents, views_ledger, views_lists, views_purchase, views_quality,
+    views_search,
 )
 
 app_name = "inventory"
@@ -31,6 +32,10 @@ urlpatterns = [
     path("job-work/", views_lists.job_work_list, name="job_work_list"),
     path("memos/", views_lists.memo_list, name="memo_list"),
     path("movements/", views_lists.recent, name="recent"),
+    path("search/", views_search.search, name="search"),
+    path("quality/<str:check>/", views_quality.quality, name="quality"),
+    path("splits/", views_lists.splits, name="splits"),
+    path("transfers/", views_lists.transfers, name="transfers"),
     path("photos/<int:media_id>/", views.photo, name="photo"),
     path("diamonds/", views_diamonds.search, name="diamonds"),
     path("diamonds/settings/", views_dia_settings.settings_page, name="dia_settings"),
@@ -56,4 +61,6 @@ urlpatterns = [
     path("diamonds/assortments/<int:pk>/reverse/", views_dia_assort.assort_reverse, name="dia_assort_reverse"),
     path("diamonds/purchases/", views_dia_purchase.purchase, name="dia_purchase"),
     path("diamonds/purchases/<int:pk>/reverse/", views_dia_purchase.purchase_reverse, name="dia_purchase_reverse"),
+    path("diamonds/movements/", views_dia_movements.movements, name="dia_movements"),
+    path("diamonds/lines/<str:ref>/", views_dia_movements.line, name="dia_line"),
 ]

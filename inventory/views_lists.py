@@ -1,4 +1,4 @@
-"""The rail's ledger lists: what is out on job work, what is out on memo, and recent documents."""
+"""The rail's ledger lists: what is out on job work and on memo, recent documents, splits and transfers."""
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count
 from django.shortcuts import redirect
@@ -86,3 +86,57 @@ def recent(request):
             for d in documents.order_by("-created_at", "-pk")[:RECENT_CAP]]
     return _page(request, "inventory/recent.html", _everything(request), tab="recent", rows=rows, kind=kind,
                  kinds=[(value, label) for value, label in Kind.choices if value in ledger.STONE_KINDS])
+
+
+def _name(user):
+    return (user.full_name or user.get_username()) if user else "system"
+
+
+@login_required
+def splits(request):
+    """Every split, newest first: the pouch it came out of, the pouches it made, and the carats taken
+    out (any loss included). A reversal is not listed on its own: the split it undid reads Reversed.
+    Merges join this list when they are built (5c).
+
+    ponytail: every split on one page; page through when there are hundreds.
+    """
+    if _client(request):
+        return redirect("inventory:shelf")
+    documents = (StockDocument.objects.filter(kind=Kind.SPLIT, reverses__isnull=True)
+                 .select_related("created_by").prefetch_related("movements__pouch__batch")
+                 .order_by("-created_at", "-pk"))
+    rows = []
+    for d in documents:
+        moves = sorted(d.movements.all(), key=lambda m: m.pk)
+        out = [m for m in moves if m.direction == Movement.OUT]
+        source = out[0].pouch if out else None
+        rows.append(mask(request.user, {
+            "pk": d.pk, "number": d.number, "occurred_on": d.occurred_on,
+            "source": str(source) if source else "", "source_ref": source.ref if source else "",
+            "made": [str(m.pouch) for m in moves if m.direction == Movement.IN],
+            "ct": sum((m.ct or ledger.ZERO for m in out), ledger.ZERO),
+            "reversed": d.status == Status.REVERSED, "by": _name(d.created_by),
+        }))
+    return _page(request, "inventory/splits.html", _everything(request), tab="splits", rows=rows)
+
+
+@login_required
+def transfers(request):
+    """Every transfer, newest first: the pouch, where it was filed and where it went. A reversal is
+    not listed on its own: the transfer it undid reads Reversed.
+
+    ponytail: every transfer on one page; page through when there are hundreds.
+    """
+    if _client(request):
+        return redirect("inventory:shelf")
+    documents = (StockDocument.objects.filter(kind=Kind.TRANSFER, reverses__isnull=True)
+                 .select_related("created_by", "from_batch", "to_batch").prefetch_related("movements__pouch")
+                 .order_by("-created_at", "-pk"))
+    rows = [mask(request.user, {
+        "pk": d.pk, "number": d.number, "occurred_on": d.occurred_on,
+        "ref": next(iter(d.movements.all())).pouch.ref,
+        "moved_from": f"{d.from_batch.code} · {d.from_pouch_no or '?'}",
+        "moved_to": f"{d.to_batch.code} · {d.to_pouch_no}",
+        "reversed": d.status == Status.REVERSED, "by": _name(d.created_by),
+    }) for d in documents]
+    return _page(request, "inventory/transfers.html", _everything(request), tab="transfers", rows=rows)

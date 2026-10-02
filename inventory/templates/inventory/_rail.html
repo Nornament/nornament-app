@@ -20,8 +20,8 @@ the prototype named but never built is shown locked, never as a dead link.{% end
   {% if caps.inv_move %}<a class="{% if tab == 'memo' %}on{% endif %}" href="{% url 'inventory:memo_list' %}"><span class="ic">↘</span>Memo out</a>
   {% else %}<span class="locked"><span class="ic">↘</span>Memo out<span class="ct">🔒</span></span>{% endif %}
   <span class="locked"><span class="ic">⊙</span>Stock takes<span class="ct">🔒</span></span>
-  <span class="locked"><span class="ic">⤴</span>Splits &amp; merges<span class="ct">🔒</span></span>
-  <span class="locked"><span class="ic">⇉</span>Transfers<span class="ct">🔒</span></span>
+  <a class="{% if tab == 'splits' %}on{% endif %}" href="{% url 'inventory:splits' %}"><span class="ic">⤴</span>Splits &amp; merges</a>
+  <a class="{% if tab == 'transfers' %}on{% endif %}" href="{% url 'inventory:transfers' %}"><span class="ic">⇉</span>Transfers</a>
 </nav>
 {% endif %}
 
@@ -29,16 +29,17 @@ the prototype named but never built is shown locked, never as a dead link.{% end
 <nav class="nav">
   {% if not client_view %}<span class="locked"><span class="ic">₹</span>Price list — cost<span class="ct">🔒</span></span>{% endif %}
   <span class="locked"><span class="ic">₹</span>Price list — selling<span class="ct">🔒</span></span>
-  <span class="locked"><span class="ic">⌗</span>Suppliers<span class="ct">🔒</span></span>
+  {% if caps.inv_masters and caps.view_vendor and not client_view %}<a href="{% url 'inventory:dia_settings' %}#suppliers"><span class="ic">⌗</span>Suppliers</a>
+  {% else %}<span class="locked"><span class="ic">⌗</span>Suppliers<span class="ct">🔒</span></span>{% endif %}
   <span class="locked"><span class="ic">◐</span>Client lookbook<span class="ct">🔒</span></span>
 </nav>
 
 {% if not client_view %}
 <div class="nav-h">Data quality</div>
 <nav class="nav">
-  {% if 'misfiled' in rail %}<span class="locked"><span class="ic" style="color:var(--warning)">⚑</span>Misfiled colour<span class="ct">{{ rail.misfiled|grouped }} 🔒</span></span>{% endif %}
-  {% if 'no_pouch_no' in rail %}<span class="locked"><span class="ic" style="color:var(--critical)">!</span>No pouch no.<span class="ct">{{ rail.no_pouch_no|grouped }} 🔒</span></span>{% endif %}
-  <span class="locked"><span class="ic">◱</span>Missing photos<span class="ct">{{ rail.no_photo|grouped }} 🔒</span></span>
-  <span class="locked"><span class="ic">⤢</span>No size in mm<span class="ct">{{ rail.no_size|grouped }} 🔒</span></span>
+  {% if 'misfiled' in rail %}<a class="{% if check == 'misfiled' %}on{% endif %}" href="{% url 'inventory:quality' 'misfiled' %}"><span class="ic" style="color:var(--warning)">⚑</span>Misfiled colour<span class="ct">{{ rail.misfiled|grouped }}</span></a>{% endif %}
+  {% if 'no_pouch_no' in rail %}<a class="{% if check == 'no_pouch_no' %}on{% endif %}" href="{% url 'inventory:quality' 'no_pouch_no' %}"><span class="ic" style="color:var(--critical)">!</span>No pouch no.<span class="ct">{{ rail.no_pouch_no|grouped }}</span></a>{% endif %}
+  <a class="{% if check == 'no_photo' %}on{% endif %}" href="{% url 'inventory:quality' 'no_photo' %}"><span class="ic">◱</span>Missing photos<span class="ct">{{ rail.no_photo|grouped }}</span></a>
+  <a class="{% if check == 'no_size' %}on{% endif %}" href="{% url 'inventory:quality' 'no_size' %}"><span class="ic">⤢</span>No size in mm<span class="ct">{{ rail.no_size|grouped }}</span></a>
 </nav>
 {% endif %}

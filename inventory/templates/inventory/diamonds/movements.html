@@ -1,0 +1,26 @@
+{% extends "inventory_base.html" %}{% load inventory_extras %}
+{% block title %}Movements · Diamonds{% endblock %}
+{% block crumb %}<b>Diamonds</b> &nbsp;›&nbsp; Movements{% endblock %}
+{% block content %}
+{% include "inventory/diamonds/_dsub.html" %}
+<div class="dbanner"><h2>Movements</h2></div>
+
+<div class="filterbar">
+  <div class="fsel"><label>Kind</label>
+    <form method="get" style="display:contents">
+      {% if as_role %}<input type="hidden" name="as" value="{{ as_role }}">{% endif %}
+      <select class="inp" name="kind" onchange="this.form.submit()"><option value="">All kinds</option>
+        {% for value, label in kinds %}<option value="{{ value }}"{% if value == kind %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></form></div>
+</div>
+
+<div class="card" style="overflow:hidden"><div style="overflow:auto"><table class="led">
+  <thead><tr><th>Date</th><th>Document</th><th>Kind</th><th>Karigar / supplier</th><th class="r">Lines</th><th>Status</th></tr></thead>
+  <tbody>{% for d in rows %}<tr>
+    <td>{{ d.occurred_on|date:"d M Y" }}</td>
+    <td class="mono"><a href="{{ d.href }}"><b>{{ d.number }}</b></a></td>
+    <td>{{ d.kind }}</td>
+    <td>{% if 'karigar_name' in d %}{{ d.karigar_name }}{% elif 'vendor_name' in d %}{{ d.vendor_name }}{% elif d.in_house %}In-house{% else %}<span class="hint">—</span>{% endif %}</td>
+    <td class="r">{{ d.lines }}</td>
+    <td><span class="chip {{ d.tone }}"><span class="dot"></span>{{ d.status }}</span></td></tr>
+  {% empty %}<tr><td colspan="6" class="hint">No diamond documents yet.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

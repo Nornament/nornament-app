@@ -4,10 +4,12 @@ A showroom login sees stones and their sale side; it must never see a cost
 rate, a valuation, a pouch value or a supplier. A new inventory screen that is
 not listed here fails ``test_every_inventory_screen_is_walked``.
 """
+from urllib.parse import urlencode
+
 import pytest
 from django.urls import URLPattern, URLResolver, get_resolver, reverse
 
-from inventory.models import Movement, StockDocument
+from inventory.models import DiamondLine, Movement, StockDocument
 from inventory.tests.conftest import (
     CUSTOMER, DIA_COST, DIA_COST_VALUE, DIA_LINE_COST, DIA_OVERRIDE, DIA_SALE, DIA_SALE_VALUE, DIA_SUPPLIER, KARIGAR,
     PURCHASE_COST, SUPPLIER, VALUE,
@@ -128,7 +130,7 @@ def test_an_admin_preview_masks_like_the_role(client, admin_user_, diamonds):
 
 def test_every_inventory_screen_is_walked():
     covered = ({name for name, _, _ in SCREENS} | {name for name, _ in DIAMOND_SCREENS} | LEDGER_SCREENS
-               | DIA_LEDGER_SCREENS)
+               | DIA_LEDGER_SCREENS | FINDER_SCREENS)
     named = set()
     for resolver in get_resolver().url_patterns:
         if isinstance(resolver, URLResolver) and resolver.app_name == "inventory":
@@ -320,3 +322,86 @@ def test_no_stones_screen_lists_or_opens_a_diamond_document(client, accounts_use
         assert client.get(reverse("inventory:document", args=[dia_docs[doc].pk])).status_code == 404, doc
     for url in (reverse("inventory:job_work_list") + "?closed=1", reverse("inventory:shelf")):
         assert dia_docs["card"].number not in client.get(url).content.decode(), url
+
+
+#: part 5a's finders, walked by test_no_finder_shows_a_login_what_it_may_not_see
+FINDER_SCREENS = {"inventory:search", "inventory:quality", "inventory:splits", "inventory:transfers",
+                  "inventory:dia_movements", "inventory:dia_line"}
+
+#: what each login may not see on a finder (Production sees suppliers and karigars; the Karigar desk, karigars)
+#: SUPPLIER, CUSTOMER and PURCHASE_COST never render on any finder screen today (none of search, the
+#: quality filters, splits/transfers or the diamond Movements/line pages show a stones vendor, customer
+#: or purchase cost), so their absence here guards against a future screen growing one rather than
+#: proving masking now. The non-vacuous check for those three is
+#: test_no_ledger_screen_shows_a_login_what_it_may_not_see, which walks the document and purchase
+#: screens where an allowed role does see them (test_each_name_and_cost_reaches_those_who_may_see_it).
+FINDER_SECRETS = {
+    "sales_user": ("7,919", PURCHASE_COST, SUPPLIER, KARIGAR, DIA_SUPPLIER, DIA_LINE_COST, DIA_OVERRIDE, DIA_COST),
+    "karigar_user": ("7,919", PURCHASE_COST, SUPPLIER, CUSTOMER, DIA_SUPPLIER, DIA_LINE_COST, DIA_OVERRIDE, DIA_COST),
+    "production_user": ("7,919", PURCHASE_COST, CUSTOMER, DIA_LINE_COST, DIA_OVERRIDE, DIA_COST),
+    "graphic_user": ("7,919", PURCHASE_COST, SUPPLIER, KARIGAR, CUSTOMER, DIA_SUPPLIER, DIA_LINE_COST, DIA_OVERRIDE,
+                     DIA_COST),
+}
+
+
+def _dia_finder_urls():
+    """The diamond Movements list, each kind of it, and every line's ledger."""
+    movements = reverse("inventory:dia_movements")
+    return ([movements] + [f"{movements}?kind={kind}" for kind in ("dia_job", "dia_assort", "dia_purchase")]
+            + [reverse("inventory:dia_line", args=[ref]) for ref in DiamondLine.objects.values_list("ref", flat=True)])
+
+
+def _stones_finder_urls(d):
+    """Search (each kind of match), the four filters, and the two lists."""
+    search = reverse("inventory:search")
+    queries = ("SL01G", "Onyx", d["stones"]["onyx"].ref, "SL01G 7", "B-771", "DRFGH", "NRD-000001")
+    return ([f"{search}?{urlencode({'q': q})}" for q in queries]
+            + [reverse("inventory:quality", args=[check]) for check in ("misfiled", "no_pouch_no", "no_photo", "no_size")]
+            + [reverse("inventory:splits"), reverse("inventory:transfers")])
+
+
+@pytest.mark.parametrize("fixture", sorted(FINDER_SECRETS))
+def test_no_finder_shows_a_login_what_it_may_not_see(client, finder_docs, request, fixture):
+    client.force_login(request.getfixturevalue(fixture))
+    for url in _stones_finder_urls(finder_docs) + _dia_finder_urls():
+        response = client.get(url)
+        assert response.status_code == 200, f"{url} returned {response.status_code}"
+        body = response.content.decode()
+        for secret in FINDER_SECRETS[fixture]:
+            assert secret not in body, f"{url} leaked {secret!r} to {fixture}"
+
+
+@pytest.mark.parametrize("role", ["SALES", "KARIGAR", "PRODUCTION", "GRAPHIC"])
+def test_an_admin_preview_of_each_diamond_finder_masks_like_the_role(client, admin_user_, finder_docs, role):
+    client.force_login(admin_user_)
+    for url in _dia_finder_urls():
+        previewed = f"{url}{'&' if '?' in url else '?'}as={role}"
+        body = client.get(previewed).content.decode()
+        for secret in DIA_SECRETS[role]:
+            assert secret not in body, f"{previewed} leaked {secret!r}"
+
+
+def test_each_finder_shows_names_and_cost_to_those_who_may_see_them(client, accounts_user, finder_docs):
+    client.force_login(accounts_user)
+    assert "₹7,919" in client.get(reverse("inventory:quality", args=["no_photo"])).content.decode()
+    movements = client.get(reverse("inventory:dia_movements")).content.decode()
+    assert KARIGAR in movements and DIA_SUPPLIER in movements
+    assorted = finder_docs["dia"]["assort"].movements.get(reason=Movement.Reason.ASSORT_IN).diamond
+    assert DIA_OVERRIDE in client.get(reverse("inventory:dia_line", args=[assorted.ref])).content.decode()
+    bought = finder_docs["dia"]["purchase"].movements.get().diamond
+    assert DIA_LINE_COST in client.get(reverse("inventory:dia_line", args=[bought.ref])).content.decode()
+    round_line = finder_docs["dia"]["round"]
+    assert DIA_COST in client.get(reverse("inventory:dia_line", args=[round_line.ref])).content.decode()
+    splits = client.get(reverse("inventory:splits")).content.decode()
+    assert finder_docs["split"].number in splits and "SL01G · 7" in splits
+    assert "SL02G · 5" in client.get(reverse("inventory:transfers")).content.decode()
+
+
+def test_client_view_reaches_no_stones_finder(client, admin_user_, finder_docs):
+    client.force_login(admin_user_)
+    client.post(reverse("inventory:set_view"), {"view": "client"})
+    for url in _stones_finder_urls(finder_docs):
+        response = client.get(url)
+        assert response.status_code == 302 and response["Location"] == reverse("inventory:shelf"), url
+    body = client.get(reverse("inventory:shelf")).content.decode()
+    assert f'action="{reverse("inventory:search")}"' not in body and "Search batch, pouch, stone… 🔒" in body
