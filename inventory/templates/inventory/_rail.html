@@ -19,7 +19,7 @@ the prototype named but never built is shown locked, never as a dead link.{% end
   {% else %}<span class="locked"><span class="ic">↗</span>Job work out<span class="ct">🔒</span></span>{% endif %}
   {% if caps.inv_move %}<a class="{% if tab == 'memo' %}on{% endif %}" href="{% url 'inventory:memo_list' %}"><span class="ic">↘</span>Memo out</a>
   {% else %}<span class="locked"><span class="ic">↘</span>Memo out<span class="ct">🔒</span></span>{% endif %}
-  <span class="locked"><span class="ic">⊙</span>Stock takes<span class="ct">🔒</span></span>
+  <a class="{% if tab == 'stock_take' %}on{% endif %}" href="{% url 'inventory:stock_takes' %}"><span class="ic">⊙</span>Stock takes</a>
   <a class="{% if tab == 'splits' %}on{% endif %}" href="{% url 'inventory:splits' %}"><span class="ic">⤴</span>Splits &amp; merges</a>
   <a class="{% if tab == 'transfers' %}on{% endif %}" href="{% url 'inventory:transfers' %}"><span class="ic">⇉</span>Transfers</a>
 </nav>

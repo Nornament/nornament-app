@@ -20,7 +20,7 @@ def test_the_stones_rail_links_the_lists_and_the_data_quality_filters(client, ac
     assert 'Misfiled colour<span class="ct">1</span>' in body and 'No pouch no.<span class="ct">0</span>' in body
     assert 'Missing photos<span class="ct">2</span>' in body and 'No size in mm<span class="ct">1</span>' in body
     assert "🔒" not in body.split('<div class="nav-h">Data quality</div>')[1].split("</nav>")[0]
-    assert 'Stock takes<span class="ct">🔒' in body and 'Client lookbook<span class="ct">🔒' in body
+    assert f'href="{reverse("inventory:stock_takes")}"' in body and 'Client lookbook<span class="ct">🔒' in body
 
 
 def test_client_view_shows_neither_the_lists_nor_the_filters(client, admin_user_, shelf):

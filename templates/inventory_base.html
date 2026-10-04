@@ -71,7 +71,7 @@ would fight on every page.
           {% if caps.inv_purchase and caps.view_cost and caps.view_vendor %}<a class="{% if tab == 'purchase' %}on{% endif %}" href="{% url 'inventory:purchase' %}">Purchase</a>
           {% else %}<button disabled>Purchase</button>{% endif %}
         {% endif %}
-        <button disabled title="Coming soon">Stock take 🔒</button>
+        {% if not client_view %}<a class="{% if tab == 'stock_take' %}on{% endif %}" href="{% url 'inventory:stock_takes' %}">Stock take</a>{% endif %}
       {% endif %}
     </div>
 
