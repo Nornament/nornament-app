@@ -142,6 +142,7 @@ class StockDocument(models.Model):
         MEMO = "memo", "Memo"
         SPLIT = "split", "Split"
         TRANSFER = "transfer", "Transfer"
+        MERGE = "merge", "Merge"
         SINGLE = "single", "Single"
         # diamonds (part 4): listed only on the diamond screens, never on a stones one
         DIA_JOB = "dia_job", "Job card"

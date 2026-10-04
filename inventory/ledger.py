@@ -22,13 +22,13 @@ from accounts.capabilities import INV_ASSORT, INV_JOB, INV_MOVE, INV_PURCHASE
 from stock.services import ServiceError, log, require
 
 from . import dia_services, inputs, services
-from .models import Batch, DiamondLine, Movement, Pouch, StockDocument
+from .models import Batch, DiamondLine, Movement, Pouch, PriceEntry, StockDocument
 
 ZERO = Decimal("0")
 Kind, Status = StockDocument.Kind, StockDocument.Status
 
 #: the stones kinds: every stones list and page shows only these
-STONE_KINDS = (Kind.PURCHASE, Kind.JOB_WORK, Kind.MEMO, Kind.SPLIT, Kind.TRANSFER, Kind.SINGLE)
+STONE_KINDS = (Kind.PURCHASE, Kind.JOB_WORK, Kind.MEMO, Kind.SPLIT, Kind.TRANSFER, Kind.MERGE, Kind.SINGLE)
 #: part 4's diamond kinds, shown only on the diamond screens
 DIAMOND_KINDS = (Kind.DIA_JOB, Kind.DIA_ASSORT, Kind.DIA_PURCHASE)
 #: the kinds that close themselves when nothing is outstanding (stones job work and memos)
@@ -40,11 +40,11 @@ CLOSABLE = (Kind.DIA_JOB,)
 #: the right that posts each kind — and so may undo, close or reverse it
 RIGHT_FOR_KIND = {
     Kind.PURCHASE: INV_PURCHASE, Kind.JOB_WORK: INV_JOB, Kind.MEMO: INV_MOVE,
-    Kind.SPLIT: INV_ASSORT, Kind.TRANSFER: INV_ASSORT, Kind.SINGLE: INV_MOVE,
+    Kind.SPLIT: INV_ASSORT, Kind.TRANSFER: INV_ASSORT, Kind.MERGE: INV_ASSORT, Kind.SINGLE: INV_MOVE,
     Kind.DIA_JOB: INV_JOB, Kind.DIA_ASSORT: INV_ASSORT, Kind.DIA_PURCHASE: INV_PURCHASE,
 }
 #: automatic numbers; job work and memos carry the challan or memo no. people type
-PREFIX = {Kind.PURCHASE: "PUR-", Kind.SPLIT: "SPL-", Kind.TRANSFER: "TRF-", Kind.SINGLE: "MOV-",
+PREFIX = {Kind.PURCHASE: "PUR-", Kind.SPLIT: "SPL-", Kind.TRANSFER: "TRF-", Kind.MERGE: "MRG-", Kind.SINGLE: "MOV-",
           Kind.DIA_JOB: "JC-", Kind.DIA_ASSORT: "AS-", Kind.DIA_PURCHASE: "DP-"}
 REVERSAL_PREFIX = "REV-"
 #: the reasons that bring a pouch or a diamond line into being, so a reversal can find what it created
@@ -346,6 +346,18 @@ def _unfile(document):
     pouch.save(update_fields=["batch", "pouch_no"])
 
 
+def _unmerge_rate(user, document, target):
+    """A merge set its target the weighted rate; reversing it puts back the rate the target had before,
+    unless someone has valued it since. A new pouch had none, so it keeps the merge's."""
+    wrote = target.prices.filter(kind=PriceEntry.VALUATION, created_at=document.created_at).first()
+    if wrote is None or services.latest_price(target, PriceEntry.VALUATION) != wrote:
+        return
+    before = (target.prices.filter(kind=PriceEntry.VALUATION, created_at__lt=document.created_at)
+              .order_by("-effective_from", "-pk").first())
+    if before is not None:
+        PriceEntry.objects.create(pouch=target, kind=PriceEntry.VALUATION, rate=before.rate, set_by=_by(user))
+
+
 @transaction.atomic
 def reverse_document(user, document, note=""):
     """Post the opposite of every movement on it not already reversed, on a new document
@@ -361,6 +373,14 @@ def reverse_document(user, document, note=""):
     created = [m for m in moves if m.direction == Movement.IN and m.reason in CREATING]
     later = (Q(pouch__in=[m.pouch_id for m in created if m.pouch_id])
              | Q(diamond__in=[m.diamond_id for m in created if m.diamond_id]))
+    target = None
+    if document.kind == Kind.MERGE:
+        # the target may have held stone before the merge, so "created" cannot find it: anything on it
+        # after this merge's own movements means it has moved since
+        target = next((m.pouch for m in moves if m.direction == Movement.IN and m.reason == Movement.Reason.MERGE), None)
+        if target is None:
+            raise ServiceError(f"{document} has no merged pouch to take back.")
+        later |= Q(pouch=target, pk__gt=max(m.pk for m in moves))
     moved = (Movement.objects.filter(later, reverses__isnull=True, reversal__isnull=True)
              .exclude(document=document).select_related("pouch__batch", "diamond").first())
     if moved:
@@ -375,6 +395,8 @@ def reverse_document(user, document, note=""):
                                note=f"Reverses {document.number}", reverses=m) for m in moves])
     document.status = Status.REVERSED
     document.save(update_fields=["status"])
+    if target is not None:
+        _unmerge_rate(user, document, target)
     log(user, "REVERSAL", "inv_document", document.pk, f"{document} reversed by {reversal.number}")
     return reversal
 

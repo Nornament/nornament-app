@@ -25,6 +25,7 @@
       <a class="btn pri" href="{% url 'crm:pipeline_new' 'enquiry' %}?item={{ row.ref|urlencode }}%20{{ row.stone_name|urlencode }}">✉ Enquire</a>
     {% else %}
       {% if caps.inv_assort %}<a class="btn gho" href="{% url 'inventory:split' row.ref %}">⤴ Split pouch</a>{% endif %}
+      {% if caps.inv_assort %}<a class="btn gho" href="{% url 'inventory:merge' row.ref %}">⤵ Merge</a>{% endif %}
       <a class="btn" href="{% url 'inventory:movements' row.ref %}">⇄ Movements</a>
       {% if caps.inv_masters %}<button class="btn pri" form="pouchform">Save</button>{% endif %}
     {% endif %}

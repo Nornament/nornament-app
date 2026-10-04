@@ -1,0 +1,55 @@
+{% extends "inventory_base.html" %}{% load inventory_extras %}
+{% block title %}{{ title }}{% endblock %}
+{% block crumb %}Commercial &nbsp;›&nbsp; <b>{{ title }}</b>{% endblock %}
+{% block content %}
+<div class="shelfbar"><h1>{{ title }}</h1><span class="chip">{{ count|grouped }} pouch{{ count|pluralize:"es" }}</span>
+  <span class="spacer"></span><a class="hint" href="{% url 'inventory:dia_settings' %}#rates">Diamonds price by the rate card →</a></div>
+
+<form method="get" class="card" style="margin-bottom:14px"><div class="card-b ctrow">
+  <input type="hidden" name="f" value="1">
+  <input class="inp" name="stone" value="{{ filters.stone }}" placeholder="Stone" style="width:150px">
+  {% for key, label, options in choices %}<select class="inp" name="{{ key }}" style="width:140px" aria-label="{{ label }}">
+    <option value="">{{ label }}: any</option>{% for value, text, on in options %}<option value="{{ value }}"{% if on %} selected{% endif %}>{{ text }}</option>{% endfor %}</select>{% endfor %}
+  <input class="inp mono" name="batch" value="{{ filters.batch }}" placeholder="Batch" style="width:100px">
+  <label class="hint"><input type="checkbox" name="stock" value="1"{% if filters.stock %} checked{% endif %}> In stock only</label>
+  <button class="btn">Filter</button> <a class="hint" href="?">Clear</a>
+</div></form>
+
+<div class="card" style="overflow:hidden"><div style="overflow:auto"><table class="pt">
+  <thead><tr><th>Pouch</th><th>Stone</th><th>Size</th><th class="r">Ct on hand</th>
+    {% if mode == 'cost' %}<th class="r">Purchase /ct</th><th class="r">Valuation /ct</th><th class="r">Value</th>
+    {% else %}<th class="r">List /ct</th><th class="r">List value</th>{% if margin %}<th class="r">Margin</th>{% endif %}{% endif %}</tr></thead>
+  <tbody>{% for p in page %}<tr>
+    <td><a class="rowlink mono" href="{% url 'inventory:pouch' p.ref %}">{{ p.ref }}</a>
+      <span class="hint mono">{{ p.batch_code }} · {{ p.pouch_no|default:"?" }}</span></td>
+    <td>{{ p.stone_name }}</td><td class="mono">{{ p.size_text|default:"—" }}</td><td class="r">{{ p.ct|ct }}</td>
+    {% if mode == 'cost' %}
+      <td class="r">{% if 'purchase_rate' in p %}{{ p.purchase_rate|rupees }}{% endif %}</td>
+      <td class="r">{% if 'valuation_rate' in p %}{{ p.valuation_rate|rupees }}{% if p.valuation_rate is not None and p.valuation_from %} <span class="hint">{{ p.valuation_from|date:"j M Y" }}</span>{% endif %}{% endif %}</td>
+      <td class="r"><b>{% if 'pouch_value' in p %}{{ p.pouch_value|rupees }}{% endif %}</b></td>
+    {% else %}
+      <td class="r">{% if 'list_rate' in p %}{{ p.list_rate|rupees }}{% if p.list_from %} <span class="hint">{{ p.list_from|date:"j M Y" }}</span>{% endif %}{% endif %}</td>
+      <td class="r"><b>{% if 'list_value' in p %}{{ p.list_value|rupees }}{% endif %}</b></td>
+      {% if margin %}<td class="r">{% if p.margin is not None %}{{ p.margin|floatformat:1 }}%{% else %}—{% endif %}</td>{% endif %}
+    {% endif %}
+  </tr>{% empty %}<tr><td colspan="{% if mode == 'cost' or margin %}7{% else %}6{% endif %}" class="hint">No pouch matches these filters.</td></tr>{% endfor %}</tbody>
+  {% if count %}<tfoot><tr><td colspan="4"><b>{{ count|grouped }}</b> pouch{{ count|pluralize:"es" }}</td>
+    {% if mode == 'cost' %}<td></td><td></td><td class="r"><b>{{ total|rupees }}</b></td>
+    {% else %}<td></td><td class="r"><b>{{ total|rupees }}</b></td>{% if margin %}<td></td>{% endif %}{% endif %}</tr></tfoot>{% endif %}
+</table></div></div>
+
+{% if page.has_other_pages %}<div class="ctrow" style="margin-top:10px">
+  {% if page.has_previous %}<a class="btn sm" href="?{{ query }}&page={{ page.previous_page_number }}">‹ Previous</a>{% endif %}
+  <span class="hint">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+  {% if page.has_next %}<a class="btn sm" href="?{{ query }}&page={{ page.next_page_number }}">Next ›</a>{% endif %}
+</div>{% endif %}
+
+{% if can_set %}<form method="post" class="card" style="margin-top:14px"><div class="card-b ctrow">{% csrf_token %}
+  {% for name, value in posted %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+  <input type="hidden" name="count" value="{{ count }}">
+  <b>Set {{ set_label }}</b> ₹/ct <input class="inp tnum" name="rate" required inputmode="decimal" style="width:120px">
+  effective from <input class="inp" type="date" name="effective_from" value="{{ today|date:'Y-m-d' }}" max="{{ today|date:'Y-m-d' }}" style="width:150px">
+  <button class="btn pri"{% if not count %} disabled{% endif %}>Set for {{ count|grouped }} pouch{{ count|pluralize:"es" }}</button>
+  <span class="hint">Every pouch these filters match, on every page. Each gets its own dated row; nothing is overwritten.</span>
+</div></form>{% endif %}
+{% endblock %}

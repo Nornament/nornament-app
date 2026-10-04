@@ -4,12 +4,14 @@ from decimal import Decimal
 import pytest
 from django.urls import reverse
 
-from inventory import ledger
+from inventory import ledger, ledger_assort, services
 from inventory.ledger_assort import SplitPart, split_pouch, transfer_pouch
 from inventory.models import Batch
 
 pytestmark = pytest.mark.django_db
 D = Decimal
+
+ONYX = {"stone_name": "Green Onyx", "colour": "Green", "shape": "Oval", "quality": "B"}
 
 
 def _body(client, user, name):
@@ -22,7 +24,7 @@ def _row(body, number):
 
 
 def test_splits_list_every_split_newest_first(client, accounts_user, sales_user, shelf):
-    assert "No splits yet." in _body(client, sales_user, "inventory:splits")
+    assert "No splits or merges yet." in _body(client, sales_user, "inventory:splits")
     first = split_pouch(accounts_user, shelf["onyx"], 4, D("2.5"),
                         [SplitPart("3", 2, D("1")), SplitPart("4", 2, D("1"))], loss_ct=D("0.5"))
     second = split_pouch(accounts_user, shelf["ruby"], None, D("10"), [SplitPart("5", None, D("10"))])
@@ -61,3 +63,29 @@ def test_neither_list_is_reachable_in_client_view(client, admin_user_, shelf):
     for name in ("inventory:splits", "inventory:transfers"):
         response = client.get(reverse(name))
         assert response.status_code == 302 and response["Location"] == reverse("inventory:shelf"), name
+
+
+def test_merges_are_listed_beside_splits(client, accounts_user, admin_user_, sales_user, shelf):
+    twin = services.open_pouch(admin_user_, shelf["batch"], {"pouch_no": "5", **ONYX}, pcs=10, ct=D("7.5"), rate=None)
+    split = split_pouch(accounts_user, shelf["ruby"], None, D("10"), [SplitPart("6", None, D("10"))])
+    merge, _ = ledger_assort.merge_pouches(accounts_user, [shelf["onyx"], twin], into=shelf["onyx"], loss_ct=D("0.5"))
+    body = _body(client, sales_user, "inventory:splits")
+    assert body.index(merge.number) < body.index(split.number)
+    row = _row(body, merge.number)
+    assert "Merge" in row and "SL01G · 5" in row and twin.ref in row and "SL01G · 1" in row
+    assert "7.50" in row                                              # what went in, not the loss
+    assert "Split" in _row(body, split.number)
+    assert "<th>Kind</th>" in body and "<th>Out of</th>" in body and "<th>Into</th>" in body
+
+
+def test_a_reversed_merge_reads_reversed_and_its_reversal_is_not_listed(client, accounts_user, admin_user_, shelf):
+    twin = services.open_pouch(admin_user_, shelf["batch"], {"pouch_no": "5", **ONYX}, pcs=10, ct=D("7.5"), rate=None)
+    merge, _ = ledger_assort.merge_pouches(accounts_user, [shelf["onyx"], twin], into=shelf["onyx"])
+    reversal = ledger.reverse_document(accounts_user, merge)
+    body = _body(client, accounts_user, "inventory:splits")
+    assert "Reversed" in _row(body, merge.number) and reversal.number not in body
+
+
+def test_the_recent_list_offers_merge(client, accounts_user, shelf):
+    body = _body(client, accounts_user, "inventory:recent")
+    assert '<option value="merge"' in body

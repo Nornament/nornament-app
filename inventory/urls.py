@@ -2,8 +2,8 @@ from django.urls import path
 
 from . import (
     views, views_assort, views_dia_assort, views_dia_import, views_dia_jobs, views_dia_movements, views_dia_purchase,
-    views_dia_settings, views_diamonds, views_documents, views_ledger, views_lists, views_purchase, views_quality,
-    views_search,
+    views_dia_settings, views_diamonds, views_documents, views_ledger, views_lists, views_prices, views_purchase,
+    views_quality, views_search,
 )
 
 app_name = "inventory"
@@ -24,6 +24,7 @@ urlpatterns = [
     path("pouches/<str:ref>/movements/post/", views_ledger.movement_post, name="movement_post"),
     path("pouches/<str:ref>/split/", views_assort.split, name="split"),
     path("pouches/<str:ref>/transfer/", views_assort.transfer, name="transfer"),
+    path("pouches/<str:ref>/merge/", views_assort.merge, name="merge"),
     path("purchases/new/", views_purchase.purchase, name="purchase"),
     path("documents/<int:pk>/", views_documents.document, name="document"),
     path("documents/<int:pk>/settle/", views_documents.document_settle, name="document_settle"),
@@ -36,6 +37,8 @@ urlpatterns = [
     path("quality/<str:check>/", views_quality.quality, name="quality"),
     path("splits/", views_lists.splits, name="splits"),
     path("transfers/", views_lists.transfers, name="transfers"),
+    path("prices/cost/", views_prices.prices, {"mode": "cost"}, name="prices_cost"),
+    path("prices/selling/", views_prices.prices, {"mode": "selling"}, name="prices_selling"),
     path("photos/<int:media_id>/", views.photo, name="photo"),
     path("diamonds/", views_diamonds.search, name="diamonds"),
     path("diamonds/settings/", views_dia_settings.settings_page, name="dia_settings"),

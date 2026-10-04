@@ -4,6 +4,8 @@ Quantities are sums of movements and value is carats × the latest valuation, so
 ``stocked`` is how every screen reads a pouch: one query, with pieces, carats and
 rate annotated.
 """
+from decimal import ROUND_HALF_UP, Decimal
+
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import OuterRef, Subquery
@@ -121,9 +123,44 @@ def add_price(user, pouch, kind, rate, effective_from):
     if kind not in dict(PriceEntry.KINDS):
         raise ServiceError(f"{kind} is not a kind of price.")
     _check_quantities(None, None, rate)
+    if effective_from > timezone.localdate():
+        raise ServiceError("A price cannot take effect in the future: the newest one is the current one.")
     entry = PriceEntry.objects.create(pouch=pouch, kind=kind, rate=rate, effective_from=effective_from, set_by=_by(user))
     log(user, "INSERT", "inv_price", entry.pk, f"{kind} {rate}/ct on {pouch}")
     return entry
+
+
+#: what a group set may write: purchase prices come only from purchases
+GROUP_KINDS = (PriceEntry.VALUATION, PriceEntry.LIST)
+
+
+@transaction.atomic
+def set_group_price(user, pouches, kind, rate, effective_from, described=""):
+    """One dated price per pouch in a filtered group. Nothing is overwritten: each pouch gets its own row."""
+    if kind not in GROUP_KINDS:
+        raise ServiceError("A group sets a valuation or a list price; purchase prices come from purchases.")
+    require(user, INV_MASTERS, "Only a role that edits inventory records can set a price.")
+    require(user, VIEW_SALE if kind == PriceEntry.LIST else VIEW_COST, "A price you may not see is not yours to set.")
+    # zero is refused here, unlike one pouch: a whole group at zero is a slip
+    bad_rate = "The rate has to be a number above zero, at most ten digits before the point."
+    if rate is None or not rate.is_finite() or rate >= 10 ** 10:
+        raise ServiceError(bad_rate)
+    # numeric(14,4): quantize to what Postgres will actually store before range-checking it
+    rate = rate.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+    if rate <= 0 or rate >= 10 ** 10:
+        raise ServiceError(bad_rate)
+    if effective_from > timezone.localdate():
+        raise ServiceError("A price cannot take effect in the future: the newest one is the current one.")
+    pouches = list(pouches)
+    if not pouches:
+        raise ServiceError("No pouch matches these filters.")
+    by = _by(user)
+    entries = PriceEntry.objects.bulk_create([
+        PriceEntry(pouch=pouch, kind=kind, rate=rate, effective_from=effective_from, set_by=by) for pouch in pouches
+    ])
+    detail = f"{kind} {rate.normalize():f}/ct on {len(pouches)} pouch{'es' if len(pouches) != 1 else ''}"
+    log(user, "INSERT", "inv_price", entries[0].pk, f"{detail} ({described})" if described else detail)
+    return len(pouches)
 
 
 def recount_deltas(pouch, pcs, ct):

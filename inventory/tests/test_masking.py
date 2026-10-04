@@ -130,7 +130,7 @@ def test_an_admin_preview_masks_like_the_role(client, admin_user_, diamonds):
 
 def test_every_inventory_screen_is_walked():
     covered = ({name for name, _, _ in SCREENS} | {name for name, _ in DIAMOND_SCREENS} | LEDGER_SCREENS
-               | DIA_LEDGER_SCREENS | FINDER_SCREENS)
+               | DIA_LEDGER_SCREENS | FINDER_SCREENS | PRICE_SCREENS)
     named = set()
     for resolver in get_resolver().url_patterns:
         if isinstance(resolver, URLResolver) and resolver.app_name == "inventory":
@@ -143,7 +143,7 @@ def test_every_inventory_screen_is_walked():
 
 #: the ledger's screens, walked by test_no_ledger_screen_shows_a_login_what_it_may_not_see
 LEDGER_SCREENS = {"inventory:document", "inventory:job_work_list", "inventory:memo_list", "inventory:recent",
-                  "inventory:purchase", "inventory:split", "inventory:transfer"}
+                  "inventory:purchase", "inventory:split", "inventory:transfer", "inventory:merge"}
 
 
 def _ledger_urls(d):
@@ -158,6 +158,7 @@ def _ledger_urls(d):
         reverse("inventory:recent"), reverse("inventory:recent") + "?kind=job_work",
         reverse("inventory:purchase"),
         reverse("inventory:split", args=[d["onyx"].ref]), reverse("inventory:transfer", args=[d["onyx"].ref]),
+        reverse("inventory:merge", args=[d["onyx"].ref]),
         reverse("inventory:shelf"), reverse("inventory:pouch", args=[d["bought"].ref]),
     ]
 
@@ -203,7 +204,8 @@ def test_client_view_reaches_no_ledger_screen_or_write(client, admin_user_, ledg
     for url in (reverse("inventory:movement_post", args=[d["onyx"].ref]),
                 reverse("inventory:document_settle", args=[d["job"].pk]),
                 reverse("inventory:document_undo", args=[d["job"].pk]),
-                reverse("inventory:document_reverse", args=[d["job"].pk])):
+                reverse("inventory:document_reverse", args=[d["job"].pk]),
+                reverse("inventory:merge", args=[d["onyx"].ref])):
         assert client.post(url, {"reason": "Sale", "ct": "1"}).status_code == 302, url
     for url in client_screens:
         body = client.get(url).content.decode()
@@ -223,6 +225,8 @@ def test_the_ledger_writes_refuse_a_login_without_the_right(client, sales_user, 
         (reverse("inventory:purchase"), {"supplier": d["supplier"].pk}),
         (reverse("inventory:split", args=[d["onyx"].ref]), {"out_ct": "1", "pouch_no": "9", "ct": "1"}),
         (reverse("inventory:transfer", args=[d["onyx"].ref]), {"batch": "SL01G", "pouch_no": "9"}),
+        (reverse("inventory:merge", args=[d["onyx"].ref]), {"pouch": [d["onyx"].pk, d["ruby"].pk], "into": "new",
+                                                           "new_pouch_no": "9"}),
     ]:
         assert client.post(url, data).status_code == 403, url
     assert Movement.objects.count() == before
@@ -327,6 +331,45 @@ def test_no_stones_screen_lists_or_opens_a_diamond_document(client, accounts_use
 #: part 5a's finders, walked by test_no_finder_shows_a_login_what_it_may_not_see
 FINDER_SCREENS = {"inventory:search", "inventory:quality", "inventory:splits", "inventory:transfers",
                   "inventory:dia_movements", "inventory:dia_line"}
+
+#: part 5b's price lists, walked by test_no_price_list_shows_a_login_what_it_may_not_see
+PRICE_SCREENS = {"inventory:prices_cost", "inventory:prices_selling"}
+
+
+@pytest.mark.parametrize("fixture, secrets", [
+    ("sales_user", ("7,919", VALUE, TOTAL_VALUE, SUPPLIER)),
+    ("karigar_user", ("7,919", VALUE, TOTAL_VALUE, SUPPLIER)),
+    ("production_user", ("7,919", VALUE, TOTAL_VALUE)),
+    ("graphic_user", ("7,919", VALUE, TOTAL_VALUE, SUPPLIER)),
+])
+def test_no_price_list_shows_a_login_what_it_may_not_see(client, shelf, request, fixture, secrets):
+    client.force_login(request.getfixturevalue(fixture))
+    for name in sorted(PRICE_SCREENS):
+        for query in ("", "?f=1"):
+            response = client.get(reverse(name) + query)
+            assert response.status_code in (200, 403), f"{name} returned {response.status_code}"
+            body = response.content.decode()
+            for secret in secrets:
+                assert secret not in body, f"{name}{query} leaked {secret!r} to {fixture}"
+
+
+def test_the_cost_list_shows_cost_to_accounts(client, accounts_user, shelf):
+    client.force_login(accounts_user)
+    body = client.get(reverse("inventory:prices_cost")).content.decode()
+    assert "7,919" in body and VALUE in body and TOTAL_VALUE in body
+
+
+@pytest.mark.parametrize("fixture", ["sales_user", "karigar_user", "production_user", "graphic_user"])
+def test_no_price_list_post_writes_for_a_login_without_the_right(client, shelf, request, fixture):
+    from inventory.models import PriceEntry
+
+    client.force_login(request.getfixturevalue(fixture))
+    before = PriceEntry.objects.count()
+    for name in sorted(PRICE_SCREENS):
+        response = client.post(reverse(name), {"f": "1", "stock": "1", "count": "2", "rate": "1"})
+        assert response.status_code == 403, f"{name} returned {response.status_code} to {fixture}"
+    assert PriceEntry.objects.count() == before
+
 
 #: what each login may not see on a finder (Production sees suppliers and karigars; the Karigar desk, karigars)
 #: SUPPLIER, CUSTOMER and PURCHASE_COST never render on any finder screen today (none of search, the

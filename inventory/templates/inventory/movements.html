@@ -11,6 +11,7 @@
   <div class="head-act">
     <a class="btn gho" href="{% url 'inventory:pouch' row.ref %}">← Pouch</a>
     {% if caps.inv_assort %}<a class="btn gho" href="{% url 'inventory:split' row.ref %}">⤴ Split</a>{% endif %}
+    {% if caps.inv_assort %}<a class="btn gho" href="{% url 'inventory:merge' row.ref %}">⤵ Merge</a>{% endif %}
     {% if record %}<a class="btn pri" href="#record">＋ Record movement</a>{% endif %}</div>
 </div>
 
