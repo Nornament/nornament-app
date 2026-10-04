@@ -531,8 +531,15 @@ def test_each_finder_shows_names_and_cost_to_those_who_may_see_them(client, acco
 def test_client_view_reaches_no_stones_finder(client, admin_user_, finder_docs):
     client.force_login(admin_user_)
     client.post(reverse("inventory:set_view"), {"view": "client"})
+    search = reverse("inventory:search")
     for url in _stones_finder_urls(finder_docs):
         response = client.get(url)
+        if url.startswith(search):
+            # diamonds have no client view, so a diamond query still answers — but never with a pouch
+            body = response.content.decode()
+            assert response.status_code == 200 and '<span class="card-t">Pouches</span>' not in body, url
+            assert reverse("inventory:pouch", args=[finder_docs["stones"]["onyx"].ref]) not in body, url
+            continue
         assert response.status_code == 302 and response["Location"] == reverse("inventory:shelf"), url
     body = client.get(reverse("inventory:shelf")).content.decode()
     assert f'action="{reverse("inventory:search")}"' not in body and "Search batch, pouch, stone… 🔒" in body

@@ -26,8 +26,8 @@
     <span class="hint">{% if found.lines > lines|length %}first {{ lines|length }} of {{ found.lines }}{% else %}{{ found.lines }}{% endif %}</span></div>
   <div style="overflow:auto"><table class="pt">
     <thead><tr><th>Line</th><th>Item code</th><th>Category</th><th>Shape</th><th>Colour</th><th>Clarity</th><th>Size</th><th>Batch</th><th class="r">Carats</th></tr></thead>
-    <tbody>{% for l in lines %}<tr onclick="location.href='{% url 'inventory:dia_line' l.ref %}'">
-      <td class="mono"><a class="rowlink" href="{% url 'inventory:dia_line' l.ref %}"><b>{{ l.ref }}</b></a></td>
+    <tbody>{% for l in lines %}<tr onclick="location.href='{{ l.href }}'">
+      <td class="mono"><a class="rowlink" href="{{ l.href }}"><b>{{ l.ref }}</b></a></td>
       <td class="mono" style="font-size:11px">{{ l.item_code }}</td><td>{{ l.category }}</td>
       <td>{{ l.shape|default:"—" }}</td><td>{{ l.colour|default:"—" }}</td><td>{{ l.clarity|default:"—" }}</td>
       <td class="mono">{{ l.size }}</td><td class="mono">{{ l.batch|default:"—" }}</td>

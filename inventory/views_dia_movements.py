@@ -12,9 +12,11 @@ from django.db.models import Count
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 
+from accounts.capabilities import INV_ASSORT, INV_JOB
 from stock.masking import mask
 
 from . import dia_rows, dia_services, ledger
+from .ledger_purchase import PURCHASE_RIGHTS
 from .models import DiamondLine, StockDocument
 from .views_diamonds import dia_page, viewer
 
@@ -26,15 +28,26 @@ RECENT_CAP = 100
 #: where each diamond document is read, and the query that picks it there
 SCREEN = {Kind.DIA_JOB: ("inventory:dia_jobs", "card"), Kind.DIA_ASSORT: ("inventory:dia_assorts", "doc"),
           Kind.DIA_PURCHASE: ("inventory:dia_purchase", None)}
+#: the right each screen needs — a stock take has none here: it is readable by every internal login
+NEEDS = {Kind.DIA_JOB: (INV_JOB,), Kind.DIA_ASSORT: (INV_ASSORT,), Kind.DIA_PURCHASE: PURCHASE_RIGHTS}
 
 
-def opens(document, as_role=""):
+def _may_open(user, kind):
+    return all(user.has_perm(right) for right in NEEDS.get(kind, ()))
+
+
+def opens(user, document, as_role=""):
     """The screen a diamond document is read on: its job card, its assortment, or Purchases (which
-    lists them; a purchase has no page of its own). A reversal opens the document it reversed."""
+    lists them; a purchase has no page of its own). A reversal opens the document it reversed.
+
+    ``""`` when the viewer holds none of the rights that screen needs — a stock take has no such
+    right, so it always links. The caller then renders the document number as plain text."""
     document = document.reverses or document
     if document.kind == Kind.DIA_COUNT:
         url = reverse("inventory:dia_stock_take", args=[document.stock_take.pk])
         return url + (f"?{urlencode({'as': as_role})}" if as_role else "")
+    if not _may_open(user, document.kind):
+        return ""
     name, key = SCREEN[document.kind]
     params = {key: document.pk} if key else {}
     if as_role:
@@ -66,7 +79,7 @@ def movements(request):
     rows = [mask(user, {"pk": d.pk, "number": d.number, "kind": d.get_kind_display(), **ledger.party(d),
                         "in_house": d.kind == Kind.DIA_JOB and d.vendor_id is None, "occurred_on": d.occurred_on,
                         "status": d.get_status_display(), "tone": TONE[d.status], "lines": d.lines,
-                        "href": opens(d, as_role)})
+                        "href": opens(user, d, as_role)})
             for d in documents.order_by("-created_at", "-pk")[:RECENT_CAP]]
     return dia_page(request, "inventory/diamonds/movements.html", dtab="movements", rows=rows, kind=kind,
                     kinds=[(value, label) for value, label in Kind.choices if value in ledger.DIAMOND_KINDS])
@@ -86,7 +99,7 @@ def _ledger(user, line, as_role=""):
         rows.append(mask(user, {
             "when": m.occurred_at, "reason": m.reason, "note": m.note, "reversal": bool(m.reverses_id),
             "sym": symbol, "cls": cls, "direction": WORD[m.effect], "ct": m.ct, "balance": balance,
-            "number": doc.number if doc else "", "href": opens(doc, as_role) if doc else "",
+            "number": doc.number if doc else "", "href": opens(user, doc, as_role) if doc else "",
             "ref": m.ref if not doc or m.ref != doc.number else "",
             "by": (m.recorded_by.full_name or m.recorded_by.get_username()) if m.recorded_by_id else "system",
         }))

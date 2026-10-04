@@ -10,6 +10,8 @@
   <input class="inp" name="stone" value="{{ filters.stone }}" placeholder="Stone" style="width:150px">
   {% for key, label, options in choices %}<select class="inp" name="{{ key }}" style="width:140px" aria-label="{{ label }}">
     <option value="">{{ label }}: any</option>{% for value, text, on in options %}<option value="{{ value }}"{% if on %} selected{% endif %}>{{ text }}</option>{% endfor %}</select>{% endfor %}
+  <input class="inp" name="size_text" value="{{ filters.size_text }}" placeholder="Size" list="sizes" style="width:120px">
+  <datalist id="sizes">{% for s in sizes %}<option value="{{ s }}">{% endfor %}</datalist>
   <input class="inp mono" name="batch" value="{{ filters.batch }}" placeholder="Batch" style="width:100px">
   <label class="hint"><input type="checkbox" name="stock" value="1"{% if filters.stock %} checked{% endif %}> In stock only</label>
   <button class="btn">Filter</button> <a class="hint" href="?">Clear</a>
@@ -47,6 +49,7 @@
 {% if can_set %}<form method="post" class="card" style="margin-top:14px"><div class="card-b ctrow">{% csrf_token %}
   {% for name, value in posted %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
   <input type="hidden" name="count" value="{{ count }}">
+  <input type="hidden" name="group" value="{{ group }}">
   <b>Set {{ set_label }}</b> ₹/ct <input class="inp tnum" name="rate" required inputmode="decimal" style="width:120px">
   effective from <input class="inp" type="date" name="effective_from" value="{{ today|date:'Y-m-d' }}" max="{{ today|date:'Y-m-d' }}" style="width:150px">
   <button class="btn pri"{% if not count %} disabled{% endif %}>Set for {{ count|grouped }} pouch{{ count|pluralize:"es" }}</button>

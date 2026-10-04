@@ -45,6 +45,26 @@ def test_a_name_the_viewer_may_not_see_is_absent_never_in_house(client, sales_us
     assert _get(client, karigar_user, reverse("inventory:dia_movements")).status_code == 200
 
 
+def test_a_link_opens_only_for_a_viewer_who_holds_that_screens_right(client, sales_user, accounts_user, dia_docs):
+    card, assort, purchase = dia_docs["card"], dia_docs["assort"], dia_docs["purchase"]
+    body = _get(client, accounts_user, reverse("inventory:dia_movements")).content.decode()
+    assert f'href="{reverse("inventory:dia_jobs")}?card={card.pk}"><b>{card.number}</b></a>' in body
+    assert f'href="{reverse("inventory:dia_assorts")}?doc={assort.pk}"><b>{assort.number}</b></a>' in body
+    assert f'href="{reverse("inventory:dia_purchase")}"><b>{purchase.number}</b></a>' in body
+    body = _get(client, sales_user, reverse("inventory:dia_movements")).content.decode()
+    for number in (card.number, assort.number, purchase.number):
+        assert f'<b>{number}</b>' in body and f'<b>{number}</b></a>' not in body       # named, but not a link
+
+
+def test_the_line_ledger_withholds_a_link_the_viewer_may_not_open(client, sales_user, accounts_user, dia_docs):
+    line, card = dia_docs["round"], dia_docs["card"]
+    url = reverse("inventory:dia_line", args=[line.ref])
+    body = _get(client, accounts_user, url).content.decode()
+    assert f'href="{reverse("inventory:dia_jobs")}?card={card.pk}">{card.number}</a>' in body
+    body = _get(client, sales_user, url).content.decode()
+    assert card.number in body and f'href="{reverse("inventory:dia_jobs")}?card={card.pk}">' not in body
+
+
 def test_the_line_ledger_runs_to_what_the_engine_holds(client, accounts_user, dia_docs):
     line, card = dia_docs["round"], dia_docs["card"]
     ledger_dia_jobs.post_entry(accounts_user, card, "set", line, D("0.25"))           # a settle: on hand unchanged

@@ -1,8 +1,10 @@
 """Part 5d: stock takes — counting a box colour, a batch or a diamond category, and posting the differences."""
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
 from django.core.exceptions import PermissionDenied
+from django.utils import timezone
 
 from inventory import dia_services, ledger, ledger_assort, ledger_single, services, stock_take
 from inventory.models import Batch, BoxColour, DiamondTerm, Movement, Pouch, StockDocument, StockTake
@@ -229,3 +231,13 @@ def test_close_refuses_a_diamond_line_recounted_since_and_a_resave_lets_it_throu
     stock_take.close(accounts_user, take)
     take.refresh_from_db()
     assert take.status == StockTake.CLOSED
+
+
+def test_close_refuses_a_backdated_recount_since_even_though_it_occurred_before_the_count(accounts_user, shelf):
+    onyx = shelf["onyx"]
+    take = stock_take.start(accounts_user, StockTake.STONES, batch=shelf["batch"])
+    stock_take.save_counts(accounts_user, take, {onyx.pk: (20, D("12"))})           # 0.5 ct short
+    yesterday = timezone.localdate() - timedelta(days=1)
+    ledger_single.post_recount(accounts_user, onyx, None, D("12"), occurred_on=yesterday)
+    with pytest.raises(ServiceError, match="was recounted since it was counted here"):
+        stock_take.close(accounts_user, take)

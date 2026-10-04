@@ -167,7 +167,7 @@ def _not_recounted_since(take, by_pk, counts):
     for count in counts:
         owner_pk = count.pouch_id or count.diamond_id
         later = Movement.objects.filter(**{field: owner_pk}, reason=Movement.Reason.RECOUNT_ADJUSTMENT,
-                                        occurred_at__gt=count.counted_at)
+                                        recorded_at__gt=count.counted_at)
         if take.document_id:
             later = later.exclude(document_id=take.document_id)
         if later.exists():

@@ -41,6 +41,7 @@ would fight on every page.
       <div class="spacer"></div>
       {% if client_view %}<div class="search locked" title="Internal only">Search batch, pouch, stone… 🔒</div>
       {% else %}<form method="get" action="{% url 'inventory:search' %}" role="search">
+        {% if as_role %}<input type="hidden" name="as" value="{{ as_role }}">{% endif %}
         <input class="inp" type="search" name="q" value="{{ q|default:'' }}" maxlength="60" placeholder="Search batch, pouch, stone…"
           aria-label="Search pouches and diamond lines" style="min-width:190px;padding:6px 10px;font-size:12px"></form>{% endif %}
       {% if side != 'diamonds' %}

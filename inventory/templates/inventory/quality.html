@@ -2,9 +2,15 @@
 {% block title %}{{ title }}{% endblock %}
 {% block crumb %}Data quality &nbsp;›&nbsp; <b>{{ title }}</b>{% endblock %}
 {% block content %}
-<div class="shelfbar"><h1>{{ title }}</h1><span class="chip">{{ pouches|length|grouped }} pouch{{ pouches|length|pluralize:"es" }}</span></div>
+<div class="shelfbar"><h1>{{ title }}</h1><span class="chip">{{ count|grouped }} pouch{{ count|pluralize:"es" }}</span></div>
 <div class="card" style="overflow:hidden">
   {% if pouches %}{% include "inventory/_pouch_table.html" with show_batch=True %}
   {% else %}<div class="card-b"><span class="hint">None.</span></div>{% endif %}
 </div>
+
+{% if pouches.has_other_pages %}<div class="ctrow" style="margin-top:10px">
+  {% if pouches.has_previous %}<a class="btn sm" href="?page={{ pouches.previous_page_number }}">‹ Previous</a>{% endif %}
+  <span class="hint">Page {{ pouches.number }} of {{ pouches.paginator.num_pages }}</span>
+  {% if pouches.has_next %}<a class="btn sm" href="?page={{ pouches.next_page_number }}">Next ›</a>{% endif %}
+</div>{% endif %}
 {% endblock %}
