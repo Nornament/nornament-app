@@ -1,0 +1,64 @@
+{% extends "inventory_base.html" %}{% load inventory_extras %}
+{% block title %}{{ book.title }} · Lookbook{% endblock %}
+{% block crumb %}Commercial &nbsp;›&nbsp; <a href="{% url 'inventory:lookbooks' %}">Client lookbooks</a> &nbsp;›&nbsp; <b>{{ book.title }}</b>{% endblock %}
+{% block content %}
+<div class="shelfbar"><h1>{{ book.title }}</h1>
+  {% if book.shared %}<span class="chip good"><span class="dot"></span>Link on</span>{% else %}<span class="chip"><span class="dot" style="background:var(--muted)"></span>Link off</span>{% endif %}</div>
+{% if error %}<div class="banner crit"><div class="banner-ic">!</div><div><h4>{{ error }}</h4></div></div>{% endif %}
+{% if confirming == "delete" %}<div class="banner crit"><div class="banner-ic">!</div><div><h4>Delete this lookbook? Its link stops working.</h4>
+  <form method="post" style="margin-top:8px">{% csrf_token %}<input type="hidden" name="confirm" value="delete">
+    <button class="btn crit" name="action" value="delete">Yes, delete it</button></form></div></div>{% endif %}
+
+<div class="card" style="margin-bottom:14px"><div class="card-b">
+  <label class="hint">Client link</label>
+  <div class="ctrow">
+    <input class="inp mono" id="lblink" value="{{ link }}" readonly style="flex:1">
+    <button type="button" class="btn sm" onclick="navigator.clipboard.writeText(document.getElementById('lblink').value);this.textContent='Copied'">Copy link</button>
+  </div>
+</div></div>
+
+{% if may %}
+<div class="card" style="margin-bottom:14px"><div class="card-b">
+  <form method="post">{% csrf_token %}
+    <div class="ctrow">
+      <input class="inp" name="title" value="{{ book.title }}" maxlength="120" required>
+      <label class="hint"><input type="checkbox" name="shared" {% if book.shared %}checked{% endif %}> Link on</label>
+    </div>
+    <textarea class="inp" name="note" placeholder="Note to the client" style="margin-top:8px;width:100%">{{ book.note }}</textarea>
+    <button class="btn pri" name="action" value="save" style="margin-top:8px">Save</button>
+  </form>
+</div></div>
+
+<div class="card" style="margin-bottom:14px"><div class="card-b">
+  <form method="post">{% csrf_token %}
+    <textarea class="inp mono" name="refs" placeholder="NRN-000001, SL01G · 3" style="width:100%" rows="2"></textarea>
+    <div class="hint" style="margin-top:4px">NRN refs or batch · pouch no. (batch/pouch no. also works), separated by commas or new lines</div>
+    <button class="btn pri" name="action" value="add" style="margin-top:8px">Add</button>
+  </form>
+</div></div>
+{% endif %}
+
+<div class="card" style="overflow:hidden"><div style="overflow:auto"><table class="led">
+  <thead><tr><th>#</th><th></th><th>Ref</th><th>Where</th><th>Stone</th><th>Size</th><th class="r">Ct</th><th>Available</th>{% if may %}<th></th>{% endif %}</tr></thead>
+  <tbody>{% for s in stones %}<tr>
+    <td class="hint">{{ forloop.counter }}</td>
+    <td>{% if s.photo_id %}<div class="tile" style="width:36px"><img class="photo" src="{% url 'inventory:photo' s.photo_id %}" alt=""></div>{% else %}<span class="hint">no photo</span>{% endif %}</td>
+    <td class="mono">{{ s.ref }}</td>
+    <td class="hint">{{ s.where }}</td>
+    <td>{{ s.stone_name|default:"Unidentified" }}</td>
+    <td>{{ s.size|default:"—" }}</td>
+    <td class="r tnum">{{ s.ct|ct }}</td>
+    <td>{% if s.available %}<span class="chip good"><span class="dot"></span>Available</span>{% else %}<span class="chip crit"><span class="dot"></span>No longer available</span>{% endif %}</td>
+    {% if may %}<td style="white-space:nowrap">
+      <form method="post" style="display:inline">{% csrf_token %}<input type="hidden" name="pouch" value="{{ s.pk }}">
+        <button class="btn sm" name="action" value="up">↑</button></form>
+      <form method="post" style="display:inline">{% csrf_token %}<input type="hidden" name="pouch" value="{{ s.pk }}">
+        <button class="btn sm" name="action" value="down">↓</button></form>
+      <form method="post" style="display:inline">{% csrf_token %}<input type="hidden" name="pouch" value="{{ s.pk }}">
+        <button class="btn sm" name="action" value="remove">Remove</button></form>
+    </td>{% endif %}</tr>
+  {% empty %}<tr><td colspan="{% if may %}9{% else %}8{% endif %}" class="hint">No stones yet.</td></tr>{% endfor %}</tbody></table></div></div>
+
+{% if may %}<form method="post" style="margin-top:14px">{% csrf_token %}
+  <button class="btn gho" name="action" value="delete">Delete lookbook</button></form>{% endif %}
+{% endblock %}

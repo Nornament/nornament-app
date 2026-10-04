@@ -26,7 +26,7 @@ def test_the_rail_and_the_tab_open_the_list(client, sales_user, shelf):
     client.force_login(sales_user)
     body = client.get(reverse("inventory:shelf")).content.decode()
     assert f'href="{LIST}"' in body and 'Stock takes<span class="ct">🔒' not in body and "Stock take 🔒" not in body
-    assert 'Client lookbook<span class="ct">🔒' in body
+    assert f'href="{reverse("inventory:lookbooks")}"' in body
 
 
 def test_starting_from_the_list_opens_the_sheet(client, accounts_user, shelf):

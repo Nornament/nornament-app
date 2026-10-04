@@ -38,6 +38,12 @@ def kg(value):
 
 
 @register.simple_tag
+def joined(*parts, sep=" · "):
+    """The non-blank parts, joined — "" and None skipped rather than leaving a stray separator."""
+    return sep.join(part for part in parts if part)
+
+
+@register.simple_tag
 def silhouette(shape, hex_colour):
     # the shape only picks a branch in rules.shape_svg; the colour is escaped
     # because this tag cannot know every caller passes one from its own table

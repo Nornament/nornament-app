@@ -515,3 +515,33 @@ class StockTakeCount(models.Model):
             models.CheckConstraint(condition=Q(pouch__isnull=True) ^ Q(diamond__isnull=True),
                                    name="inv_stock_take_count_one_owner"),
         ]
+
+
+class Lookbook(models.Model):
+    """A curated set of pouches shared with a client by a private link (part 5e)."""
+
+    title = models.CharField(max_length=120)
+    note = models.TextField(blank=True, help_text="Shown to the client under the title.")
+    token = models.CharField(max_length=32, unique=True, editable=False)
+    shared = models.BooleanField(default=True, help_text="Off: the link answers as if it never existed.")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "inv_lookbook"
+        ordering = ["-created_at", "-pk"]
+
+    def __str__(self):
+        return self.title
+
+
+class LookbookStone(models.Model):
+    lookbook = models.ForeignKey(Lookbook, on_delete=models.CASCADE, related_name="stones")
+    pouch = models.ForeignKey(Pouch, on_delete=models.PROTECT, related_name="+")
+    position = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "inv_lookbook_stone"
+        ordering = ["position", "pk"]
+        constraints = [models.UniqueConstraint(fields=["lookbook", "pouch"], name="inv_lookbook_stone_once")]

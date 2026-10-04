@@ -26,6 +26,7 @@
     {% else %}
       {% if caps.inv_assort %}<a class="btn gho" href="{% url 'inventory:split' row.ref %}">⤴ Split pouch</a>{% endif %}
       {% if caps.inv_assort %}<a class="btn gho" href="{% url 'inventory:merge' row.ref %}">⤵ Merge</a>{% endif %}
+      {% if caps.view_sale %}<a class="btn gho" href="{% url 'inventory:lookbook_add' row.ref %}">＋ Lookbook</a>{% endif %}
       <a class="btn" href="{% url 'inventory:movements' row.ref %}">⇄ Movements</a>
       {% if caps.inv_masters %}<button class="btn pri" form="pouchform">Save</button>{% endif %}
     {% endif %}
