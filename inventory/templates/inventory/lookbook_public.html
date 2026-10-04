@@ -1,0 +1,38 @@
+{% load static inventory_extras %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>{{ book.title }} · Nornament</title>
+  <link rel="stylesheet" href="{% static 'css/inventory.css' %}">
+</head>
+<body>
+<div class="wrap">
+  <div class="brand-name">Nornament</div>
+  <h1>{{ book.title }}</h1>
+  {% if book.note %}<p>{{ book.note|linebreaksbr }}</p>{% endif %}
+  <div class="colgrid">
+    {% for c in cards %}
+    <div class="colcard">
+      <div class="tile">
+        {% if c.photo_id %}<img class="photo" src="{% url 'lookbook_photo' book.token c.photo_id %}" alt="{{ c.stone_name }}" loading="lazy">{% else %}<span class="nophoto">no photo yet</span>{% endif %}
+      </div>
+      <div class="cb">
+        <div class="nm">{{ c.stone_name }}</div>
+        <div class="st">{{ c.colour }} · {{ c.shape }} · {{ c.cut }}</div>
+        <div class="st">{{ c.size_display }}</div>
+        <div class="st">{{ c.ct|ct }} ct</div>
+        <div class="st">{% if c.countable %}{{ c.pcs|grouped }} pcs{% else %}uncountable{% endif %}</div>
+        <div class="st">Ref {{ c.ref }}</div>
+        <div class="fl">{% if c.available %}<span class="chip good"><span class="dot"></span>Available</span>{% else %}<span class="chip crit"><span class="dot"></span>No longer available</span>{% endif %}</div>
+        {% if c.enquire %}<a class="btn pri" href="{{ c.enquire }}" rel="noopener" target="_blank" style="margin-top:8px;display:inline-block">Enquire</a>{% endif %}
+      </div>
+    </div>
+    {% empty %}
+    <p>Nothing here yet.</p>
+    {% endfor %}
+  </div>
+</div>
+</body>
+</html>

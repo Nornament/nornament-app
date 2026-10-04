@@ -1,11 +1,20 @@
 """Lookbooks (part 5e): the staff screens, and the client's page a private link opens."""
+import os
+from urllib.parse import quote
+
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import AnonymousUser
 from django.http import Http404
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.views.decorators.http import require_GET
 
 from accounts.capabilities import VIEW_SALE
+from mediahub import storage
+from mediahub.models import MediaAsset
+from stock.enums import MediaKind
 from stock.masking import mask
 from stock.services import ServiceError, require
 
@@ -95,12 +104,49 @@ def lookbook_add(request, ref):
                  pouch=pouch, books=Lookbook.objects.all())
 
 
-# ── the client's page (part 5e, task 3): placeholder so `lookbook_detail`'s link field has a URL name to
-# reverse right now. Task 3 replaces this with the real public page, its photo route, and the url mount
-# in config/urls.py below.
+# ── the client's page: no login, nothing gated or filed, the same 404 for off and unknown.
+def _noindex(response):
+    response["X-Robots-Tag"] = "noindex"
+    return response
+
+
+def _gone(request):
+    return _noindex(render(request, "inventory/lookbook_gone.html", status=404))
+
+
+def _enquire(book, ref):
+    text = quote(f"Lookbook {book.title} — {ref}")
+    if settings.LOOKBOOK_WHATSAPP:
+        return f"https://wa.me/{settings.LOOKBOOK_WHATSAPP}?text={text}"
+    if settings.LOOKBOOK_EMAIL:
+        return f"mailto:{settings.LOOKBOOK_EMAIL}?subject={text}"
+    return ""
+
+
+@require_GET
 def lookbook_public(request, token):
-    raise Http404
+    """What a client sees: the client preview's own row, for no one in particular, so nothing gated or
+    filed survives (rows.CLIENT_HIDDEN, then every gated key masked away)."""
+    book = lookbooks.resolve(token)
+    if book is None:
+        return _gone(request)
+    pouches = lookbooks.pouches(book)
+    found = rows.pouch_rows(AnonymousUser(), pouches, client=True)
+    cards = [{**row, "available": bool(row.get("ct") or row.get("pcs")), "enquire": _enquire(book, row["ref"])}
+             for row in found]
+    return _noindex(render(request, "inventory/lookbook_public.html", {"book": book, "cards": cards}))
 
 
+@require_GET
 def lookbook_photo(request, token, media_id):
-    raise Http404
+    book = lookbooks.resolve(token)
+    asset = MediaAsset.objects.filter(pk=media_id, scope="pouch", kind=MediaKind.PHOTO, is_archived=False).first()
+    if book is None or asset is None or not book.stones.filter(pouch_id=asset.scope_id).exists():
+        return _gone(request)
+    pouch = Pouch.objects.get(pk=asset.scope_id)
+    extension = os.path.splitext(asset.file_name or "")[1].lower() or ".jpg"
+    try:
+        url = storage.presign_get(asset.storage_key, asset.mime_type, f"{pouch.ref}{extension}")
+    except storage.StorageNotConfigured:
+        return _noindex(render(request, "inventory/lookbook_gone.html", status=503))
+    return _noindex(redirect(url))
