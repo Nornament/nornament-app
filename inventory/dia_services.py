@@ -22,7 +22,7 @@ from stock.services import ServiceError, log, require
 from . import dia_rules, inputs
 from .dia_rules import canonical_code
 from .dia_seed import COLOUR_LADDER
-from .models import DiamondCode, DiamondLine, DiamondLineCost, DiamondRate, DiamondTerm, Movement, balance
+from .models import DiamondCode, DiamondLine, DiamondLineCost, DiamondRate, DiamondTerm, Movement, StockTake, balance
 
 #: the prototype's seven rights, as the permissions they are, plus part 2's Record stock movements
 RIGHTS = [("view_cost", "See cost"), ("view_sale", "See sale"), ("view_margin", "See margin"),
@@ -228,7 +228,7 @@ def _in_use(t):
     if any(t.value in other.expands_to.split() for other in ranges):
         return True
     if t.kind == DiamondTerm.CATEGORY:
-        return DiamondLine.objects.filter(category=t).exists()
+        return DiamondLine.objects.filter(category=t).exists() or StockTake.objects.filter(category=t).exists()
     if t.kind == DiamondTerm.BAND:
         return DiamondLine.objects.filter(band=t).exists()
     if t.kind == DiamondTerm.SHAPE:

@@ -56,8 +56,11 @@ def movements(request):
     user, role = viewer(request)
     as_role = _as_role(request, user, role)
     kind = request.GET.get("kind", "")
+    # reverses__isnull=True above means every listed document has no reverses of its own, so
+    # opens()'s "document.reverses or document" always falls through to this row's own stock_take
     documents = (StockDocument.objects.filter(kind__in=ledger.DIAMOND_KINDS, reverses__isnull=True)
-                 .select_related("vendor").annotate(lines=Count("movements__diamond", distinct=True)))
+                 .select_related("vendor", "stock_take")
+                 .annotate(lines=Count("movements__diamond", distinct=True)))
     if kind in ledger.DIAMOND_KINDS:
         documents = documents.filter(kind=kind)
     rows = [mask(user, {"pk": d.pk, "number": d.number, "kind": d.get_kind_display(), **ledger.party(d),

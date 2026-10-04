@@ -30,7 +30,7 @@ def test_client_view_shows_neither_the_lists_nor_the_filters(client, admin_user_
     assert reverse("inventory:splits") not in body and reverse("inventory:quality", args=["misfiled"]) not in body
 
 
-def test_the_diamond_movements_tab_is_live_and_stock_take_stays_locked(client, admin_user_, diamonds):
+def test_the_diamond_movements_tab_is_live_and_so_is_stock_take(client, admin_user_, diamonds):
     client.force_login(admin_user_)
     body = client.get(reverse("inventory:diamonds")).content.decode()
     assert f'href="{reverse("inventory:dia_movements")}">Movements</a>' in body
