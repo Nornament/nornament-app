@@ -1,4 +1,4 @@
-"""Split pouch and Transfer to another batch — the two assort screens.
+"""Split pouch, Transfer to another batch, and Merge pouches — the assort screens.
 
 Both need the assort right, neither is reachable in client view, and a refusal
 comes back on the form with what was typed.
@@ -87,3 +87,36 @@ def transfer(request, ref):
     numbers.pop(obj.batch.code, None)
     return _page(request, "inventory/transfer.html", everything, tab="tx", pouch_ref=obj.ref, row=row,
                  form=form, error=error, next_numbers=numbers)
+
+
+@login_required
+def merge(request, ref):
+    if _client(request):
+        return redirect("inventory:shelf")
+    opening, everything, row = _assort(request, ref, "Only a role that assorts can merge pouches.")
+    found = ledger_assort.candidates(opening)
+    by_pk = {r["pk"]: r for r in everything}
+    ticked, into, error = {opening.pk}, str(opening.pk), None
+    form = {"new_pouch_no": ledger.next_pouch_no(opening.batch), "size_text": opening.size_text}
+    if request.method == "POST":
+        form = request.POST
+        ticked = {int(pk) for pk in form.getlist("pouch") if pk.isdigit()}
+        into = form.get("into") or ""
+        try:
+            target = None if into == "new" else next((p for p in found if str(p.pk) == into), None)
+            if into != "new" and target is None:
+                raise ServiceError("Merge into one of the ticked pouches, or a new pouch.")
+            document, rate = ledger_assort.merge_pouches(
+                request.user, [p for p in found if p.pk in ticked], target, (form.get("new_pouch_no") or "").strip(),
+                (form.get("size_text") or "").strip(), inputs.whole(form.get("loss_pcs"), "Loss pieces"),
+                inputs.decimal(form.get("loss_ct"), "Loss weight"), (form.get("note") or "").strip(),
+            )
+        except ServiceError as refused:
+            error = refused.messages[0]
+        else:
+            unvalued = "" if rate is not None else " — no valuation set: one of the pouches had none."
+            messages.success(request, f"Merge posted as {document.number}.{unvalued}")
+            return redirect("inventory:document", pk=document.pk)
+    return _page(request, "inventory/merge.html", everything, tab="tx", pouch_ref=opening.ref, row=row,
+                 candidates=[by_pk[p.pk] for p in found] if len(found) > 1 else [], ticked=ticked, into=into,
+                 form=form, error=error)

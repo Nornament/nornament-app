@@ -143,7 +143,7 @@ def test_every_inventory_screen_is_walked():
 
 #: the ledger's screens, walked by test_no_ledger_screen_shows_a_login_what_it_may_not_see
 LEDGER_SCREENS = {"inventory:document", "inventory:job_work_list", "inventory:memo_list", "inventory:recent",
-                  "inventory:purchase", "inventory:split", "inventory:transfer"}
+                  "inventory:purchase", "inventory:split", "inventory:transfer", "inventory:merge"}
 
 
 def _ledger_urls(d):
@@ -158,6 +158,7 @@ def _ledger_urls(d):
         reverse("inventory:recent"), reverse("inventory:recent") + "?kind=job_work",
         reverse("inventory:purchase"),
         reverse("inventory:split", args=[d["onyx"].ref]), reverse("inventory:transfer", args=[d["onyx"].ref]),
+        reverse("inventory:merge", args=[d["onyx"].ref]),
         reverse("inventory:shelf"), reverse("inventory:pouch", args=[d["bought"].ref]),
     ]
 
@@ -223,6 +224,8 @@ def test_the_ledger_writes_refuse_a_login_without_the_right(client, sales_user, 
         (reverse("inventory:purchase"), {"supplier": d["supplier"].pk}),
         (reverse("inventory:split", args=[d["onyx"].ref]), {"out_ct": "1", "pouch_no": "9", "ct": "1"}),
         (reverse("inventory:transfer", args=[d["onyx"].ref]), {"batch": "SL01G", "pouch_no": "9"}),
+        (reverse("inventory:merge", args=[d["onyx"].ref]), {"pouch": [d["onyx"].pk, d["ruby"].pk], "into": "new",
+                                                           "new_pouch_no": "9"}),
     ]:
         assert client.post(url, data).status_code == 403, url
     assert Movement.objects.count() == before

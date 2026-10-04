@@ -24,6 +24,7 @@ urlpatterns = [
     path("pouches/<str:ref>/movements/post/", views_ledger.movement_post, name="movement_post"),
     path("pouches/<str:ref>/split/", views_assort.split, name="split"),
     path("pouches/<str:ref>/transfer/", views_assort.transfer, name="transfer"),
+    path("pouches/<str:ref>/merge/", views_assort.merge, name="merge"),
     path("purchases/new/", views_purchase.purchase, name="purchase"),
     path("documents/<int:pk>/", views_documents.document, name="document"),
     path("documents/<int:pk>/settle/", views_documents.document_settle, name="document_settle"),
