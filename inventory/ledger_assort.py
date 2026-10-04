@@ -6,7 +6,7 @@ when the pouch is counted (the diamond assortment's rule). A transfer changes
 only where a pouch is filed; its quantity and its ``NRN-`` reference stay.
 """
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.db import transaction
 
@@ -107,3 +107,90 @@ def transfer_pouch(user, pouch, to_batch, to_pouch_no, note=""):
     pouch.batch, pouch.pouch_no = to_batch, to_pouch_no
     pouch.save(update_fields=["batch", "pouch_no"])
     return document
+
+
+#: what two pouches must share to merge (as typed); size may differ
+SAME = ("stone_name", "colour", "shape", "quality")
+
+
+def candidates(pouch):
+    """The pouches that may merge with ``pouch``: its batch, its stone, something on hand. It comes first."""
+    same = Pouch.objects.filter(batch_id=pouch.batch_id, **{field: getattr(pouch, field) for field in SAME})
+    held = [p for p in services.stocked(same) if p.on_ct or p.on_pcs]
+    return sorted(held, key=lambda p: (p.pk != pouch.pk, p.pk))
+
+
+def _weighted(pouches):
+    """Σ(ct × rate) / Σ ct to the column's 4 places; ``None`` when a pouch with weight has no valuation."""
+    weighed = [p for p in pouches if p.on_ct]
+    if not weighed or any(p.rate is None for p in weighed):
+        return None
+    total = sum(p.on_ct for p in weighed)
+    return (sum(p.on_ct * p.rate for p in weighed) / total).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+
+
+def _settled(pouches):
+    """Refuse a pouch with stone still out on an open job work or memo: what comes back would land in an emptied pouch."""
+    ids = {p.pk for p in pouches}
+    open_docs = StockDocument.objects.filter(kind__in=ledger.OPENABLE, status=StockDocument.Status.OPEN)
+    for doc_pk, owed in ledger.owed_by_document(open_docs).items():
+        for pouch, _, _ in owed:
+            if pouch.pk in ids:
+                number = StockDocument.objects.get(pk=doc_pk).number
+                raise ServiceError(f"Settle {number} first: {pouch} still has stone out on it.")
+
+
+@transaction.atomic
+def merge_pouches(user, pouches, into=None, new_pouch_no="", size_text="", loss_pcs=None, loss_ct=None, note=""):
+    """Empty every pouch into one of them (``into``) or into a new pouch in their batch, less an optional
+    loss. The merged pouch is valued at the carat-weighted rate of everything in it, before the loss.
+    Returns the document and the rate written (``None`` when one of the pouches had no valuation)."""
+    require(user, INV_ASSORT, "Only a role that assorts can merge pouches.")
+    held = list(services.stocked(Pouch.objects.filter(pk__in={p.pk for p in pouches})))
+    if len(held) < 2:
+        raise ServiceError("Tick at least two pouches to merge.")
+    held.sort(key=lambda p: p.pk)
+    first = held[0]
+    if any(p.batch_id != first.batch_id or any(getattr(p, f) != getattr(first, f) for f in SAME) for p in held):
+        raise ServiceError("Only pouches of the same stone in the same batch merge.")
+    for p in held:
+        if not (p.on_ct or p.on_pcs):
+            raise ServiceError(f"{p} is empty.")
+    if any(p.countable != first.countable for p in held):
+        raise ServiceError(f"Count {next(p for p in held if not p.countable)} first: "
+                           "counted and uncounted pouches do not merge.")
+    _settled(held)
+    target = None
+    if into is not None:
+        target = next((p for p in held if p.pk == into.pk), None)
+        if target is None:
+            raise ServiceError("Merge into one of the ticked pouches, or a new pouch.")
+    else:
+        number = _free_numbers(first.batch, [SplitPart(new_pouch_no or "", None, None)])[0]
+    if (loss_ct or 0) < 0 or (loss_pcs or 0) < 0:
+        raise ServiceError("A loss cannot be negative.")
+    total_ct = sum((p.on_ct or ledger.ZERO for p in held), ledger.ZERO)
+    total_pcs = sum(p.on_pcs or 0 for p in held)
+    if (loss_ct or 0) > total_ct or (first.countable and (loss_pcs or 0) > total_pcs):
+        raise ServiceError("The loss is more than the pouches hold.")
+    rate = _weighted(held)
+    sources = [p for p in held if target is None or p.pk != target.pk]
+    if target is None:
+        target = ledger.new_pouch(first.batch, pouch_no=number, size_text=size_text or first.size_text,
+                                  **{field: getattr(first, field) for field in COPIED})
+    elif size_text and size_text != target.size_text:
+        target.size_text = size_text
+        target.save(update_fields=["size_text"])
+    document = ledger.open_document(user, StockDocument.Kind.MERGE, note=note)
+    lines = [ledger.Line(p, Reason.MERGE, Movement.OUT, p.on_pcs if first.countable else None, p.on_ct, note=note)
+             for p in sources]
+    lines.append(ledger.Line(target, Reason.MERGE, Movement.IN,
+                             sum(p.on_pcs or 0 for p in sources) if first.countable else None,
+                             sum((p.on_ct or ledger.ZERO for p in sources), ledger.ZERO), note=note))
+    if loss_pcs or loss_ct:
+        lines.append(ledger.Line(target, Reason.WASTAGE, Movement.OUT, loss_pcs if first.countable else None, loss_ct,
+                                 note="Loss in the merge"))
+    ledger.post(user, document, lines)
+    if rate is not None:
+        PriceEntry.objects.create(pouch=target, kind=PriceEntry.VALUATION, rate=rate, set_by=_by(user))
+    return document, rate
