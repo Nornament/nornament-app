@@ -130,7 +130,7 @@ def test_an_admin_preview_masks_like_the_role(client, admin_user_, diamonds):
 
 def test_every_inventory_screen_is_walked():
     covered = ({name for name, _, _ in SCREENS} | {name for name, _ in DIAMOND_SCREENS} | LEDGER_SCREENS
-               | DIA_LEDGER_SCREENS | FINDER_SCREENS | PRICE_SCREENS | STOCK_TAKE_SCREENS)
+               | DIA_LEDGER_SCREENS | FINDER_SCREENS | PRICE_SCREENS | STOCK_TAKE_SCREENS | LOOKBOOK_SCREENS)
     named = set()
     for resolver in get_resolver().url_patterns:
         if isinstance(resolver, URLResolver) and resolver.app_name == "inventory":
@@ -148,6 +148,37 @@ LEDGER_SCREENS = {"inventory:document", "inventory:job_work_list", "inventory:me
 #: part 5d's stock-take screens, walked by test_no_stock_take_screen_shows_a_login_what_it_may_not_see
 STOCK_TAKE_SCREENS = {"inventory:stock_takes", "inventory:stock_take", "inventory:dia_stock_takes",
                       "inventory:dia_stock_take"}
+
+#: part 5e's lookbook screens, walked by test_no_lookbook_screen_shows_a_login_what_it_may_not_see
+LOOKBOOK_SCREENS = {"inventory:lookbooks", "inventory:lookbook", "inventory:lookbook_add"}
+
+
+@pytest.fixture
+def lookbook(sales_user, shelf):
+    from inventory import lookbooks
+
+    book = lookbooks.create(sales_user, "Greens")
+    lookbooks.add_stones(sales_user, book, shelf["onyx"].ref)
+    return book
+
+
+@pytest.mark.parametrize("fixture", ["sales_user", "karigar_user", "production_user", "graphic_user"])
+def test_no_lookbook_screen_shows_a_login_what_it_may_not_see(client, lookbook, shelf, request, fixture):
+    client.force_login(request.getfixturevalue(fixture))
+    list_body = client.get(reverse("inventory:lookbooks")).content.decode()
+    assert lookbook.title in list_body                          # non-vacuous: every role sees its lookbooks
+    detail_body = client.get(reverse("inventory:lookbook", args=[lookbook.pk])).content.decode()
+    assert shelf["onyx"].ref in detail_body                      # non-vacuous: every role sees its stones
+    for body in (list_body, detail_body):
+        for secret in ("7,919", VALUE, SUPPLIER):
+            assert secret not in body, f"leaked {secret!r} to {fixture}"
+    add_url = reverse("inventory:lookbook_add", args=[shelf["onyx"].ref])
+    response = client.get(add_url)
+    if fixture == "sales_user":
+        # the sale right does see the add-to-lookbook form
+        assert response.status_code == 200 and shelf["onyx"].ref in response.content.decode()
+    else:
+        assert response.status_code == 403, f"{add_url} returned {response.status_code} to {fixture}"
 
 
 @pytest.fixture
