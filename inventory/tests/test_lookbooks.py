@@ -3,9 +3,11 @@ from decimal import Decimal
 
 import pytest
 from django.core.exceptions import PermissionDenied
+from django.db import IntegrityError
 
 from inventory import lookbooks, services
 from inventory.models import Lookbook, LookbookStone
+from stock.models import ActivityLog
 from stock.services import ServiceError
 
 pytestmark = pytest.mark.django_db
@@ -72,3 +74,32 @@ def test_every_write_needs_the_sale_right(karigar_user, sales_user, shelf):
                  lambda: lookbooks.delete(karigar_user, book)):
         with pytest.raises(PermissionDenied):
             call()
+
+
+def test_the_tokenizer_splits_refs_and_batch_pouch_no_tokens(sales_user):
+    assert lookbooks._TOKEN.findall("NRN-1 SL01G · 2") == ["NRN-1", "SL01G · 2"]
+    assert lookbooks._TOKEN.findall("SL01G · 2 SL01G · 3") == ["SL01G · 2", "SL01G · 3"]
+
+
+def test_a_slash_also_works_as_the_batch_pouch_no_separator(sales_user, shelf):
+    book = lookbooks.create(sales_user, "Reds")
+    added, unknown, skipped = lookbooks.add_stones(sales_user, book, "SL01G/2")
+    assert [p.pk for p in added] == [shelf["ruby"].pk] and not unknown and not skipped
+
+
+def test_update_logs_the_title_and_link_state(sales_user, shelf):
+    book = lookbooks.create(sales_user, "Greens")
+    lookbooks.update(sales_user, book, "Greens for Mrs Rao", "note", False)
+    entry = ActivityLog.objects.filter(table_name="inv_lookbook", record_pk=str(book.pk), action="UPDATE").latest("changed_at")
+    assert "Greens for Mrs Rao" in entry.detail and "link off" in entry.detail
+
+
+def test_a_create_race_on_an_already_added_pouch_is_treated_as_skipped(sales_user, shelf, monkeypatch):
+    book = lookbooks.create(sales_user, "Greens")
+
+    def boom(**kwargs):
+        raise IntegrityError("duplicate key")
+
+    monkeypatch.setattr(LookbookStone.objects, "create", boom)
+    added, unknown, skipped = lookbooks.add_stones(sales_user, book, shelf["onyx"].ref)
+    assert added == [] and unknown == [] and [p.pk for p in skipped] == [shelf["onyx"].pk]

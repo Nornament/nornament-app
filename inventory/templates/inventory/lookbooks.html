@@ -11,7 +11,7 @@
   <thead><tr><th>Title</th><th class="r">Stones</th><th>Link</th><th>Last changed</th></tr></thead>
   <tbody>{% for b in books %}<tr>
     <td><a href="{% url 'inventory:lookbook' b.pk %}"><b>{{ b.title }}</b></a></td>
-    <td class="r tnum">{{ b.stones.count|grouped }}</td>
+    <td class="r tnum">{{ b.n|grouped }}</td>
     <td>{% if b.shared %}<span class="chip good"><span class="dot"></span>Link on</span>{% else %}<span class="chip"><span class="dot" style="background:var(--muted)"></span>Link off</span>{% endif %}</td>
     <td class="hint">{{ b.updated_at|date:"d M Y" }}</td></tr>
   {% empty %}<tr><td colspan="4" class="hint">No lookbooks yet.</td></tr>{% endfor %}</tbody></table></div></div>

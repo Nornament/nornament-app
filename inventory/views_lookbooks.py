@@ -6,10 +6,12 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import AnonymousUser
+from django.db.models import Count
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.views.decorators.http import require_GET
+from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_safe
 
 from accounts.capabilities import VIEW_SALE
 from mediahub import storage
@@ -24,9 +26,12 @@ from .views import _client, _everything, _page
 
 
 def _staff_rows(user, book):
+    pouches = lookbooks.pouches(book)
+    photos = rows._photos([p.pk for p in pouches])
     return [mask(user, {"pk": p.pk, "ref": p.ref, "where": str(p), "stone_name": p.stone_name,
-                        "size": p.size_text, "ct": p.on_ct, "available": bool(p.on_ct or p.on_pcs)})
-            for p in lookbooks.pouches(book)]
+                        "size": p.size_text, "ct": p.on_ct, "available": bool(p.on_ct or p.on_pcs),
+                        "photo_id": photos.get(p.pk)})
+            for p in pouches]
 
 
 @login_required
@@ -41,7 +46,7 @@ def lookbook_list(request):
             error = refused.messages[0]
         else:
             return redirect("inventory:lookbook", pk=book.pk)
-    books = Lookbook.objects.all()
+    books = Lookbook.objects.annotate(n=Count("stones"))
     return _page(request, "inventory/lookbooks.html", _everything(request), tab="lookbooks", books=books,
                  error=error, may=request.user.has_perm(VIEW_SALE))
 
@@ -55,7 +60,7 @@ def lookbook_detail(request, pk):
     if request.method == "POST":
         require(request.user, VIEW_SALE, lookbooks.RIGHT)
         action, p = request.POST.get("action"), request.POST
-        pouch_pk = int(p["pouch"]) if (p.get("pouch") or "").isdigit() else None
+        pouch_pk = int(p["pouch"]) if (p.get("pouch") or "").isdecimal() else None
         try:
             if action == "add":
                 added, unknown, skipped = lookbooks.add_stones(request.user, book, p.get("refs"))
@@ -94,7 +99,7 @@ def lookbook_add(request, ref):
     pouch = get_object_or_404(Pouch, ref=ref)
     if request.method == "POST":
         lookbook_pk = request.POST.get("lookbook") or ""
-        if not lookbook_pk.isdigit():
+        if not lookbook_pk.isdecimal():
             raise Http404
         book = get_object_or_404(Lookbook, pk=lookbook_pk)
         lookbooks.add_stones(request.user, book, pouch.ref)
@@ -110,8 +115,8 @@ def _noindex(response):
     return response
 
 
-def _gone(request):
-    return _noindex(render(request, "inventory/lookbook_gone.html", status=404))
+def _gone(request, status=404, message=None):
+    return _noindex(render(request, "inventory/lookbook_gone.html", {"message": message}, status=status))
 
 
 def _enquire(book, ref):
@@ -123,30 +128,43 @@ def _enquire(book, ref):
     return ""
 
 
-@require_GET
+#: what a public card may carry, plus "available" and "enquire" computed below — nothing else rides along
+_CARD_KEYS = ("ref", "stone_name", "colour", "shape", "cut", "size_display", "ct", "pcs", "countable", "photo_id")
+
+
+@never_cache
+@require_safe
 def lookbook_public(request, token):
     """What a client sees: the client preview's own row, for no one in particular, so nothing gated or
-    filed survives (rows.CLIENT_HIDDEN, then every gated key masked away)."""
+    filed survives (rows.CLIENT_HIDDEN, every gated key masked away, then only the allow-listed keys kept)."""
     book = lookbooks.resolve(token)
     if book is None:
         return _gone(request)
     pouches = lookbooks.pouches(book)
     found = rows.pouch_rows(AnonymousUser(), pouches, client=True)
-    cards = [{**row, "available": bool(row.get("ct") or row.get("pcs")), "enquire": _enquire(book, row["ref"])}
-             for row in found]
+    cards = [{**{key: row[key] for key in _CARD_KEYS}, "available": bool(row.get("ct") or row.get("pcs")),
+              "enquire": _enquire(book, row["ref"])} for row in found]
     return _noindex(render(request, "inventory/lookbook_public.html", {"book": book, "cards": cards}))
 
 
-@require_GET
+@never_cache
+@require_safe
 def lookbook_photo(request, token, media_id):
+    """Only the photo the page shows for a pouch in this lookbook — its first by rank, via rows._photos,
+    not any photo stepped to by id."""
     book = lookbooks.resolve(token)
-    asset = MediaAsset.objects.filter(pk=media_id, scope="pouch", kind=MediaKind.PHOTO, is_archived=False).first()
-    if book is None or asset is None or not book.stones.filter(pouch_id=asset.scope_id).exists():
+    if book is None:
         return _gone(request)
-    pouch = Pouch.objects.get(pk=asset.scope_id)
+    asset = MediaAsset.objects.filter(pk=media_id, scope="pouch", kind=MediaKind.PHOTO, is_archived=False).first()
+    if asset is None:
+        return _gone(request)
+    pouch_pk = int(asset.scope_id)
+    if not book.stones.filter(pouch_id=pouch_pk).exists() or rows._photos([pouch_pk]).get(pouch_pk) != asset.pk:
+        return _gone(request)
+    pouch = Pouch.objects.get(pk=pouch_pk)
     extension = os.path.splitext(asset.file_name or "")[1].lower() or ".jpg"
     try:
         url = storage.presign_get(asset.storage_key, asset.mime_type, f"{pouch.ref}{extension}")
     except storage.StorageNotConfigured:
-        return _noindex(render(request, "inventory/lookbook_gone.html", status=503))
+        return _gone(request, status=503, message="Photos are unavailable right now.")
     return _noindex(redirect(url))

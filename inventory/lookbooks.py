@@ -4,7 +4,7 @@ Every write needs the sale right — the showroom builds them. Nothing here touc
 import re
 import secrets
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Max
 
 from accounts.capabilities import VIEW_SALE
@@ -14,8 +14,10 @@ from . import inputs, services
 from .models import Lookbook, LookbookStone, Pouch
 
 RIGHT = "Only a role that sees sale prices builds lookbooks."
-#: NRN refs, or "batch · pouch no." — the separators people type between several
-_SPLIT = re.compile(r"[,\n;]+")
+#: a token: an NRN ref, or "batch · pouch no." (also "batch/pouch no." — nobody can type ·)
+_TOKEN = re.compile(r"[^\s,;·/]+(?:\s*[·/]\s*[^\s,;·/]+)?")
+#: a public lookbook token: secrets.token_urlsafe(16) output, never more
+_PUBLIC_TOKEN = re.compile(r"[A-Za-z0-9_-]{1,32}\Z")
 
 
 def _by(user):
@@ -41,6 +43,7 @@ def update(user, book, title, note, shared):
     inputs.fits(Lookbook, title=title)
     book.title, book.note, book.shared = title, (note or "").strip(), bool(shared)
     book.save(update_fields=["title", "note", "shared", "updated_at"])
+    log(user, "UPDATE", "inv_lookbook", book.pk, f"{book.title} ({'link on' if book.shared else 'link off'})")
     return book
 
 
@@ -48,9 +51,10 @@ def _find(token):
     token = token.strip()
     if token.upper().startswith("NRN-"):
         return Pouch.objects.filter(ref__iexact=token).first()
-    if "·" in token:
-        batch, _, number = (part.strip() for part in token.partition("·"))
-        return Pouch.objects.filter(batch__code__iexact=batch, pouch_no=number).first()
+    for sep in ("·", "/"):
+        if sep in token:
+            batch, _, number = (part.strip() for part in token.partition(sep))
+            return Pouch.objects.filter(batch__code__iexact=batch, pouch_no=number).first()
     return None
 
 
@@ -59,8 +63,8 @@ def add_stones(user, book, text):
     """Each NRN ref or "batch · pouch no." in ``text`` joins the end, in the order typed.
     Returns (added, unknown, skipped): unknown as typed, skipped already in the lookbook."""
     require(user, VIEW_SALE, RIGHT)
-    tokens = [t.strip() for chunk in _SPLIT.split(text or "") for t in
-              (chunk.split() if "·" not in chunk else [chunk]) if t.strip()]
+    book = Lookbook.objects.select_for_update().get(pk=book.pk)
+    tokens = _TOKEN.findall(text or "")
     have = set(book.stones.values_list("pouch_id", flat=True))
     position = (book.stones.aggregate(m=Max("position"))["m"] or 0)
     added, unknown, skipped = [], [], []
@@ -72,9 +76,14 @@ def add_stones(user, book, text):
             skipped.append(pouch)
         else:
             position += 1
-            LookbookStone.objects.create(lookbook=book, pouch=pouch, position=position)
-            have.add(pouch.pk)
-            added.append(pouch)
+            try:
+                with transaction.atomic():
+                    LookbookStone.objects.create(lookbook=book, pouch=pouch, position=position)
+            except IntegrityError:
+                skipped.append(pouch)
+            else:
+                have.add(pouch.pk)
+                added.append(pouch)
     book.save(update_fields=["updated_at"])
     return added, unknown, skipped
 
@@ -89,6 +98,7 @@ def _renumber(book):
 @transaction.atomic
 def move(user, book, pouch_pk, step):
     require(user, VIEW_SALE, RIGHT)
+    book = Lookbook.objects.select_for_update().get(pk=book.pk)
     _renumber(book)
     stones = list(book.stones.order_by("position"))
     index = next((i for i, s in enumerate(stones) if s.pouch_id == pouch_pk), None)
@@ -105,6 +115,7 @@ def move(user, book, pouch_pk, step):
 @transaction.atomic
 def remove(user, book, pouch_pk):
     require(user, VIEW_SALE, RIGHT)
+    book = Lookbook.objects.select_for_update().get(pk=book.pk)
     book.stones.filter(pouch_id=pouch_pk).delete()
     _renumber(book)
     book.save(update_fields=["updated_at"])
@@ -117,7 +128,9 @@ def delete(user, book):
 
 
 def resolve(token):
-    return Lookbook.objects.filter(token=token, shared=True).first() if token else None
+    if not token or not _PUBLIC_TOKEN.match(token):
+        return None
+    return Lookbook.objects.filter(token=token, shared=True).first()
 
 
 def pouches(book):

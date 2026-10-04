@@ -75,9 +75,9 @@ an `X-Robots-Tag: noindex` header.
 ### Photos
 
 `/lookbook/<token>/photo/<media_id>/` (`lookbook_photo`): serves (as the staff
-`photo` view does — a presigned redirect named by the NRN ref) only a live
-pouch photo whose pouch is in that lookbook and only while the link is On;
-anything else is the same 404.
+`photo` view does — a presigned redirect named by the NRN ref) only the photo
+the page shows for that pouch (its first by rank) and only while the link is
+On; anything else is the same 404.
 
 ## Settings
 
@@ -116,3 +116,16 @@ view), lookbook PDFs.
   with the link Off.
 - The Enquire link: WhatsApp text, email fallback, hidden when neither is set.
 - The masking walk covers every new URL.
+
+## Addendum (build)
+
+Fix wave, part 5e:
+
+- `lookbooks.resolve` rejects a token that is not `[A-Za-z0-9_-]{1,32}` before
+  it reaches the database (a NUL or other stray byte 404s instead of raising).
+- `lookbook_photo` serves only the photo the page shows for that pouch — its
+  first by rank, per `rows._photos` — never any other live photo of the same
+  pouch stepped to by id.
+- The add-stones tokenizer also accepts `/` as the batch/pouch-no. separator
+  (nobody can type `·`); `SL01G/2` resolves the same as `SL01G · 2`.
+- Both public views carry `@never_cache` and `@require_safe` (HEAD works).
