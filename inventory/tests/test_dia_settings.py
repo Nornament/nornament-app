@@ -40,6 +40,20 @@ def test_add_rename_delete_a_value(client, accounts_user, diamonds):
     assert "in use" in response.content.decode()
 
 
+def test_a_category_counted_by_a_stock_take_refuses_deletion_cleanly(client, accounts_user, diamonds):
+    """A category no diamond line uses, but a stock take counts, must refuse deletion with a
+    message — not a 500 from the FK's own PROTECT."""
+    from inventory import stock_take
+    from inventory.models import StockTake
+
+    client.force_login(accounts_user)
+    solitaire = DiamondTerm.objects.get(kind="category", value="Solitaire")
+    stock_take.start(accounts_user, StockTake.DIAMONDS, category=solitaire)
+    response = client.post(reverse("inventory:dia_term_delete", args=[solitaire.pk]), follow=True)
+    assert response.status_code == 200 and "in use" in response.content.decode()
+    assert DiamondTerm.objects.filter(pk=solitaire.pk).exists()
+
+
 def test_a_rate_can_be_set_and_codes_edited(client, accounts_user, diamonds):
     client.force_login(accounts_user)
     client.post(reverse("inventory:dia_rate_save"), {"code": "DPCEF VVS-VS", "size_text": "", "cost_rate": "21000",

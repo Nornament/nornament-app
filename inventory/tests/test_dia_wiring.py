@@ -71,9 +71,9 @@ def test_settings_counts_each_suppliers_purchases(client, accounts_user, diamond
     assert '<td class="r">1</td>' in row
 
 
-def test_the_diamond_stock_take_tab_stays_locked(client, accounts_user, diamonds):
+def test_the_diamond_stock_take_tab_is_unlocked(client, accounts_user, diamonds):
     body = _search(client, accounts_user)
-    assert "Movements 🔒" not in body and "Stock take 🔒" in body
+    assert "Movements 🔒" not in body and "Stock take 🔒" not in body
 
 
 def test_the_stones_pouch_ledger_filters_by_stones_reasons_only(client, admin_user_, shelf):

@@ -143,11 +143,13 @@ class StockDocument(models.Model):
         SPLIT = "split", "Split"
         TRANSFER = "transfer", "Transfer"
         MERGE = "merge", "Merge"
+        STOCK_TAKE = "stock_take", "Stock take"
         SINGLE = "single", "Single"
         # diamonds (part 4): listed only on the diamond screens, never on a stones one
         DIA_JOB = "dia_job", "Job card"
         DIA_ASSORT = "dia_assort", "Assortment"
         DIA_PURCHASE = "dia_purchase", "Diamond purchase"
+        DIA_COUNT = "dia_count", "Diamond stock take"
 
     class Status(models.TextChoices):
         OPEN = "open", "Open"
@@ -456,3 +458,60 @@ class DiamondLineCost(models.Model):
 
     def __str__(self):
         return f"{self.cost_rate}/ct on {self.line_id}"
+
+
+class StockTake(models.Model):
+    """A count of one box colour or batch of stones, or one category of diamonds (part 5d).
+
+    Each count keeps the book figure it was taken against; closing posts counted − book as
+    Recount Adjustments on one document and freezes ``result``. Never recomputed after."""
+
+    STONES, DIAMONDS = "stones", "diamonds"
+    SIDES = [(STONES, "Stones"), (DIAMONDS, "Diamonds")]
+    OPEN, CLOSED, CANCELLED = "open", "closed", "cancelled"
+    STATUSES = [(OPEN, "Open"), (CLOSED, "Closed"), (CANCELLED, "Cancelled")]
+
+    number = models.CharField(max_length=12, unique=True)
+    side = models.CharField(max_length=8, choices=SIDES)
+    box_colour = models.ForeignKey(BoxColour, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    batch = models.ForeignKey(Batch, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    category = models.ForeignKey(DiamondTerm, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    status = models.CharField(max_length=10, choices=STATUSES, default=OPEN)
+    started_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    started_at = models.DateTimeField(default=timezone.now)
+    closed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    closed_at = models.DateTimeField(null=True, blank=True)
+    document = models.OneToOneField(StockDocument, null=True, blank=True, on_delete=models.PROTECT,
+                                    related_name="stock_take")
+    result = models.JSONField(null=True, blank=True)
+    note = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "inv_stock_take"
+        ordering = ["-started_at", "-pk"]
+
+    def __str__(self):
+        return self.number
+
+
+class StockTakeCount(models.Model):
+    stock_take = models.ForeignKey(StockTake, on_delete=models.CASCADE, related_name="counts")
+    pouch = models.ForeignKey(Pouch, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    diamond = models.ForeignKey(DiamondLine, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    counted_pcs = models.PositiveIntegerField(null=True, blank=True)
+    counted_ct = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)
+    book_pcs = models.PositiveIntegerField(null=True, blank=True)
+    book_ct = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)
+    counted_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    counted_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "inv_stock_take_count"
+        constraints = [
+            models.UniqueConstraint(fields=["stock_take", "pouch"], condition=Q(pouch__isnull=False),
+                                    name="inv_stock_take_count_pouch"),
+            models.UniqueConstraint(fields=["stock_take", "diamond"], condition=Q(diamond__isnull=False),
+                                    name="inv_stock_take_count_diamond"),
+            models.CheckConstraint(condition=Q(pouch__isnull=True) ^ Q(diamond__isnull=True),
+                                   name="inv_stock_take_count_one_owner"),
+        ]

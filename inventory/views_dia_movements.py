@@ -32,6 +32,9 @@ def opens(document, as_role=""):
     """The screen a diamond document is read on: its job card, its assortment, or Purchases (which
     lists them; a purchase has no page of its own). A reversal opens the document it reversed."""
     document = document.reverses or document
+    if document.kind == Kind.DIA_COUNT:
+        url = reverse("inventory:dia_stock_take", args=[document.stock_take.pk])
+        return url + (f"?{urlencode({'as': as_role})}" if as_role else "")
     name, key = SCREEN[document.kind]
     params = {key: document.pk} if key else {}
     if as_role:
@@ -53,8 +56,11 @@ def movements(request):
     user, role = viewer(request)
     as_role = _as_role(request, user, role)
     kind = request.GET.get("kind", "")
+    # reverses__isnull=True above means every listed document has no reverses of its own, so
+    # opens()'s "document.reverses or document" always falls through to this row's own stock_take
     documents = (StockDocument.objects.filter(kind__in=ledger.DIAMOND_KINDS, reverses__isnull=True)
-                 .select_related("vendor").annotate(lines=Count("movements__diamond", distinct=True)))
+                 .select_related("vendor", "stock_take")
+                 .annotate(lines=Count("movements__diamond", distinct=True)))
     if kind in ledger.DIAMOND_KINDS:
         documents = documents.filter(kind=kind)
     rows = [mask(user, {"pk": d.pk, "number": d.number, "kind": d.get_kind_display(), **ledger.party(d),

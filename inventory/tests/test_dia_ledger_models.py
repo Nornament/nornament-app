@@ -37,9 +37,10 @@ def test_the_diamond_kinds_and_reasons_exist():
 
 def test_each_diamond_kind_has_a_prefix_and_a_right():
     assert {k: ledger.PREFIX[k] for k in ledger.DIAMOND_KINDS} == {
-        K.DIA_JOB: "JC-", K.DIA_ASSORT: "AS-", K.DIA_PURCHASE: "DP-"}
+        K.DIA_JOB: "JC-", K.DIA_ASSORT: "AS-", K.DIA_PURCHASE: "DP-", K.DIA_COUNT: "DST-"}
     assert {k: ledger.RIGHT_FOR_KIND[k] for k in ledger.DIAMOND_KINDS} == {
-        K.DIA_JOB: "accounts.inv_job", K.DIA_ASSORT: "accounts.inv_assort", K.DIA_PURCHASE: "accounts.inv_purchase"}
+        K.DIA_JOB: "accounts.inv_job", K.DIA_ASSORT: "accounts.inv_assort", K.DIA_PURCHASE: "accounts.inv_purchase",
+        K.DIA_COUNT: "accounts.inv_move"}
     assert set(ledger.STONE_KINDS) | set(ledger.DIAMOND_KINDS) == set(K.values)
     assert not set(ledger.STONE_KINDS) & set(ledger.DIAMOND_KINDS)
 

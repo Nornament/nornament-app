@@ -1,0 +1,7 @@
+{% extends "inventory_base.html" %}{% load inventory_extras %}
+{% block title %}{{ take.number }} · Stock take · Diamonds{% endblock %}
+{% block crumb %}<b>Diamonds</b> &nbsp;›&nbsp; <a href="{% url 'inventory:dia_stock_takes' %}{% if as_role %}?as={{ as_role }}{% endif %}">Stock takes</a> &nbsp;›&nbsp; <b class="mono">{{ take.number }}</b>{% endblock %}
+{% block content %}
+{% include "inventory/diamonds/_dsub.html" %}
+{% include "inventory/_stock_take_body.html" with diamonds=True %}
+{% endblock %}

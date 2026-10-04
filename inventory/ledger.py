@@ -28,9 +28,10 @@ ZERO = Decimal("0")
 Kind, Status = StockDocument.Kind, StockDocument.Status
 
 #: the stones kinds: every stones list and page shows only these
-STONE_KINDS = (Kind.PURCHASE, Kind.JOB_WORK, Kind.MEMO, Kind.SPLIT, Kind.TRANSFER, Kind.MERGE, Kind.SINGLE)
+STONE_KINDS = (Kind.PURCHASE, Kind.JOB_WORK, Kind.MEMO, Kind.SPLIT, Kind.TRANSFER, Kind.MERGE, Kind.SINGLE,
+               Kind.STOCK_TAKE)
 #: part 4's diamond kinds, shown only on the diamond screens
-DIAMOND_KINDS = (Kind.DIA_JOB, Kind.DIA_ASSORT, Kind.DIA_PURCHASE)
+DIAMOND_KINDS = (Kind.DIA_JOB, Kind.DIA_ASSORT, Kind.DIA_PURCHASE, Kind.DIA_COUNT)
 #: the kinds that close themselves when nothing is outstanding (stones job work and memos)
 OPENABLE = (Kind.JOB_WORK, Kind.MEMO)
 #: the kinds whose credits are checked, owner by owner, against what is out on them
@@ -42,10 +43,12 @@ RIGHT_FOR_KIND = {
     Kind.PURCHASE: INV_PURCHASE, Kind.JOB_WORK: INV_JOB, Kind.MEMO: INV_MOVE,
     Kind.SPLIT: INV_ASSORT, Kind.TRANSFER: INV_ASSORT, Kind.MERGE: INV_ASSORT, Kind.SINGLE: INV_MOVE,
     Kind.DIA_JOB: INV_JOB, Kind.DIA_ASSORT: INV_ASSORT, Kind.DIA_PURCHASE: INV_PURCHASE,
+    Kind.STOCK_TAKE: INV_MOVE, Kind.DIA_COUNT: INV_MOVE,
 }
 #: automatic numbers; job work and memos carry the challan or memo no. people type
 PREFIX = {Kind.PURCHASE: "PUR-", Kind.SPLIT: "SPL-", Kind.TRANSFER: "TRF-", Kind.MERGE: "MRG-", Kind.SINGLE: "MOV-",
-          Kind.DIA_JOB: "JC-", Kind.DIA_ASSORT: "AS-", Kind.DIA_PURCHASE: "DP-"}
+          Kind.DIA_JOB: "JC-", Kind.DIA_ASSORT: "AS-", Kind.DIA_PURCHASE: "DP-",
+          Kind.STOCK_TAKE: "STK-", Kind.DIA_COUNT: "DST-"}
 REVERSAL_PREFIX = "REV-"
 #: the reasons that bring a pouch or a diamond line into being, so a reversal can find what it created
 CREATING = (Movement.Reason.PURCHASE, Movement.Reason.SPLIT, Movement.Reason.ASSORT_IN)

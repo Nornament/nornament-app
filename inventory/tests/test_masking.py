@@ -130,7 +130,7 @@ def test_an_admin_preview_masks_like_the_role(client, admin_user_, diamonds):
 
 def test_every_inventory_screen_is_walked():
     covered = ({name for name, _, _ in SCREENS} | {name for name, _ in DIAMOND_SCREENS} | LEDGER_SCREENS
-               | DIA_LEDGER_SCREENS | FINDER_SCREENS | PRICE_SCREENS)
+               | DIA_LEDGER_SCREENS | FINDER_SCREENS | PRICE_SCREENS | STOCK_TAKE_SCREENS)
     named = set()
     for resolver in get_resolver().url_patterns:
         if isinstance(resolver, URLResolver) and resolver.app_name == "inventory":
@@ -144,6 +144,63 @@ def test_every_inventory_screen_is_walked():
 #: the ledger's screens, walked by test_no_ledger_screen_shows_a_login_what_it_may_not_see
 LEDGER_SCREENS = {"inventory:document", "inventory:job_work_list", "inventory:memo_list", "inventory:recent",
                   "inventory:purchase", "inventory:split", "inventory:transfer", "inventory:merge"}
+
+#: part 5d's stock-take screens, walked by test_no_stock_take_screen_shows_a_login_what_it_may_not_see
+STOCK_TAKE_SCREENS = {"inventory:stock_takes", "inventory:stock_take", "inventory:dia_stock_takes",
+                      "inventory:dia_stock_take"}
+
+
+@pytest.fixture
+def counted(admin_user_, shelf):
+    from decimal import Decimal
+
+    from inventory import stock_take
+    from inventory.models import StockTake
+
+    take = stock_take.start(admin_user_, StockTake.STONES, batch=shelf["batch"])
+    stock_take.save_counts(admin_user_, take, {shelf["onyx"].pk: (20, Decimal("10.5"))})   # −2 ct × ₹7,919
+    return take
+
+
+@pytest.mark.parametrize("fixture", ["sales_user", "karigar_user", "production_user", "graphic_user"])
+def test_no_stock_take_screen_shows_a_login_what_it_may_not_see(client, counted, request, fixture):
+    client.force_login(request.getfixturevalue(fixture))
+    for url in (reverse("inventory:stock_takes"), reverse("inventory:stock_take", args=[counted.pk])):
+        response = client.get(url)
+        assert response.status_code == 200, url
+        assert "15,838" not in response.content.decode(), f"{url} leaked the variance value to {fixture}"
+
+
+def test_accounts_sees_the_variance_value(client, accounts_user, counted):
+    client.force_login(accounts_user)
+    assert "15,838" in client.get(reverse("inventory:stock_take", args=[counted.pk])).content.decode()
+
+
+@pytest.fixture
+def dia_counted(admin_user_, diamonds):
+    from decimal import Decimal
+
+    from inventory import stock_take
+    from inventory.models import DiamondTerm, StockTake
+
+    natural = DiamondTerm.objects.get(kind="category", value="Natural Diamond")
+    take = stock_take.start(admin_user_, StockTake.DIAMONDS, category=natural)
+    stock_take.save_counts(admin_user_, take, {diamonds["round"].pk: (None, Decimal("3"))})   # −0.4 ct × ₹16,517
+    return take
+
+
+@pytest.mark.parametrize("fixture", ["sales_user", "karigar_user", "production_user", "graphic_user"])
+def test_no_diamond_stock_take_screen_shows_a_login_what_it_may_not_see(client, dia_counted, request, fixture):
+    client.force_login(request.getfixturevalue(fixture))
+    for url in (reverse("inventory:dia_stock_takes"), reverse("inventory:dia_stock_take", args=[dia_counted.pk])):
+        response = client.get(url)
+        assert response.status_code == 200, url
+        assert "6,607" not in response.content.decode(), f"{url} leaked the variance value to {fixture}"
+
+
+def test_accounts_sees_the_diamond_variance_value(client, accounts_user, dia_counted):
+    client.force_login(accounts_user)
+    assert "6,607" in client.get(reverse("inventory:dia_stock_take", args=[dia_counted.pk])).content.decode()
 
 
 def _ledger_urls(d):

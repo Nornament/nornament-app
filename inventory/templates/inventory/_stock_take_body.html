@@ -1,0 +1,17 @@
+{% load inventory_extras %}
+<div class="shelfbar"><h1>{{ take.number }} · {{ scope }}</h1>
+  <span class="chip {% if reversed %}crit{% elif take.status == 'open' %}warn{% elif take.status == 'closed' %}good{% endif %}"><span class="dot"></span>{% if reversed %}Reversed{% else %}{{ take.get_status_display }}{% endif %}</span></div>
+{% if error %}<div class="banner crit"><div class="banner-ic">!</div><div><h4>{{ error }}</h4></div></div>{% endif %}
+<p class="hint">Started by {{ take.started_by.full_name|default:take.started_by.get_username|default:"system" }} on {{ take.started_at|date:"d M Y" }}{% if take.closed_at %} · {{ take.get_status_display|lower }} {{ take.closed_at|date:"d M Y" }}{% endif %}{% if take.document %} · posted as {% if diamonds %}<b class="mono">{{ take.document.number }}</b>{% else %}<a class="mono" href="{% url 'inventory:document' take.document.pk %}">{{ take.document.number }}</a>{% endif %}{% endif %}</p>
+<form method="post">{% csrf_token %}{% if shown and editable %}<input type="hidden" name="shown" value="{{ shown }}">{% endif %}
+<div class="card" style="overflow:hidden">{% include "inventory/_stock_sheet.html" %}
+  {% if may and not previewing %}<div class="card-b" style="border-top:1px solid var(--border)">
+    {% if take.status == 'open' %}<button class="btn" name="action" value="save">Save counts</button>
+      <button class="btn pri" name="action" value="close">Close and post</button>
+      <button class="btn gho" name="action" value="cancel">Cancel stock take</button>
+    {% elif take.status == 'closed' and take.document and not reversed %}<button class="btn gho" name="action" value="reverse">Reverse</button>{% endif %}
+    {% if confirming %}<div class="banner warn" style="margin:10px 0 0"><div class="banner-ic">?</div><div><h4>{{ confirm_message }}</h4>
+      <input type="hidden" name="confirm" value="{{ confirming }}"><button class="btn pri" name="action" value="{{ confirming }}">Yes, {% if confirming == 'close' %}close and post{% elif confirming == 'cancel' %}cancel it{% else %}reverse it{% endif %}</button>
+      <a class="btn" href="">No</a></div></div>{% endif %}
+  </div>{% endif %}
+</div></form>

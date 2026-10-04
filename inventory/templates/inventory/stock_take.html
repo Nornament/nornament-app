@@ -1,0 +1,6 @@
+{% extends "inventory_base.html" %}{% load inventory_extras %}
+{% block title %}{{ take.number }} · Stock take{% endblock %}
+{% block crumb %}Stock control &nbsp;›&nbsp; <a href="{% url 'inventory:stock_takes' %}">Stock takes</a> &nbsp;›&nbsp; <b class="mono">{{ take.number }}</b>{% endblock %}
+{% block content %}
+{% include "inventory/_stock_take_body.html" with diamonds=False %}
+{% endblock %}
