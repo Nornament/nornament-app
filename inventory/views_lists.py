@@ -94,25 +94,25 @@ def _name(user):
 
 @login_required
 def splits(request):
-    """Every split, newest first: the pouch it came out of, the pouches it made, and the carats taken
-    out (any loss included). A reversal is not listed on its own: the split it undid reads Reversed.
-    Merges join this list when they are built (5c).
+    """Every split and merge, newest first: the pouches emptied into the move, the pouches it filled,
+    and the carats taken out (a split's loss included; a merge's loss is on its target, after).
+    A reversal is not listed on its own: the document it undid reads Reversed.
 
-    ponytail: every split on one page; page through when there are hundreds.
+    ponytail: every split and merge on one page; page through when there are hundreds.
     """
     if _client(request):
         return redirect("inventory:shelf")
-    documents = (StockDocument.objects.filter(kind=Kind.SPLIT, reverses__isnull=True)
+    documents = (StockDocument.objects.filter(kind__in=(Kind.SPLIT, Kind.MERGE), reverses__isnull=True)
                  .select_related("created_by").prefetch_related("movements__pouch__batch")
                  .order_by("-created_at", "-pk"))
     rows = []
     for d in documents:
         moves = sorted(d.movements.all(), key=lambda m: m.pk)
-        out = [m for m in moves if m.direction == Movement.OUT]
-        source = out[0].pouch if out else None
+        out = [m for m in moves if m.direction == Movement.OUT and (d.kind == Kind.SPLIT or m.reason == Movement.Reason.MERGE)]
+        sources = list(dict.fromkeys(m.pouch for m in out))
         rows.append(mask(request.user, {
-            "pk": d.pk, "number": d.number, "occurred_on": d.occurred_on,
-            "source": str(source) if source else "", "source_ref": source.ref if source else "",
+            "pk": d.pk, "number": d.number, "occurred_on": d.occurred_on, "kind": d.get_kind_display(),
+            "source": ", ".join(str(p) for p in sources), "source_ref": ", ".join(p.ref for p in sources),
             "made": [str(m.pouch) for m in moves if m.direction == Movement.IN],
             "ct": sum((m.ct or ledger.ZERO for m in out), ledger.ZERO),
             "reversed": d.status == Status.REVERSED, "by": _name(d.created_by),
