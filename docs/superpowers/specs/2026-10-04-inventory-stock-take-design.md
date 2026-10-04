@@ -32,7 +32,7 @@ Both padlocks come off: the stones rail's **Stock takes** and both sides' top
 
 URL names `inventory:stock_takes`, `inventory:dia_stock_takes`. Open stock
 takes first, then closed and cancelled, newest first: number (`ST-000001`),
-scope, status chip, started by / on, counted *n* of *m*, closed by / on.
+scope, status chip, started by / on, counted *n* (the sheet shows *n* of *m*), closed by / on.
 
 **Start a stock take** (for `inv_move` holders): stones choose a box colour
 **or** a batch (two selects; exactly one); diamonds choose a category. Starting
@@ -65,7 +65,10 @@ URL names `inventory:stock_take`, `inventory:dia_stock_take`.
 - Saving a count stores the counted figures **and the book figures at that
   moment**. The variance is counted − book-at-count, so stone sold or moved
   after its pouch was counted is not undone by the recount. Re-saving a row
-  refreshes both.
+  with a **changed** count refreshes both; a row saved again unchanged keeps
+  the book it was counted against.
+- The sheet's Book column shows the book at count for a counted row, the live
+  book otherwise.
 - **Close** posts one document — kind **Stock take** (`STK-`, stones) or
   **Diamond stock take** (`DST-`, diamonds) — holding a Recount Adjustment line
   for every counted difference: pieces and carats separately, as
@@ -112,8 +115,8 @@ URL names `inventory:stock_take`, `inventory:dia_stock_take`.
   `book_ct`, `counted_by`, `counted_at`; unique per (stock take, pouch) and
   (stock take, diamond).
 - `StockDocument.Kind`: `STOCK_TAKE = "stock_take", "Stock take"` (in
-  `STONE_KINDS`, prefix `STK-`) and `DIA_STOCK_TAKE = "dia_stock_take",
-  "Diamond stock take"` (in `DIAMOND_KINDS`, prefix `DST-`); both
+  `STONE_KINDS`, prefix `STK-`) and `DIA_COUNT = "dia_count",
+  "Diamond stock take"` (the kind column holds 12 characters) (in `DIAMOND_KINDS`, prefix `DST-`); both
   `RIGHT_FOR_KIND = INV_MOVE`. The diamond Movements tab opens a diamond stock
   take's document on its stock take.
 - One migration.
