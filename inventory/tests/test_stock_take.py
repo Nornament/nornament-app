@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 from django.core.exceptions import PermissionDenied
 
-from inventory import ledger, ledger_single, services, stock_take
+from inventory import dia_services, ledger, ledger_assort, ledger_single, services, stock_take
 from inventory.models import Batch, BoxColour, DiamondTerm, Movement, Pouch, StockDocument, StockTake
 from stock.services import ServiceError
 
@@ -177,3 +177,55 @@ def test_every_write_needs_the_movement_right(sales_user, accounts_user, shelf):
                  lambda: stock_take.reverse(sales_user, take)):
         with pytest.raises(PermissionDenied):
             call()
+
+
+# I2: a counted pouch (or diamond line) transferred or assorted out of scope must stay on the
+# sheet and close normally — `owners()` always includes anything already counted.
+
+
+def test_a_counted_pouch_transferred_out_of_scope_still_closes(accounts_user, admin_user_, shelf):
+    other = Batch.objects.create(code="SL02R", box_colour_id="R", family="S", cls="L", seq="02")
+    onyx = shelf["onyx"]
+    take = stock_take.start(accounts_user, StockTake.STONES, batch=shelf["batch"])
+    stock_take.save_counts(accounts_user, take, {onyx.pk: (20, D("12"))})           # 0.5 ct short
+    ledger_assort.transfer_pouch(admin_user_, onyx, other, "9")
+    assert onyx.pk in {p.pk for p in stock_take.owners(take)}                       # stays on the sheet
+    stock_take.close(accounts_user, take)
+    take.refresh_from_db()
+    move = take.document.movements.get()
+    assert (take.status, move.pcs, move.ct, move.direction) == (StockTake.CLOSED, None, D("0.5"), Movement.OUT)
+    assert _held(onyx).batch_id == other.pk                                        # still re-filed, as transferred
+
+
+# I3: owner's ruling — refuse the close while a counted owner has had a Recount Adjustment
+# (any document, or none — a bare diamond recount) recorded after it was counted here.
+
+
+def test_close_refuses_a_stale_count_recounted_since_and_a_resave_or_clear_lets_it_through(accounts_user, shelf):
+    onyx = shelf["onyx"]
+    take = stock_take.start(accounts_user, StockTake.STONES, batch=shelf["batch"])
+    stock_take.save_counts(accounts_user, take, {onyx.pk: (20, D("12"))})           # 0.5 ct short
+    ledger_single.post_recount(accounts_user, onyx, None, D("12"))                  # same shortfall, one pouch
+    with pytest.raises(ServiceError, match="was recounted since it was counted here"):
+        stock_take.close(accounts_user, take)
+    take.refresh_from_db()
+    assert take.status == StockTake.OPEN and take.document is None
+    stock_take.save_counts(accounts_user, take, {onyx.pk: (None, None)})            # clearing it lets the close through
+    stock_take.close(accounts_user, take)
+    take.refresh_from_db()
+    assert take.status == StockTake.CLOSED and take.document is None               # nothing left to post
+
+
+def test_close_refuses_a_diamond_line_recounted_since_and_a_resave_lets_it_through(accounts_user, diamonds):
+    round_ = diamonds["round"]
+    take = stock_take.start(accounts_user, StockTake.DIAMONDS, category=_natural())
+    stock_take.save_counts(accounts_user, take, {round_.pk: (None, D("3"))})        # 0.4 ct short
+    dia_services.recount_line(accounts_user, round_, D("3"))                        # a bare recount, no document
+    with pytest.raises(ServiceError, match="was recounted since it was counted here"):
+        stock_take.close(accounts_user, take)
+    take.refresh_from_db()
+    assert take.status == StockTake.OPEN
+    stock_take.save_counts(accounts_user, take, {round_.pk: (None, D("3.4"))})       # a changed re-save stamps a fresh counted_at
+    stock_take.close(accounts_user, take)
+    take.refresh_from_db()
+    assert take.status == StockTake.CLOSED

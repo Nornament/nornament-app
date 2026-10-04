@@ -1,4 +1,5 @@
 """Part 5d: the stock-take screens."""
+import html
 from decimal import Decimal
 
 import pytest
@@ -14,6 +15,11 @@ LIST = reverse("inventory:stock_takes")
 
 def _sheet(take):
     return reverse("inventory:stock_take", args=[take.pk])
+
+
+def _shown_field(body):
+    """The hidden ``shown`` field's value, unescaped back to the JSON text the server rendered."""
+    return html.unescape(body.split('name="shown" value="')[1].split('"')[0])
 
 
 def test_the_rail_and_the_tab_open_the_list(client, sales_user, shelf):
@@ -66,7 +72,7 @@ def test_close_needs_a_second_press_then_posts(client, accounts_user, shelf):
     assert first.status_code == 200 and "Yes, close and post" in first.content.decode()
     take.refresh_from_db()
     assert take.status == StockTake.OPEN and take.counts.count() == 1        # the counts were saved
-    second = client.post(_sheet(take), {"action": "close", "confirm": "1", f"pcs_{onyx.pk}": "20", f"ct_{onyx.pk}": "12"})
+    second = client.post(_sheet(take), {"action": "close", "confirm": "close", f"pcs_{onyx.pk}": "20", f"ct_{onyx.pk}": "12"})
     take.refresh_from_db()
     assert second.status_code == 302 and take.status == StockTake.CLOSED
     body = client.get(_sheet(take)).content.decode()
@@ -79,12 +85,12 @@ def test_cancel_and_reverse_from_the_sheet(client, accounts_user, shelf):
     take = stock_take.start(accounts_user, StockTake.STONES, batch=shelf["batch"])
     stock_take.save_counts(accounts_user, take, {shelf["onyx"].pk: (20, D("12"))})
     stock_take.close(accounts_user, take)
-    client.post(_sheet(take), {"action": "reverse", "confirm": "1"})
+    client.post(_sheet(take), {"action": "reverse", "confirm": "reverse"})
     take.refresh_from_db()
     assert take.document.status == StockDocument.Status.REVERSED
     assert "Reversed" in client.get(_sheet(take)).content.decode()
     other = stock_take.start(accounts_user, StockTake.STONES, batch=shelf["batch"])
-    client.post(_sheet(other), {"action": "cancel", "confirm": "1"})
+    client.post(_sheet(other), {"action": "cancel", "confirm": "cancel"})
     other.refresh_from_db()
     assert other.status == StockTake.CANCELLED
 
@@ -148,7 +154,7 @@ def test_a_diamond_stock_take_counts_carats_and_closes(client, accounts_user, di
     round_ = diamonds["round"]
     body = client.get(sheet).content.decode()
     assert round_.ref in body and f'name="pcs_{round_.pk}"' not in body
-    client.post(sheet, {"action": "close", "confirm": "1", f"ct_{round_.pk}": "3"})
+    client.post(sheet, {"action": "close", "confirm": "close", f"ct_{round_.pk}": "3"})
     take.refresh_from_db()
     assert take.status == StockTake.CLOSED and take.document.kind == StockDocument.Kind.DIA_COUNT
     movements = client.get(reverse("inventory:dia_movements")).content.decode()
@@ -170,3 +176,95 @@ def test_a_stones_stock_take_is_not_a_diamond_page(client, accounts_user, shelf)
     take = stock_take.start(accounts_user, StockTake.STONES, batch=shelf["batch"])
     client.force_login(accounts_user)
     assert client.get(reverse("inventory:dia_stock_take", args=[take.pk])).status_code == 404
+
+
+# C2: two people on one sheet — a stale page's blank box must not delete another person's count,
+# and an emptied box must still remove one.
+
+
+def test_a_stale_page_does_not_wipe_another_counters_save(client, accounts_user, shelf):
+    take = stock_take.start(accounts_user, StockTake.STONES, batch=shelf["batch"])
+    onyx, ruby = shelf["onyx"], shelf["ruby"]
+    client.force_login(accounts_user)
+    sheet = _sheet(take)
+    # A and B both load the sheet before either has counted anything: every box blank
+    shown = _shown_field(client.get(sheet).content.decode())
+    # A counts and saves the onyx
+    client.post(sheet, {"action": "save", f"pcs_{onyx.pk}": "20", f"ct_{onyx.pk}": "12", "shown": shown})
+    assert take.counts.count() == 1
+    # B posts the stale page: onyx boxes still read blank (as B's page showed), ruby now counted
+    client.post(sheet, {"action": "save", f"pcs_{onyx.pk}": "", f"ct_{onyx.pk}": "",
+                        f"ct_{ruby.pk}": "39", "shown": shown})
+    assert {c.pouch_id for c in take.counts.all()} == {onyx.pk, ruby.pk}        # A's onyx count survives
+
+
+def test_an_emptied_box_still_removes_a_count_even_with_the_shown_field(client, accounts_user, shelf):
+    take = stock_take.start(accounts_user, StockTake.STONES, batch=shelf["batch"])
+    onyx = shelf["onyx"]
+    client.force_login(accounts_user)
+    sheet = _sheet(take)
+    client.post(sheet, {"action": "save", f"pcs_{onyx.pk}": "20", f"ct_{onyx.pk}": "12",
+                        "shown": _shown_field(client.get(sheet).content.decode())})
+    assert take.counts.count() == 1
+    shown = _shown_field(client.get(sheet).content.decode())                    # now shows 20 / 12
+    client.post(sheet, {"action": "save", f"pcs_{onyx.pk}": "", f"ct_{onyx.pk}": "", "shown": shown})
+    assert not take.counts.exists()
+
+
+# I1: the confirm flow — a different button after a confirm banner must ask again for its own action.
+
+
+def test_pressing_a_different_button_after_a_confirm_banner_asks_again(client, accounts_user, shelf):
+    take = stock_take.start(accounts_user, StockTake.STONES, batch=shelf["batch"])
+    client.force_login(accounts_user)
+    sheet = _sheet(take)
+    body = client.post(sheet, {"action": "close"}).content.decode()
+    assert 'name="confirm" value="close"' in body
+    # the stale confirm value rides along, but the button pressed names a different action
+    body = client.post(sheet, {"action": "cancel", "confirm": "close"}).content.decode()
+    take.refresh_from_db()
+    assert take.status == StockTake.OPEN                                        # not cancelled
+    assert 'name="confirm" value="cancel"' in body                              # asks to confirm Cancel instead
+    # and the reverse: a stale "confirm cancel" does not let Close through either
+    body = client.post(sheet, {"action": "close", "confirm": "cancel"}).content.decode()
+    take.refresh_from_db()
+    assert take.status == StockTake.OPEN                                        # not closed
+    assert 'name="confirm" value="close"' in body
+    # the matching confirm does go through
+    client.post(sheet, {"action": "close", "confirm": "close"})
+    take.refresh_from_db()
+    assert take.status == StockTake.CLOSED
+
+
+# Minors: a crafted non-numeric category, and the diamond sheet's own right check.
+
+
+def test_a_non_numeric_category_post_is_a_message_not_a_500(client, accounts_user, diamonds):
+    client.force_login(accounts_user)
+    response = client.post(DIA_LIST, {"category": "not-a-number"}, follow=True)
+    assert response.status_code == 200
+    assert "Choose the category to count." in response.content.decode()
+    assert not StockTake.objects.exists()
+
+
+def test_a_diamond_sheet_post_without_inv_move_is_403(client, sales_user, accounts_user, diamonds):
+    take = stock_take.start(accounts_user, StockTake.DIAMONDS, category=_natural())
+    client.force_login(sales_user)
+    assert client.post(reverse("inventory:dia_stock_take", args=[take.pk]), {"action": "save"}).status_code == 403
+
+
+# I4: a bad value in one row must not throw away everything typed, and must name the row.
+
+
+def test_a_bad_value_in_one_row_keeps_the_other_rows_typed_value_and_saves_nothing(client, accounts_user, shelf):
+    take = stock_take.start(accounts_user, StockTake.STONES, batch=shelf["batch"])
+    onyx, ruby = shelf["onyx"], shelf["ruby"]
+    client.force_login(accounts_user)
+    sheet = _sheet(take)
+    shown = _shown_field(client.get(sheet).content.decode())
+    body = client.post(sheet, {"action": "save", f"pcs_{onyx.pk}": "20", f"ct_{onyx.pk}": "1..2",
+                               f"ct_{ruby.pk}": "39", "shown": shown}).content.decode()
+    assert "SL01G · 1 — Carats: 1..2 is not a number." in body
+    assert 'value="20"' in body and 'value="1..2"' in body        # the bad row's own typing survives
+    assert 'value="39"' in body                                   # so does the other row's good typing
+    assert not take.counts.exists()                                # nothing was saved

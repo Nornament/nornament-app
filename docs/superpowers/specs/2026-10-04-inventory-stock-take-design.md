@@ -58,7 +58,9 @@ URL names `inventory:stock_take`, `inventory:dia_stock_take`.
 - A closed or cancelled stock take renders read-only from its frozen result,
   with a link to the posted document (stones: the document page; diamonds: the
   stock take itself carries it) and, for a closed one not yet reversed, a
-  **Reverse** button (`inv_move`).
+  **Reverse** button (`inv_move`). Its foot shows no money, only counted *n* of
+  *m* and total variance ct — the frozen result never recomputes a value, and
+  the day's rate is gone with the live sheet.
 
 ## Counting and posting
 
@@ -141,3 +143,23 @@ count, any stock-app change.
 - Rights (403), client view (redirect), the padlocks come off on both sides,
   the diamond Movements tab opens a diamond stock take, the masking walk
   (variance value only with the cost right; preview masks and hides forms).
+
+## Addendum (build)
+
+- **Recount since refusal**: closing refuses while any counted owner has had a
+  Recount Adjustment movement — on any document, or none (a bare diamond
+  recount) — recorded after that count's `counted_at` that is not this stock
+  take's own. Nothing is written and the take stays open; re-saving that row
+  with a changed count, or clearing it, lets the close go through.
+- **Concurrent counting**: the sheet renders a hidden field of what it showed
+  for each row (pk → [pcs, ct], as strings or null). Only a row whose posted
+  value differs from that is sent to `save_counts`, so a stale page's blank
+  box can no longer delete another counter's save, and an emptied box still
+  removes a count.
+- **Out-of-scope counted rows**: a pouch or diamond line counted here and then
+  moved out of scope (a transfer, an assortment) stays on the sheet and closes
+  normally; `owners()` always includes anything already counted, in or out of
+  scope.
+- **Form-field limit**: `DATA_UPLOAD_MAX_NUMBER_FIELDS` is raised to 5000, so a
+  large box colour's sheet (two fields per row) no longer answers 400 on Save,
+  Close or Cancel.
