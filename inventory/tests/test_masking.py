@@ -146,7 +146,8 @@ LEDGER_SCREENS = {"inventory:document", "inventory:job_work_list", "inventory:me
                   "inventory:purchase", "inventory:split", "inventory:transfer", "inventory:merge"}
 
 #: part 5d's stock-take screens, walked by test_no_stock_take_screen_shows_a_login_what_it_may_not_see
-STOCK_TAKE_SCREENS = {"inventory:stock_takes", "inventory:stock_take"}
+STOCK_TAKE_SCREENS = {"inventory:stock_takes", "inventory:stock_take", "inventory:dia_stock_takes",
+                      "inventory:dia_stock_take"}
 
 
 @pytest.fixture
@@ -173,6 +174,33 @@ def test_no_stock_take_screen_shows_a_login_what_it_may_not_see(client, counted,
 def test_accounts_sees_the_variance_value(client, accounts_user, counted):
     client.force_login(accounts_user)
     assert "15,838" in client.get(reverse("inventory:stock_take", args=[counted.pk])).content.decode()
+
+
+@pytest.fixture
+def dia_counted(admin_user_, diamonds):
+    from decimal import Decimal
+
+    from inventory import stock_take
+    from inventory.models import DiamondTerm, StockTake
+
+    natural = DiamondTerm.objects.get(kind="category", value="Natural Diamond")
+    take = stock_take.start(admin_user_, StockTake.DIAMONDS, category=natural)
+    stock_take.save_counts(admin_user_, take, {diamonds["round"].pk: (None, Decimal("3"))})   # −0.4 ct × ₹16,517
+    return take
+
+
+@pytest.mark.parametrize("fixture", ["sales_user", "karigar_user", "production_user", "graphic_user"])
+def test_no_diamond_stock_take_screen_shows_a_login_what_it_may_not_see(client, dia_counted, request, fixture):
+    client.force_login(request.getfixturevalue(fixture))
+    for url in (reverse("inventory:dia_stock_takes"), reverse("inventory:dia_stock_take", args=[dia_counted.pk])):
+        response = client.get(url)
+        assert response.status_code == 200, url
+        assert "6,607" not in response.content.decode(), f"{url} leaked the variance value to {fixture}"
+
+
+def test_accounts_sees_the_diamond_variance_value(client, accounts_user, dia_counted):
+    client.force_login(accounts_user)
+    assert "6,607" in client.get(reverse("inventory:dia_stock_take", args=[dia_counted.pk])).content.decode()
 
 
 def _ledger_urls(d):

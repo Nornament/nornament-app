@@ -33,7 +33,8 @@ def test_client_view_shows_neither_the_lists_nor_the_filters(client, admin_user_
 def test_the_diamond_movements_tab_is_live_and_stock_take_stays_locked(client, admin_user_, diamonds):
     client.force_login(admin_user_)
     body = client.get(reverse("inventory:diamonds")).content.decode()
-    assert f'href="{reverse("inventory:dia_movements")}">Movements</a>' in body and "Stock take 🔒" in body
+    assert f'href="{reverse("inventory:dia_movements")}">Movements</a>' in body
+    assert f'href="{reverse("inventory:dia_stock_takes")}">Stock take</a>' in body
     previewed = client.get(reverse("inventory:diamonds"), {"as": "SALES"}).content.decode()       # only an admin previews
     assert f'href="{reverse("inventory:dia_movements")}?as=SALES">Movements</a>' in previewed
 

@@ -120,3 +120,53 @@ def test_the_sheet_colspans_line_up_with_the_header(client, accounts_user, shelf
     header = body.split("<thead>")[1].split("</thead>")[0]
     assert header.count("<th") == 10        # Pouch, Stone, Size, Book/Counted pcs, Book/Counted ct, Variance pcs/ct, value
     assert 'colspan="8"' in body.split("<tfoot>")[1]
+
+
+DIA_LIST = reverse("inventory:dia_stock_takes")
+
+
+def _natural():
+    from inventory.models import DiamondTerm
+
+    return DiamondTerm.objects.get(kind="category", value="Natural Diamond")
+
+
+def test_the_diamond_tab_opens_the_diamond_list_and_a_preview_carries(client, admin_user_, diamonds):
+    client.force_login(admin_user_)
+    body = client.get(reverse("inventory:diamonds")).content.decode()
+    assert f'href="{DIA_LIST}">Stock take</a>' in body and "Stock take 🔒" not in body
+    previewed = client.get(reverse("inventory:diamonds"), {"as": "SALES"}).content.decode()
+    assert f'href="{DIA_LIST}?as=SALES">Stock take</a>' in previewed
+
+
+def test_a_diamond_stock_take_counts_carats_and_closes(client, accounts_user, diamonds):
+    client.force_login(accounts_user)
+    response = client.post(DIA_LIST, {"category": _natural().pk})
+    take = StockTake.objects.get()
+    sheet = reverse("inventory:dia_stock_take", args=[take.pk])
+    assert response["Location"] == sheet
+    round_ = diamonds["round"]
+    body = client.get(sheet).content.decode()
+    assert round_.ref in body and f'name="pcs_{round_.pk}"' not in body
+    client.post(sheet, {"action": "close", "confirm": "1", f"ct_{round_.pk}": "3"})
+    take.refresh_from_db()
+    assert take.status == StockTake.CLOSED and take.document.kind == StockDocument.Kind.DIA_COUNT
+    movements = client.get(reverse("inventory:dia_movements")).content.decode()
+    assert f'href="{sheet}"' in movements                       # the diamond Movements tab opens it
+
+
+def test_a_preview_masks_and_hides_every_form(client, admin_user_, accounts_user, diamonds):
+    take = stock_take.start(accounts_user, StockTake.DIAMONDS, category=_natural())
+    stock_take.save_counts(accounts_user, take, {diamonds["round"].pk: (None, D("3"))})   # −0.4 ct × ₹16,517
+    client.force_login(admin_user_)
+    sheet = reverse("inventory:dia_stock_take", args=[take.pk])
+    assert "6,607" in client.get(sheet).content.decode()
+    previewed = client.get(sheet, {"as": "SALES"}).content.decode()
+    assert "6,607" not in previewed and "Save counts" not in previewed and 'name="ct_' not in previewed
+    assert "Start a stock take" not in client.get(DIA_LIST, {"as": "SALES"}).content.decode()
+
+
+def test_a_stones_stock_take_is_not_a_diamond_page(client, accounts_user, shelf):
+    take = stock_take.start(accounts_user, StockTake.STONES, batch=shelf["batch"])
+    client.force_login(accounts_user)
+    assert client.get(reverse("inventory:dia_stock_take", args=[take.pk])).status_code == 404

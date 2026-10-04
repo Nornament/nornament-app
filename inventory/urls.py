@@ -66,6 +66,8 @@ urlpatterns = [
     path("diamonds/purchases/<int:pk>/reverse/", views_dia_purchase.purchase_reverse, name="dia_purchase_reverse"),
     path("diamonds/movements/", views_dia_movements.movements, name="dia_movements"),
     path("diamonds/lines/<str:ref>/", views_dia_movements.line, name="dia_line"),
+    path("diamonds/stock-takes/", views_stock_take.dia_stock_takes, name="dia_stock_takes"),
+    path("diamonds/stock-takes/<int:pk>/", views_stock_take.dia_stock_take_sheet, name="dia_stock_take"),
     path("stock-takes/", views_stock_take.stock_takes, name="stock_takes"),
     path("stock-takes/<int:pk>/", views_stock_take.stock_take_sheet, name="stock_take"),
 ]

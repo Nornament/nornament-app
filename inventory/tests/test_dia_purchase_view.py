@@ -102,7 +102,8 @@ def test_the_diamond_purchase_tab(client, accounts_user, production_user, diamon
     client.force_login(accounts_user)
     body = client.get(reverse("inventory:diamonds")).content.decode()
     assert f'href="{reverse("inventory:dia_purchase")}">Purchase</a>' in body
-    assert f'href="{reverse("inventory:dia_movements")}">Movements</a>' in body and "Stock take 🔒" in body
+    assert f'href="{reverse("inventory:dia_movements")}">Movements</a>' in body
+    assert f'href="{reverse("inventory:dia_stock_takes")}">Stock take</a>' in body
     client.force_login(production_user)
     body = client.get(reverse("inventory:diamonds")).content.decode()
     assert "<button disabled>Purchase 🔒</button>" in body

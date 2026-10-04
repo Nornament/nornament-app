@@ -59,8 +59,8 @@ would fight on every page.
         <a class="{% if dtab == 'movements' %}on{% endif %}" href="{% url 'inventory:dia_movements' %}{% if as_role %}?as={{ as_role }}{% endif %}">Movements</a>
         {% if caps.inv_purchase and caps.view_cost and caps.view_vendor %}<a class="{% if dtab == 'purchase' %}on{% endif %}" href="{% url 'inventory:dia_purchase' %}">Purchase</a>
         {% else %}<button disabled>Purchase 🔒</button>{% endif %}
-        <a class="{% if dtab != 'purchase' and dtab != 'movements' %}on{% endif %}" href="{% url 'inventory:diamonds' %}">Diamond stock</a>
-        <button disabled title="Coming soon">Stock take 🔒</button>
+        <a class="{% if dtab != 'purchase' and dtab != 'movements' and dtab != 'stock_take' %}on{% endif %}" href="{% url 'inventory:diamonds' %}">Diamond stock</a>
+        <a class="{% if dtab == 'stock_take' %}on{% endif %}" href="{% url 'inventory:dia_stock_takes' %}{% if as_role %}?as={{ as_role }}{% endif %}">Stock take</a>
       {% else %}
         <a class="{% if tab == 'shelf' %}on{% endif %}" href="{% url 'inventory:shelf' %}">Shelf</a>
         {% if pouch_ref %}<a class="{% if tab == 'lot' %}on{% endif %}" href="{% url 'inventory:pouch' pouch_ref %}">Pouch detail</a>

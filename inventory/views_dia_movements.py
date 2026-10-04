@@ -32,6 +32,9 @@ def opens(document, as_role=""):
     """The screen a diamond document is read on: its job card, its assortment, or Purchases (which
     lists them; a purchase has no page of its own). A reversal opens the document it reversed."""
     document = document.reverses or document
+    if document.kind == Kind.DIA_COUNT:
+        url = reverse("inventory:dia_stock_take", args=[document.stock_take.pk])
+        return url + (f"?{urlencode({'as': as_role})}" if as_role else "")
     name, key = SCREEN[document.kind]
     params = {key: document.pk} if key else {}
     if as_role:

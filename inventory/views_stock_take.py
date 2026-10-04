@@ -14,8 +14,9 @@ from stock.masking import mask
 from stock.services import ServiceError, require
 
 from . import dia_services, inputs, ledger, stock_take
-from .models import Batch, BoxColour, StockDocument, StockTake
+from .models import Batch, BoxColour, DiamondTerm, StockDocument, StockTake
 from .views import _client, _everything, _page
+from .views_diamonds import dia_page, viewer
 
 CONFIRM = {"close": "Close and post the counted differences?", "cancel": "Cancel this stock take? Nothing is posted.",
            "reverse": "Reverse the recount this stock take posted?"}
@@ -151,3 +152,41 @@ def stock_take_sheet(request, pk):
     return _page(request, "inventory/stock_take.html", _everything(request), tab="stock_take",
                  error=error, confirming=confirming, confirm_message=CONFIRM.get(confirming), may=may,
                  previewing=False, editable=take.status == StockTake.OPEN and may, **_context(request.user, take))
+
+
+@login_required
+def dia_stock_takes(request):
+    user, _ = viewer(request)
+    previewing = user is not request.user
+    error = None
+    if request.method == "POST":
+        require(request.user, INV_MOVE, stock_take.RIGHT)
+        try:
+            take = stock_take.start(request.user, StockTake.DIAMONDS,
+                                    category=DiamondTerm.objects.filter(kind="category", pk=request.POST.get("category") or 0).first())
+        except ServiceError as refused:
+            error = refused.messages[0]
+        else:
+            return redirect("inventory:dia_stock_take", pk=take.pk)
+    takes = StockTake.objects.filter(side=StockTake.DIAMONDS).select_related("category", "started_by", "closed_by")
+    return dia_page(request, "inventory/diamonds/stock_takes.html", dtab="stock_take", error=error,
+                    takes=_listed(takes), categories=DiamondTerm.objects.filter(kind="category").order_by("sort", "value"),
+                    may=request.user.has_perm(INV_MOVE) and not previewing)
+
+
+@login_required
+def dia_stock_take_sheet(request, pk):
+    user, _ = viewer(request)
+    previewing = user is not request.user
+    take = get_object_or_404(StockTake.objects.select_related("category", "document"), pk=pk, side=StockTake.DIAMONDS)
+    error = confirming = None
+    if request.method == "POST":
+        done, error, confirming = _act(request, take, _sheet_rows(request.user, take))
+        if done:
+            return done
+        take.refresh_from_db()
+    context = _context(user, take)
+    may = request.user.has_perm(INV_MOVE) and not previewing
+    return dia_page(request, "inventory/diamonds/stock_take.html", dtab="stock_take", error=error, confirming=confirming,
+                    confirm_message=CONFIRM.get(confirming), may=may, previewing=previewing,
+                    editable=take.status == StockTake.OPEN and may, **context)
