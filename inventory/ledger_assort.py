@@ -13,7 +13,7 @@ from django.db import transaction
 from accounts.capabilities import INV_ASSORT
 from stock.services import ServiceError, require
 
-from . import ledger, services
+from . import inputs, ledger, services
 from .models import Movement, Pouch, PriceEntry, StockDocument
 
 Reason = Movement.Reason
@@ -146,6 +146,7 @@ def merge_pouches(user, pouches, into=None, new_pouch_no="", size_text="", loss_
     loss. The merged pouch is valued at the carat-weighted rate of everything in it, before the loss.
     Returns the document and the rate written (``None`` when one of the pouches had no valuation)."""
     require(user, INV_ASSORT, "Only a role that assorts can merge pouches.")
+    inputs.fits(Pouch, size_text=size_text)
     held = list(services.stocked(Pouch.objects.filter(pk__in={p.pk for p in pouches})))
     if len(held) < 2:
         raise ServiceError("Tick at least two pouches to merge.")

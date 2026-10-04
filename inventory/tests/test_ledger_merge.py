@@ -122,6 +122,21 @@ def test_merging_needs_the_assort_right(sales_user, production_user, shelf, twin
     assert not StockDocument.objects.exists()
 
 
+def test_a_size_too_long_for_an_existing_target_is_refused(accounts_user, shelf, twin):
+    _refused(accounts_user, [shelf["onyx"], twin], "is too long", into=shelf["onyx"], size_text="x" * 81)
+
+
+def test_merging_two_uncounted_pouches_sums_only_the_carats(accounts_user, admin_user_, shelf):
+    first = services.open_pouch(admin_user_, shelf["batch"], {"pouch_no": "9", **ONYX}, pcs=None, ct=D("3"), rate=D("100"))
+    second = services.open_pouch(admin_user_, shelf["batch"], {"pouch_no": "10", **ONYX}, pcs=None, ct=D("2"), rate=D("100"))
+    doc, rate = ledger_assort.merge_pouches(accounts_user, [first, second], into=first)
+    assert rate == D("100.0000")
+    held = _held(first)
+    assert held.on_pcs is None and held.on_ct == D("5")
+    into = doc.movements.get(pouch=first, direction=Movement.IN)
+    assert into.pcs is None and into.ct == D("2")
+
+
 def test_reversing_a_merge_into_a_pouch_gives_the_stock_back_and_puts_its_rate_back(accounts_user, shelf, twin):
     onyx = shelf["onyx"]
     doc, _ = ledger_assort.merge_pouches(accounts_user, [onyx, twin], into=onyx, loss_ct=D("0.5"))
