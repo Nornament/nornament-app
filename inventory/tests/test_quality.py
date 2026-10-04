@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 from django.urls import reverse
 
-from inventory import rows, services
+from inventory import rows, services, views_quality
 from inventory.views_quality import TITLES
 
 pytestmark = pytest.mark.django_db
@@ -27,9 +27,9 @@ def flawed(admin_user_, shelf):
     return {**shelf, "jade": jade}
 
 
-def _page(client, user, check):
+def _page(client, user, check, **params):
     client.force_login(user)
-    return client.get(reverse("inventory:quality", args=[check]))
+    return client.get(reverse("inventory:quality", args=[check]), params)
 
 
 def test_each_filter_lists_exactly_the_rails_live_count(client, accounts_user, flawed):
@@ -40,6 +40,15 @@ def test_each_filter_lists_exactly_the_rails_live_count(client, accounts_user, f
         assert body.count(ROW) == counts[check], check
         assert f'{TITLES[check]}<span class="ct">{counts[check]}</span>' in body, check
         assert f'class="on" href="{reverse("inventory:quality", args=[check])}"' in body, check
+
+
+def test_the_list_pages_but_the_chip_keeps_the_full_count(client, accounts_user, flawed, monkeypatch):
+    monkeypatch.setattr(views_quality, "PAGE", 1)
+    body = _page(client, accounts_user, "no_size").content.decode()
+    assert body.count(ROW) == 1 and "Page 1 of 2" in body
+    assert f'<span class="chip">2 pouches</span>' in body                   # the chip is the rail's full count
+    second = _page(client, accounts_user, "no_size", page="2").content.decode()
+    assert second.count(ROW) == 1 and "Page 2 of 2" in second
 
 
 def test_each_row_opens_its_pouch(client, accounts_user, flawed):

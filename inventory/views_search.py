@@ -1,17 +1,22 @@
 """The top bar's search: pouches and diamond lines by the names people use for them.
 
-Internal only — in client view it redirects, as the ledger screens do — and no
-money on the page: a result says where to go, not what it is worth.
+No money on the page: a result says where to go, not what it is worth. In stones client
+view a pouch is stock control, so it is never shown here — but the search box stays live
+on a diamond page (which ignores that flag), so a client-view admin's diamond query still
+works: it just finds diamond lines, never pouches.
 """
+from urllib.parse import urlencode
+
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
-from django.shortcuts import redirect
+from django.urls import reverse
 
 from stock.masking import mask
 
 from . import dia_rules, dia_services, services
 from .models import DiamondLine, Pouch
 from .views import _client, _everything, _page
+from .views_diamonds import viewer
 
 CAP = 50
 MIN = 2
@@ -41,24 +46,31 @@ def _pouch_row(user, p):
                        "ct": p.on_ct})
 
 
-def _line_row(user, line):
+def _line_row(user, line, as_role=""):
     shape, colour, clarity = line.shape, line.colour, line.code.clarity
+    href = reverse("inventory:dia_line", args=[line.ref]) + (f"?{urlencode({'as': as_role})}" if as_role else "")
     return mask(user, {"ref": line.ref, "item_code": line.code_id, "category": line.category.value,
                        "shape": shape.value if shape else "", "colour": colour.value if colour else "",
                        "clarity": clarity.value if clarity else "", "size": line.size_text or line.band.value,
-                       "batch": line.batch_no, "ct": line.on_ct})
+                       "batch": line.batch_no, "ct": line.on_ct, "href": href})
 
 
 @login_required
 def search(request):
-    if _client(request):
-        return redirect("inventory:shelf")
+    """Internal only for pouches — a client never sees stock control — but diamonds have no client
+    view, so a client-view admin on a diamond page still gets diamond results, never pouches."""
+    client = _client(request)
+    user, role = viewer(request)
+    as_role = role if user is not request.user else ""
     q = (request.GET.get("q") or "").strip()
     pouches, lines, found = [], [], {"pouches": 0, "lines": 0}
     if len(q) >= MIN:
-        hits, matched = _pouches(q), _lines(q)
-        found = {"pouches": hits.count(), "lines": matched.count()}
-        pouches = [_pouch_row(request.user, p) for p in hits[:CAP]]
-        lines = [_line_row(request.user, line) for line in matched[:CAP]]
+        matched = _lines(q)
+        found["lines"] = matched.count()
+        lines = [_line_row(user, line, as_role) for line in matched[:CAP]]
+        if not client:
+            hits = _pouches(q)
+            found["pouches"] = hits.count()
+            pouches = [_pouch_row(request.user, p) for p in hits[:CAP]]
     return _page(request, "inventory/search.html", _everything(request), tab="search", q=q, short=len(q) < MIN,
                  pouches=pouches, lines=lines, found=found)

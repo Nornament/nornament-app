@@ -5,6 +5,7 @@ Quantities are sums of movements and value is carats × the latest valuation, so
 rate annotated.
 """
 from decimal import ROUND_HALF_UP, Decimal
+from itertools import groupby
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -134,9 +135,20 @@ def add_price(user, pouch, kind, rate, effective_from):
 GROUP_KINDS = (PriceEntry.VALUATION, PriceEntry.LIST)
 
 
+def _latest_by_pouch(pks, kind):
+    """The current row of that kind for each pouch in ``pks`` that has one, in one query."""
+    entries = PriceEntry.objects.filter(pouch_id__in=pks, kind=kind).order_by("pouch_id", "-effective_from", "-pk")
+    return {pouch_id: next(group) for pouch_id, group in groupby(entries, key=lambda e: e.pouch_id)}
+
+
 @transaction.atomic
 def set_group_price(user, pouches, kind, rate, effective_from, described=""):
-    """One dated price per pouch in a filtered group. Nothing is overwritten: each pouch gets its own row."""
+    """One dated price per pouch in a filtered group. Nothing is overwritten: each pouch gets its own row —
+    except a pouch already at this exact rate and date, which is left alone (a double-click writes once).
+
+    Returns ``(written, stale)``: pouches actually written, and of those, how many already have a newer
+    row of the same kind so this one is not yet their current price.
+    """
     if kind not in GROUP_KINDS:
         raise ServiceError("A group sets a valuation or a list price; purchase prices come from purchases.")
     require(user, INV_MASTERS, "Only a role that edits inventory records can set a price.")
@@ -154,13 +166,19 @@ def set_group_price(user, pouches, kind, rate, effective_from, described=""):
     pouches = list(pouches)
     if not pouches:
         raise ServiceError("No pouch matches these filters.")
+    latest = _latest_by_pouch([p.pk for p in pouches], kind)
+    to_write = [p for p in pouches
+                if p.pk not in latest or (latest[p.pk].rate, latest[p.pk].effective_from) != (rate, effective_from)]
+    if not to_write:
+        return 0, 0
     by = _by(user)
     entries = PriceEntry.objects.bulk_create([
-        PriceEntry(pouch=pouch, kind=kind, rate=rate, effective_from=effective_from, set_by=by) for pouch in pouches
+        PriceEntry(pouch=pouch, kind=kind, rate=rate, effective_from=effective_from, set_by=by) for pouch in to_write
     ])
-    detail = f"{kind} {rate.normalize():f}/ct on {len(pouches)} pouch{'es' if len(pouches) != 1 else ''}"
+    detail = f"{kind} {rate.normalize():f}/ct on {len(to_write)} pouch{'es' if len(to_write) != 1 else ''}"
     log(user, "INSERT", "inv_price", entries[0].pk, f"{detail} ({described})" if described else detail)
-    return len(pouches)
+    stale = sum(1 for p in to_write if p.pk in latest and latest[p.pk].effective_from > effective_from)
+    return len(to_write), stale
 
 
 def recount_deltas(pouch, pcs, ct):

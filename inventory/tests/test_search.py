@@ -34,8 +34,29 @@ def test_the_box_is_live_on_both_sides_and_padlocked_in_client_view(client, admi
     client.post(reverse("inventory:set_view"), {"view": "client"})
     body = client.get(reverse("inventory:shelf")).content.decode()
     assert box not in body and "Search batch, pouch, stone… 🔒" in body
-    response = client.get(reverse("inventory:search"), {"q": "onyx"})
-    assert response.status_code == 302 and response["Location"] == reverse("inventory:shelf")
+    assert box in client.get(reverse("inventory:diamonds")).content.decode()      # diamonds ignores the flag
+
+
+def test_a_diamond_page_search_still_works_in_stones_client_view_but_never_shows_pouches(
+        client, admin_user_, shelf, diamonds):
+    client.force_login(admin_user_)
+    client.post(reverse("inventory:set_view"), {"view": "client"})
+    rnd = diamonds["round"]
+    response = client.get(reverse("inventory:search"), {"q": "DRFGH"})
+    assert response.status_code == 200                                           # no redirect: the query is not dropped
+    body = response.content.decode()
+    assert _line(rnd) in body
+    assert '<span class="card-t">Pouches</span>' not in body                     # no pouch results section
+    assert shelf["onyx"].ref not in body and shelf["ruby"].ref not in body        # no stones ref, ever
+
+
+def test_search_carries_the_admin_preview_onto_diamond_links_only(client, admin_user_, shelf, diamonds):
+    rnd = diamonds["round"]
+    client.force_login(admin_user_)
+    body = client.get(reverse("inventory:search"), {"q": "DRFGH", "as": "SALES"}).content.decode()
+    assert f'href="{reverse("inventory:dia_line", args=[rnd.ref])}?as=SALES"' in body
+    body = client.get(reverse("inventory:search"), {"q": "onyx", "as": "SALES"}).content.decode()
+    assert _pouch(shelf["onyx"]) in body                                         # pouch links never carry ?as=
 
 
 def test_a_pouch_is_found_by_ref_batch_batch_and_pouch_no_or_stone_name(client, accounts_user, shelf):

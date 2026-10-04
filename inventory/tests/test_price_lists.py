@@ -1,4 +1,5 @@
 """Part 5b: the two price lists and setting one price for a whole group."""
+import re
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -24,8 +25,8 @@ def test_a_group_set_writes_one_dated_row_per_pouch_and_one_log(accounts_user, s
     before = PriceEntry.objects.count()
     logs = ActivityLog.objects.count()
     when = timezone.localdate() - timedelta(days=1)
-    n = services.set_group_price(accounts_user, _group(), PriceEntry.LIST, Decimal("1250"), when, described="stone=onyx")
-    assert n == 2
+    n, stale = services.set_group_price(accounts_user, _group(), PriceEntry.LIST, Decimal("1250"), when, described="stone=onyx")
+    assert (n, stale) == (2, 0)
     made = PriceEntry.objects.filter(kind=PriceEntry.LIST)
     assert PriceEntry.objects.count() == before + 2 and made.count() == 2
     assert {e.pouch_id for e in made} == {shelf["onyx"].pk, shelf["ruby"].pk}
@@ -33,6 +34,18 @@ def test_a_group_set_writes_one_dated_row_per_pouch_and_one_log(accounts_user, s
     assert ActivityLog.objects.count() == logs + 1
     assert ActivityLog.objects.latest("pk").detail == "list 1250/ct on 2 pouches (stone=onyx)"
     assert services.latest_price(shelf["onyx"], PriceEntry.LIST).rate == Decimal("1250")
+
+
+def test_a_repeated_set_writes_nothing_more_and_a_backdated_one_warns_it_is_not_current(accounts_user, shelf):
+    today = timezone.localdate()
+    n, stale = services.set_group_price(accounts_user, _group(), PriceEntry.LIST, Decimal("1250"), today)
+    assert (n, stale) == (2, 0)
+    before = PriceEntry.objects.count()
+    n, stale = services.set_group_price(accounts_user, _group(), PriceEntry.LIST, Decimal("1250"), today)  # a double click
+    assert (n, stale) == (0, 0) and PriceEntry.objects.count() == before
+    yesterday = today - timedelta(days=1)
+    n, stale = services.set_group_price(accounts_user, _group(), PriceEntry.LIST, Decimal("1300"), yesterday)
+    assert (n, stale) == (2, 2)                                      # written, but the row dated today is still current
 
 
 def test_a_valuation_set_becomes_the_rate_on_file_and_nothing_is_overwritten(accounts_user, shelf):
@@ -134,6 +147,13 @@ def test_a_login_without_the_right_is_refused_both(client, request, priced, fixt
     assert _get(client, user, SELLING).status_code == 403
 
 
+def test_size_is_a_text_input_with_a_datalist_not_a_select(client, accounts_user, priced):
+    body = _get(client, accounts_user, COST).content.decode()
+    assert '<input class="inp" name="size_text" value="" placeholder="Size" list="sizes"' in body
+    assert '<datalist id="sizes">' in body and '<option value="14*10">' in body and '<option value="Free Far">' in body
+    assert '<select class="inp" name="size_text"' not in body
+
+
 def test_the_filters_narrow_the_list(client, accounts_user, priced):
     def refs(**params):
         body = _get(client, accounts_user, COST, **params).content.decode()
@@ -178,10 +198,19 @@ def test_client_view_padlocks_both_and_redirects_both(client, admin_user_, price
         assert response.status_code == 302 and response["Location"] == reverse("inventory:shelf"), url
 
 
-def _set(client, user, url, count, rate="1250", **filters):
+def _group_digest(client, user, url, **params):
     client.force_login(user)
-    return client.post(url, {"f": "1", "stock": "1", **filters, "count": str(count), "rate": rate,
-                             "effective_from": timezone.localdate().isoformat()})
+    body = client.get(url, params).content.decode()
+    match = re.search(r'name="group" value="([0-9a-f]*)"', body)
+    return match.group(1) if match else ""
+
+
+def _set(client, user, url, count, rate="1250", group=None, effective_from=None, **filters):
+    client.force_login(user)
+    if group is None:
+        group = _group_digest(client, user, url, f="1", stock="1", **filters)
+    return client.post(url, {"f": "1", "stock": "1", **filters, "count": str(count), "group": group, "rate": rate,
+                             "effective_from": effective_from or timezone.localdate().isoformat()})
 
 
 def _said(response):
@@ -211,7 +240,7 @@ def test_setting_a_valuation_from_the_cost_list_shows_on_the_pouch(client, accou
 
 def test_a_changed_group_or_a_bad_rate_writes_nothing_and_says_why(client, accounts_user, priced):
     before = PriceEntry.objects.count()
-    response = _set(client, accounts_user, SELLING, 5)
+    response = _set(client, accounts_user, SELLING, 5, group="0" * 64)
     assert _said(response) == ["The group changed since the page loaded — check the count and set again."]
     response = _set(client, accounts_user, SELLING, 2, rate="0")
     assert _said(response) == ["The rate has to be a number above zero, at most ten digits before the point."]
@@ -224,11 +253,38 @@ def test_a_changed_group_or_a_bad_rate_writes_nothing_and_says_why(client, accou
 
 def test_a_date_that_does_not_exist_is_refused_and_writes_nothing(client, accounts_user, priced):
     before = PriceEntry.objects.count()
-    client.force_login(accounts_user)
-    response = client.post(SELLING, {"f": "1", "stock": "1", "count": "2", "rate": "1250",
-                                     "effective_from": "2026-02-30"})
+    response = _set(client, accounts_user, SELLING, 2, effective_from="2026-02-30")
     assert _said(response) == ["That date does not exist."]
     assert PriceEntry.objects.count() == before
+
+
+def test_a_same_count_but_swapped_pouches_is_refused(client, accounts_user, admin_user_, shelf):
+    before = PriceEntry.objects.count()
+    stale_group = _group_digest(client, accounts_user, SELLING, f="1", stock="1")
+    services.recount(accounts_user, shelf["ruby"], None, Decimal("0"))                # ruby empties
+    services.open_pouch(admin_user_, shelf["batch"], {"pouch_no": "9", "stone_name": "Jade"},
+                        pcs=1, ct=Decimal("1"), rate=None)                             # jade fills — same count
+    response = _set(client, accounts_user, SELLING, 2, group=stale_group)
+    assert _said(response) == ["The group changed since the page loaded — check the count and set again."]
+    assert PriceEntry.objects.count() == before
+
+
+def test_posting_the_same_set_twice_writes_the_rows_once(client, accounts_user, priced):
+    first = _set(client, accounts_user, SELLING, 2, batch="SL")
+    assert _said(first) == ["List price set on 2 pouches."]
+    before = PriceEntry.objects.count()
+    second = _set(client, accounts_user, SELLING, 2, batch="SL")                      # the double click
+    assert _said(second) == ["Already set — nothing changed."]
+    assert PriceEntry.objects.count() == before
+
+
+def test_a_backdated_set_warns_it_is_not_yet_the_current_price(client, accounts_user, priced):
+    response = _set(client, accounts_user, SELLING, 1, stone="onyx", effective_from="2026-08-15")
+    assert _said(response) == [
+        "List price set on 1 pouch.",
+        "1 of these pouches have a newer list price, so this one is not their current price.",
+    ]
+    assert services.latest_price(priced["onyx"], PriceEntry.LIST).effective_from == date(2026, 9, 1)
 
 
 def test_the_form_shows_only_to_who_may_set_and_states_the_count(client, accounts_user, sales_user, priced):
