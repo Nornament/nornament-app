@@ -4,7 +4,8 @@ from decimal import Decimal
 import pytest
 from django.core.exceptions import PermissionDenied
 
-from inventory import ledger_assort, services
+from inventory import ledger, ledger_assort, services
+from inventory.ledger_assort import SplitPart
 from inventory.models import Batch, Movement, Pouch, PriceEntry, StockDocument
 from stock.services import ServiceError
 
@@ -119,3 +120,41 @@ def test_merging_needs_the_assort_right(sales_user, production_user, shelf, twin
         with pytest.raises(PermissionDenied):
             ledger_assort.merge_pouches(user, [shelf["onyx"], twin], into=shelf["onyx"])
     assert not StockDocument.objects.exists()
+
+
+def test_reversing_a_merge_into_a_pouch_gives_the_stock_back_and_puts_its_rate_back(accounts_user, shelf, twin):
+    onyx = shelf["onyx"]
+    doc, _ = ledger_assort.merge_pouches(accounts_user, [onyx, twin], into=onyx, loss_ct=D("0.5"))
+    ledger.reverse_document(accounts_user, doc)
+    assert (_held(onyx).on_pcs, _held(onyx).on_ct, _held(onyx).rate) == (20, D("12.5"), D("7919"))
+    assert (_held(twin).on_pcs, _held(twin).on_ct, _held(twin).rate) == (10, D("7.5"), D("9000"))
+    assert StockDocument.objects.get(pk=doc.pk).status == StockDocument.Status.REVERSED
+
+
+def test_a_revaluation_after_the_merge_is_not_undone(accounts_user, admin_user_, shelf, twin):
+    from django.utils import timezone
+
+    onyx = shelf["onyx"]
+    doc, _ = ledger_assort.merge_pouches(accounts_user, [onyx, twin], into=onyx)
+    services.add_price(admin_user_, onyx, PriceEntry.VALUATION, D("9999"), timezone.localdate())
+    ledger.reverse_document(accounts_user, doc)
+    assert _held(onyx).rate == D("9999")
+
+
+def test_reversing_a_merge_into_a_new_pouch_leaves_it_at_zero(accounts_user, shelf, twin):
+    doc, _ = ledger_assort.merge_pouches(accounts_user, [shelf["onyx"], twin], into=None, new_pouch_no="7")
+    ledger.reverse_document(accounts_user, doc)
+    new = Pouch.objects.get(batch=shelf["batch"], pouch_no="7")
+    assert (_held(new).on_pcs, _held(new).on_ct) == (0, D("0"))
+    assert (_held(shelf["onyx"]).on_ct, _held(twin).on_ct) == (D("12.5"), D("7.5"))
+
+
+@pytest.mark.parametrize("into_new", [False, True])
+def test_a_merge_whose_target_has_moved_since_is_not_reversed(accounts_user, shelf, twin, into_new):
+    doc, _ = ledger_assort.merge_pouches(accounts_user, [shelf["onyx"], twin],
+                                         into=None if into_new else shelf["onyx"], new_pouch_no="7")
+    target = Pouch.objects.get(batch=shelf["batch"], pouch_no="7") if into_new else shelf["onyx"]
+    ledger_assort.split_pouch(accounts_user, target, 2, D("1"), [SplitPart("9", 2, D("1"))])
+    with pytest.raises(ServiceError, match="has moved since"):
+        ledger.reverse_document(accounts_user, doc)
+    assert StockDocument.objects.get(pk=doc.pk).status != StockDocument.Status.REVERSED
