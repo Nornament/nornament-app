@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
@@ -41,9 +41,15 @@ def test_no_weight_means_no_value(admin_user_, shelf):
 
 
 def test_the_latest_valuation_is_the_rate(shelf, admin_user_):
-    services.add_price(admin_user_, shelf["onyx"], PriceEntry.VALUATION, Decimal("8000"), date(2030, 1, 1))
+    services.add_price(admin_user_, shelf["onyx"], PriceEntry.VALUATION, Decimal("8000"), date.today())
     assert _held(shelf["onyx"]).rate == Decimal("8000")
     assert shelf["onyx"].prices.count() == 2            # the old rate is kept
+
+
+def test_a_future_dated_price_is_refused(shelf, admin_user_):
+    with pytest.raises(ServiceError, match="cannot take effect in the future"):
+        services.add_price(admin_user_, shelf["onyx"], PriceEntry.VALUATION, Decimal("8000"),
+                           date.today() + timedelta(days=1))
 
 
 def test_sales_may_neither_save_nor_price(shelf, sales_user):

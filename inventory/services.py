@@ -123,6 +123,8 @@ def add_price(user, pouch, kind, rate, effective_from):
     if kind not in dict(PriceEntry.KINDS):
         raise ServiceError(f"{kind} is not a kind of price.")
     _check_quantities(None, None, rate)
+    if effective_from > timezone.localdate():
+        raise ServiceError("A price cannot take effect in the future: the newest one is the current one.")
     entry = PriceEntry.objects.create(pouch=pouch, kind=kind, rate=rate, effective_from=effective_from, set_by=_by(user))
     log(user, "INSERT", "inv_price", entry.pk, f"{kind} {rate}/ct on {pouch}")
     return entry

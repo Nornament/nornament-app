@@ -54,8 +54,8 @@ If the opening pouch has no other candidate, the page says
 
 New `StockDocument.Kind.MERGE = "merge", "Merge"` (migration: the kind's
 choices), numbered `MRG-`, right `INV_ASSORT`, added to `STONE_KINDS` and
-`RIGHT_FOR_KIND`; `Reason.MERGE` added to `ledger.CREATING` so a reversal finds
-a pouch the merge created.
+`RIGHT_FOR_KIND`. See the addendum for why `Reason.MERGE` is not added to
+`ledger.CREATING`.
 
 `ledger_assort.merge_pouches(user, pouches, into, new_pouch_no="", size_text="", loss_pcs=None, loss_ct=None, note="")`:
 
@@ -80,9 +80,10 @@ After posting, the target gets a new dated `PriceEntry` of kind valuation, at
 the carat-weighted average rate of everything now in it **before the loss**:
 Σ(ct × rate) / Σ ct over the sources and, for an existing target, its own
 stock — rounded to 4 places. When any of those carries weight but no valuation,
-no row is written and the success message adds
-"— no valuation set: one of the pouches had none." List prices are not carried:
-a new pouch has none; an existing target keeps its own.
+or when none of them carries any weight at all, no row is written and the
+success message adds "— no valuation set: a pouch had no weight or no
+valuation." List prices are not carried: a new pouch has none; an existing
+target keeps its own.
 
 ### Refusals (each writes nothing; `ServiceError` message shown on the form)
 
@@ -105,9 +106,10 @@ shelf before reading anything, GET or POST.
 ## Reversal
 
 The document page's existing **Reverse** works on a merge through
-`ledger.reverse_document`: refused when the merged pouch (if new) has moved
-since; otherwise the emptied pouches get their stock back and the target loses
-it. Reversing a merge whose target was an **existing** pouch also writes a
+`ledger.reverse_document`: refused when the target has moved since the
+merge's own movements (see the addendum — this covers both a new and an
+existing target); otherwise the emptied pouches get their stock back and the
+target loses it. Reversing a merge whose target was an **existing** pouch also writes a
 valuation row on the target at its rate from before the merge (the latest
 valuation created before the merge document), so the average does not linger.
 A merge into a new pouch leaves the new pouch at zero with its valuation, as a
@@ -139,3 +141,19 @@ undo-last for merges (reverse the document instead), any diamond change.
   for an existing target; refused when a new target has moved since.
 - The Splits & merges list shows both kinds; the Recent movements kind filter
   offers Merge.
+
+## Addendum (build)
+
+`Reason.MERGE` is not added to `ledger.CREATING`. A reversal is instead
+refused when the target has any movement after the merge's own. This covers
+both a new and an existing target; `CREATING` would have made a merge into
+an existing pouch unreversible (an existing target already has movements
+from before the merge, so "created" would be the wrong test for it).
+
+The merge's valuation row carries the merge document's `created_at`, so a
+reversal restores the prior rate only when that row is still current — a
+manual valuation written after the merge, on an unvalued merge or otherwise,
+is never overwritten by a reversal.
+
+An opening pouch with nothing on hand (so it is not among its own
+candidates) shows the error "<pouch> is empty." and no form.

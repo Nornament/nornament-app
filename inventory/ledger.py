@@ -349,8 +349,7 @@ def _unfile(document):
 def _unmerge_rate(user, document, target):
     """A merge set its target the weighted rate; reversing it puts back the rate the target had before,
     unless someone has valued it since. A new pouch had none, so it keeps the merge's."""
-    wrote = (target.prices.filter(kind=PriceEntry.VALUATION, created_at__gte=document.created_at)
-             .order_by("pk").first())
+    wrote = target.prices.filter(kind=PriceEntry.VALUATION, created_at=document.created_at).first()
     if wrote is None or services.latest_price(target, PriceEntry.VALUATION) != wrote:
         return
     before = (target.prices.filter(kind=PriceEntry.VALUATION, created_at__lt=document.created_at)
@@ -378,7 +377,9 @@ def reverse_document(user, document, note=""):
     if document.kind == Kind.MERGE:
         # the target may have held stone before the merge, so "created" cannot find it: anything on it
         # after this merge's own movements means it has moved since
-        target = next(m.pouch for m in moves if m.direction == Movement.IN and m.reason == Movement.Reason.MERGE)
+        target = next((m.pouch for m in moves if m.direction == Movement.IN and m.reason == Movement.Reason.MERGE), None)
+        if target is None:
+            raise ServiceError(f"{document} has no merged pouch to take back.")
         later |= Q(pouch=target, pk__gt=max(m.pk for m in moves))
     moved = (Movement.objects.filter(later, reverses__isnull=True, reversal__isnull=True)
              .exclude(document=document).select_related("pouch__batch", "diamond").first())

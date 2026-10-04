@@ -7,6 +7,7 @@ from django.core.exceptions import PermissionDenied
 from inventory import ledger, ledger_assort, services
 from inventory.ledger_assort import SplitPart
 from inventory.models import Batch, Movement, Pouch, PriceEntry, StockDocument
+from stock.models import ActivityLog
 from stock.services import ServiceError
 
 pytestmark = pytest.mark.django_db
@@ -54,6 +55,9 @@ def test_merging_into_an_existing_pouch(accounts_user, shelf, twin):
     into = doc.movements.get(pouch=onyx)
     assert (into.reason, into.direction, into.pcs, into.ct) == (R.MERGE, Movement.IN, 10, D("7.5"))
     assert onyx.prices.filter(kind=PriceEntry.VALUATION).count() == 2       # the opening 7,919 is kept
+    log = ActivityLog.objects.filter(table_name="inv_pouch", record_pk=str(onyx.pk)).latest("pk")
+    assert (log.action, log.old_values, log.new_values) == (
+        "UPDATE", {"size_text": "14*10"}, {"size_text": "14*10 and 12*10"})
 
 
 def test_merging_into_a_new_pouch_copies_the_stone_and_takes_the_size(accounts_user, shelf, twin):
@@ -154,6 +158,18 @@ def test_a_revaluation_after_the_merge_is_not_undone(accounts_user, admin_user_,
     services.add_price(admin_user_, onyx, PriceEntry.VALUATION, D("9999"), timezone.localdate())
     ledger.reverse_document(accounts_user, doc)
     assert _held(onyx).rate == D("9999")
+
+
+def test_a_manual_valuation_after_an_unvalued_merge_is_kept(accounts_user, admin_user_, shelf):
+    from django.utils import timezone
+
+    onyx = shelf["onyx"]
+    bare = services.open_pouch(admin_user_, shelf["batch"], {"pouch_no": "5", **ONYX}, pcs=2, ct=D("1"), rate=None)
+    doc, rate = ledger_assort.merge_pouches(accounts_user, [onyx, bare], into=onyx)
+    assert rate is None
+    services.add_price(admin_user_, onyx, PriceEntry.VALUATION, D("5555"), timezone.localdate())
+    ledger.reverse_document(accounts_user, doc)
+    assert _held(onyx).rate == D("5555")
 
 
 def test_reversing_a_merge_into_a_new_pouch_leaves_it_at_zero(accounts_user, shelf, twin):

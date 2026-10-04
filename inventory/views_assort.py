@@ -95,6 +95,9 @@ def merge(request, ref):
         return redirect("inventory:shelf")
     opening, everything, row = _assort(request, ref, "Only a role that assorts can merge pouches.")
     found = ledger_assort.candidates(opening)
+    if opening.pk not in {p.pk for p in found}:
+        return _page(request, "inventory/merge.html", everything, tab="tx", pouch_ref=opening.ref, row=row,
+                     candidates=[], ticked=set(), into="", form={}, error=f"{opening} is empty.")
     by_pk = {r["pk"]: r for r in everything}
     ticked, into, error = {opening.pk}, str(opening.pk), None
     form = {"new_pouch_no": ledger.next_pouch_no(opening.batch), "size_text": opening.size_text}
@@ -114,7 +117,7 @@ def merge(request, ref):
         except ServiceError as refused:
             error = refused.messages[0]
         else:
-            unvalued = "" if rate is not None else " — no valuation set: one of the pouches had none."
+            unvalued = "" if rate is not None else " — no valuation set: a pouch had no weight or no valuation."
             messages.success(request, f"Merge posted as {document.number}.{unvalued}")
             return redirect("inventory:document", pk=document.pk)
     return _page(request, "inventory/merge.html", everything, tab="tx", pouch_ref=opening.ref, row=row,

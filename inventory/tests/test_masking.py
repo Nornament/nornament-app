@@ -204,7 +204,8 @@ def test_client_view_reaches_no_ledger_screen_or_write(client, admin_user_, ledg
     for url in (reverse("inventory:movement_post", args=[d["onyx"].ref]),
                 reverse("inventory:document_settle", args=[d["job"].pk]),
                 reverse("inventory:document_undo", args=[d["job"].pk]),
-                reverse("inventory:document_reverse", args=[d["job"].pk])):
+                reverse("inventory:document_reverse", args=[d["job"].pk]),
+                reverse("inventory:merge", args=[d["onyx"].ref])):
         assert client.post(url, {"reason": "Sale", "ct": "1"}).status_code == 302, url
     for url in client_screens:
         body = client.get(url).content.decode()

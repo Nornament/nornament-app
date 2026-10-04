@@ -2,14 +2,18 @@
 from decimal import Decimal
 
 import pytest
+from django.contrib.auth.models import Group, Permission
 from django.urls import reverse
 
+from accounts.capabilities import INV_ASSORT
+from accounts.models import User
 from inventory import services
 from inventory.models import Pouch, StockDocument
 
 pytestmark = pytest.mark.django_db
 D = Decimal
 ONYX = {"stone_name": "Green Onyx", "colour": "Green", "shape": "Oval", "quality": "B"}
+FIXTURE_PASSWORD = "fixture-value-not-a-credential"
 
 
 @pytest.fixture
@@ -35,6 +39,13 @@ def test_the_form_lists_the_same_stone_and_ticks_the_opening_pouch(client, accou
     assert f'class="on" href="{reverse("inventory:movements", args=[shelf["onyx"].ref])}"' in body
 
 
+def test_an_empty_opening_pouch_shows_no_form(client, accounts_user, admin_user_, shelf, twin):
+    empty = services.open_pouch(admin_user_, shelf["batch"], {"pouch_no": "6", **ONYX}, pcs=0, ct=D("0"), rate=None)
+    client.force_login(accounts_user)
+    body = client.get(_url(empty)).content.decode()
+    assert f"{empty} is empty." in body and "Post merge" not in body
+
+
 def test_a_pouch_with_no_like_pouch_says_so(client, accounts_user, shelf):
     client.force_login(accounts_user)
     body = client.get(_url(shelf["ruby"])).content.decode()
@@ -57,7 +68,7 @@ def test_a_merge_without_a_valuation_says_so(client, accounts_user, admin_user_,
     client.force_login(accounts_user)
     response = client.post(_url(shelf["onyx"]), {"pouch": [shelf["onyx"].pk, bare.pk], "into": str(shelf["onyx"].pk)})
     page = client.get(response["Location"]).content.decode()
-    assert "Merge posted as MRG-000001. — no valuation set: one of the pouches had none." in page
+    assert "Merge posted as MRG-000001. — no valuation set: a pouch had no weight or no valuation." in page
 
 
 def test_a_refusal_comes_back_on_the_form_with_the_ticks_kept(client, accounts_user, shelf, twin):
@@ -67,6 +78,15 @@ def test_a_refusal_comes_back_on_the_form_with_the_ticks_kept(client, accounts_u
     assert response.status_code == 200 and "Tick at least two pouches to merge." in body
     assert f'name="pouch" value="{twin.pk}" checked' in body
     assert f'name="pouch" value="{shelf["onyx"].pk}" checked' not in body
+    assert not StockDocument.objects.exists()
+
+
+def test_into_a_candidate_that_was_not_ticked_is_refused(client, accounts_user, admin_user_, shelf, twin):
+    third = services.open_pouch(admin_user_, shelf["batch"], {"pouch_no": "6", **ONYX}, pcs=5, ct=D("2"), rate=D("100"))
+    client.force_login(accounts_user)
+    response = client.post(_url(shelf["onyx"]), {"pouch": [shelf["onyx"].pk, twin.pk], "into": str(third.pk)})
+    body = response.content.decode()
+    assert response.status_code == 200 and "Merge into one of the ticked pouches, or a new pouch." in body
     assert not StockDocument.objects.exists()
 
 
@@ -102,3 +122,15 @@ def test_rights_and_client_view(client, sales_user, admin_user_, shelf, twin):
                                                        "new_pouch_no": "7"})):
         assert response.status_code == 302 and response["Location"] == reverse("inventory:shelf")
     assert not StockDocument.objects.exists()
+
+
+def test_a_login_with_only_inv_assort_sees_the_form_without_the_rate(client, shelf, twin):
+    group = Group.objects.create(name="OnlyAssort")
+    group.permissions.add(Permission.objects.get(codename=INV_ASSORT.split(".", 1)[1], content_type__app_label="accounts"))
+    user = User.objects.create_user(username="assort_only", password=FIXTURE_PASSWORD, must_change_password=False)
+    user.groups.add(group)
+    client.force_login(user)
+    response = client.get(_url(shelf["onyx"]))
+    body = response.content.decode()
+    assert response.status_code == 200
+    assert "7,919" not in body and "9,000" not in body and "Valuation /ct" not in body

@@ -11,7 +11,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from django.db import transaction
 
 from accounts.capabilities import INV_ASSORT
-from stock.services import ServiceError, require
+from stock.services import ServiceError, log, require
 
 from . import inputs, ledger, services
 from .models import Movement, Pouch, PriceEntry, StockDocument
@@ -132,7 +132,8 @@ def _weighted(pouches):
 def _settled(pouches):
     """Refuse a pouch with stone still out on an open job work or memo: what comes back would land in an emptied pouch."""
     ids = {p.pk for p in pouches}
-    open_docs = StockDocument.objects.filter(kind__in=ledger.OPENABLE, status=StockDocument.Status.OPEN)
+    open_docs = StockDocument.objects.filter(
+        kind__in=ledger.OPENABLE, status=StockDocument.Status.OPEN, movements__pouch__in=ids).distinct()
     for doc_pk, owed in ledger.owed_by_document(open_docs).items():
         for pouch, _, _ in owed:
             if pouch.pk in ids:
@@ -147,7 +148,9 @@ def merge_pouches(user, pouches, into=None, new_pouch_no="", size_text="", loss_
     Returns the document and the rate written (``None`` when one of the pouches had no valuation)."""
     require(user, INV_ASSORT, "Only a role that assorts can merge pouches.")
     inputs.fits(Pouch, size_text=size_text)
-    held = list(services.stocked(Pouch.objects.filter(pk__in={p.pk for p in pouches})))
+    ids = {p.pk for p in pouches}
+    list(Pouch.objects.select_for_update().filter(pk__in=ids).order_by("pk"))
+    held = list(services.stocked(Pouch.objects.filter(pk__in=ids)))
     if len(held) < 2:
         raise ServiceError("Tick at least two pouches to merge.")
     held.sort(key=lambda p: p.pk)
@@ -180,8 +183,11 @@ def merge_pouches(user, pouches, into=None, new_pouch_no="", size_text="", loss_
         target = ledger.new_pouch(first.batch, pouch_no=number, size_text=size_text or first.size_text,
                                   **{field: getattr(first, field) for field in COPIED})
     elif size_text and size_text != target.size_text:
+        old_size = target.size_text
         target.size_text = size_text
         target.save(update_fields=["size_text"])
+        log(user, "UPDATE", "inv_pouch", target.pk, str(target),
+            old_values={"size_text": old_size}, new_values={"size_text": size_text})
     document = ledger.open_document(user, StockDocument.Kind.MERGE, note=note)
     lines = [ledger.Line(p, Reason.MERGE, Movement.OUT, p.on_pcs if first.countable else None, p.on_ct, note=note)
              for p in sources]
@@ -193,5 +199,6 @@ def merge_pouches(user, pouches, into=None, new_pouch_no="", size_text="", loss_
                                  note="Loss in the merge"))
     ledger.post(user, document, lines)
     if rate is not None:
-        PriceEntry.objects.create(pouch=target, kind=PriceEntry.VALUATION, rate=rate, set_by=_by(user))
+        PriceEntry.objects.create(pouch=target, kind=PriceEntry.VALUATION, rate=rate, set_by=_by(user),
+                                  created_at=document.created_at)
     return document, rate
