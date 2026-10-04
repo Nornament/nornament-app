@@ -32,9 +32,10 @@
       <td class="r"><b>{% if 'list_value' in p %}{{ p.list_value|rupees }}{% endif %}</b></td>
       {% if margin %}<td class="r">{% if p.margin is not None %}{{ p.margin|floatformat:1 }}%{% else %}—{% endif %}</td>{% endif %}
     {% endif %}
-  </tr>{% empty %}<tr><td colspan="7" class="hint">No pouch matches these filters.</td></tr>{% endfor %}</tbody>
+  </tr>{% empty %}<tr><td colspan="{% if mode == 'cost' or margin %}7{% else %}6{% endif %}" class="hint">No pouch matches these filters.</td></tr>{% endfor %}</tbody>
   {% if count %}<tfoot><tr><td colspan="4"><b>{{ count|grouped }}</b> pouch{{ count|pluralize:"es" }}</td>
-    {% if mode == 'cost' %}<td></td><td></td>{% endif %}<td class="r"><b>{{ total|rupees }}</b></td>{% if margin %}<td></td>{% endif %}</tr></tfoot>{% endif %}
+    {% if mode == 'cost' %}<td></td><td></td><td class="r"><b>{{ total|rupees }}</b></td>
+    {% else %}<td></td><td class="r"><b>{{ total|rupees }}</b></td>{% if margin %}<td></td>{% endif %}{% endif %}</tr></tfoot>{% endif %}
 </table></div></div>
 
 {% if page.has_other_pages %}<div class="ctrow" style="margin-top:10px">

@@ -118,7 +118,11 @@ def _set(request, mode, kind, f):
         rate = Decimal(request.POST.get("rate") or "")
     except InvalidOperation:
         rate = None
-    when = parse_date(request.POST.get("effective_from") or "") or timezone.localdate()
+    try:
+        when = parse_date(request.POST.get("effective_from") or "") or timezone.localdate()
+    except ValueError:
+        messages.error(request, "That date does not exist.")
+        return redirect(back)
     described = ", ".join(f"{key}={value}" for key, value in f.items() if value)
     try:
         n = services.set_group_price(request.user, group, kind, rate, when, described=described)
@@ -141,7 +145,8 @@ def prices(request, mode):
     f = _filters(request.GET)
     rows = [_row(request.user, pouch) for pouch in _pouches(f)]
     money = "pouch_value" if mode == "cost" else "list_value"
-    total = sum((r[money] for r in rows if r.get(money) is not None), start=0) if rows else None
+    values = [r[money] for r in rows if r.get(money) is not None]
+    total = sum(values) if values else None
     query = _query(f)
     return _page(
         request, "inventory/prices.html", _everything(request), tab=f"prices_{mode}", mode=mode, title=title,

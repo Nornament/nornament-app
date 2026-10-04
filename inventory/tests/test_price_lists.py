@@ -42,7 +42,8 @@ def test_a_valuation_set_becomes_the_rate_on_file_and_nothing_is_overwritten(acc
     assert shelf["onyx"].prices.filter(kind=PriceEntry.VALUATION).count() == 2      # the opening 7,919 is kept
 
 
-@pytest.mark.parametrize("rate", [None, Decimal("0"), Decimal("-5"), Decimal("1e10"), Decimal("NaN"), Decimal("Infinity")])
+@pytest.mark.parametrize("rate", [None, Decimal("0"), Decimal("-5"), Decimal("1e10"), Decimal("NaN"), Decimal("Infinity"),
+                                   Decimal("0.00001"), Decimal("9999999999.99999")])
 def test_a_bad_rate_writes_nothing(accounts_user, shelf, rate):
     before = PriceEntry.objects.count()
     with pytest.raises(ServiceError):
@@ -104,6 +105,18 @@ def test_the_selling_list_shows_list_price_value_and_margin(client, accounts_use
     assert "₹9,500" in body and "₹1,18,750" in body                   # 12.5 ct × ₹9,500
     assert "20.0%" in body                                             # (9,500 − 7,919) / 7,919
     assert "<th class=\"r\">Margin</th>" in body
+
+
+def test_the_selling_foot_total_sits_under_list_value_not_list_ct(client, accounts_user, shelf):
+    body = _get(client, accounts_user, SELLING).content.decode()
+    foot = body[body.index("<tfoot>"):]
+    assert '<td></td><td class="r"><b>—</b></td>' in foot                # blank List /ct, then the total — never ₹0
+
+
+def test_the_selling_foot_shows_the_total_in_the_list_value_cell(client, accounts_user, priced):
+    body = _get(client, accounts_user, SELLING).content.decode()
+    foot = body[body.index("<tfoot>"):]
+    assert '<td></td><td class="r"><b>₹1,18,750</b></td>' in foot
 
 
 def test_sales_sees_list_prices_but_no_cost_or_margin_and_no_cost_list(client, sales_user, priced):
@@ -206,6 +219,15 @@ def test_a_changed_group_or_a_bad_rate_writes_nothing_and_says_why(client, accou
     assert "The rate has to be a number" in _said(response)[0]
     response = _set(client, accounts_user, SELLING, 0, stone="nothing-like-this")
     assert _said(response) == ["No pouch matches these filters."]
+    assert PriceEntry.objects.count() == before
+
+
+def test_a_date_that_does_not_exist_is_refused_and_writes_nothing(client, accounts_user, priced):
+    before = PriceEntry.objects.count()
+    client.force_login(accounts_user)
+    response = client.post(SELLING, {"f": "1", "stock": "1", "count": "2", "rate": "1250",
+                                     "effective_from": "2026-02-30"})
+    assert _said(response) == ["That date does not exist."]
     assert PriceEntry.objects.count() == before
 
 
