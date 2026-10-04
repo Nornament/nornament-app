@@ -10,11 +10,12 @@
   <select class="inp" name="category" aria-label="Category"><option value="">Category…</option>{% for c in categories %}<option value="{{ c.pk }}">{{ c.value }}</option>{% endfor %}</select>
   <button class="btn pri">Start</button></div></form>{% endif %}
 <div class="card" style="overflow:hidden"><div style="overflow:auto"><table class="led">
-  <thead><tr><th>Stock take</th><th>Scope</th><th>Status</th><th>Started</th><th class="r">Counted</th><th>Closed</th></tr></thead>
+  <thead><tr><th>Stock take</th><th>Scope</th><th>Status</th><th>Started</th><th class="r">Counted</th><th>Closed</th><th>Closed by</th></tr></thead>
   <tbody>{% for r in takes %}<tr>
     <td class="mono"><a href="{% url 'inventory:dia_stock_take' r.take.pk %}{% if as_role %}?as={{ as_role }}{% endif %}"><b>{{ r.take.number }}</b></a></td>
-    <td>{{ r.scope }}</td><td><span class="chip"><span class="dot"></span>{{ r.take.get_status_display }}</span></td>
+    <td>{{ r.scope }}</td><td><span class="chip {% if r.reversed %}crit{% endif %}"><span class="dot"></span>{% if r.reversed %}Reversed{% else %}{{ r.take.get_status_display }}{% endif %}</span></td>
     <td class="hint">{{ r.take.started_at|date:"d M Y" }} · {{ r.take.started_by.full_name|default:"system" }}</td>
-    <td class="r">{{ r.counted }}</td><td class="hint">{{ r.take.closed_at|date:"d M Y"|default:"—" }}</td></tr>
-  {% empty %}<tr><td colspan="6" class="hint">No stock takes yet.</td></tr>{% endfor %}</tbody></table></div></div>
+    <td class="r">{{ r.counted }}</td><td class="hint">{{ r.take.closed_at|date:"d M Y"|default:"—" }}</td>
+    <td class="hint">{% if r.take.closed_by %}{{ r.take.closed_by.full_name|default:r.take.closed_by.get_username }}{% else %}—{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="7" class="hint">No stock takes yet.</td></tr>{% endfor %}</tbody></table></div></div>
 {% endblock %}

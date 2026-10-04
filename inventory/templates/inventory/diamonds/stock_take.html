@@ -3,5 +3,5 @@
 {% block crumb %}<b>Diamonds</b> &nbsp;›&nbsp; <a href="{% url 'inventory:dia_stock_takes' %}{% if as_role %}?as={{ as_role }}{% endif %}">Stock takes</a> &nbsp;›&nbsp; <b class="mono">{{ take.number }}</b>{% endblock %}
 {% block content %}
 {% include "inventory/diamonds/_dsub.html" %}
-{% include "inventory/_stock_take_body.html" with list_url="inventory:dia_stock_takes" diamonds=True %}
+{% include "inventory/_stock_take_body.html" with diamonds=True %}
 {% endblock %}

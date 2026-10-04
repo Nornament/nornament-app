@@ -166,6 +166,10 @@ STORAGES = {
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }
 
+# A box colour's stock-take sheet renders two fields per row (pcs, ct); a big colour's pouch
+# count passes Django's default of 1000 and the sheet answers 400 on save, close and cancel.
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 5000
+
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_SECURE = env_bool("DJANGO_SECURE_COOKIES", not DEBUG)

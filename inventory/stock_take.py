@@ -3,7 +3,7 @@ differences as Recount Adjustments on one document when it closes.
 
 A count keeps the book figure it was taken against, so stone sold after its pouch was counted is not undone
 by the recount: what posts is counted − book-at-count (owner, 2026-10-04)."""
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -30,10 +30,16 @@ def scope_label(take):
 
 
 def _next_number():
-    # ponytail: read-the-max under the caller's transaction; the unique number catches a race
     last = (StockTake.objects.filter(number__regex=r"^ST-[0-9]{6}$").order_by("-number")
             .values_list("number", flat=True).first())
     return f"ST-{(int(last[3:]) if last else 0) + 1:06d}"
+
+
+def label(take, owner):
+    """The sheet's own label for a row: the diamond ref · item code, or the pouch's own str()."""
+    if take.side == StockTake.DIAMONDS:
+        return f"{owner.ref} · {owner.code.item_code}"
+    return str(owner)
 
 
 def _overlap(side, box_colour, batch, category):
@@ -62,20 +68,30 @@ def start(user, side, box_colour=None, batch=None, category=None, note=""):
     other = _overlap(side, box_colour, batch, category)
     if other:
         raise ServiceError(f"{other.number} is already counting {scope_label(other)}; close or cancel it first.")
-    take = StockTake.objects.create(number=_next_number(), side=side, box_colour=box_colour, batch=batch,
-                                    category=category, started_by=_by(user), note=note)
+    for attempt in range(2):
+        try:
+            with transaction.atomic():
+                take = StockTake.objects.create(number=_next_number(), side=side, box_colour=box_colour,
+                                                batch=batch, category=category, started_by=_by(user), note=note)
+            break
+        except IntegrityError:
+            if attempt:
+                raise
     log(user, "INSERT", "inv_stock_take", take.pk, f"{take.number} started: {scope_label(take)}")
     return take
 
 
 def owners(take):
-    """What the sheet lists: everything in scope with something on hand, plus anything already counted."""
+    """What the sheet lists: everything in scope with something on hand, plus anything already counted —
+    even a pouch or line a later transfer or assortment moved out of scope, so closing never loses it."""
     counted = {c.pouch_id or c.diamond_id for c in take.counts.all()}
     if take.side == StockTake.DIAMONDS:
-        lines = dia_services.stocked_lines(DiamondLine.objects.filter(category=take.category))
+        scope = Q(category=take.category) | Q(pk__in=counted)
+        lines = dia_services.stocked_lines(DiamondLine.objects.filter(scope))
         return [line for line in lines if line.on_ct or line.pk in counted]
-    scope = Pouch.objects.filter(batch=take.batch) if take.batch_id else Pouch.objects.filter(batch__box_colour=take.box_colour)
-    return [p for p in services.stocked(scope) if p.on_ct or p.on_pcs or p.pk in counted]
+    scope = Q(batch=take.batch) if take.batch_id else Q(batch__box_colour=take.box_colour)
+    pouches = services.stocked(Pouch.objects.filter(scope | Q(pk__in=counted)))
+    return [p for p in pouches if p.on_ct or p.on_pcs or p.pk in counted]
 
 
 def _open(take):
@@ -97,6 +113,7 @@ def save_counts(user, take, entries):
     take = _open(take)
     held = {o.pk: o for o in owners(take)}
     field, done = _field(take), 0
+    existing_by_pk = {getattr(c, f"{field}_id"): c for c in take.counts.all()}
     for pk, (pcs, ct) in entries.items():
         owner = held.get(pk)
         if owner is None:
@@ -105,7 +122,7 @@ def save_counts(user, take, entries):
             pcs = None
         if (pcs is not None and pcs < 0) or (ct is not None and ct < 0):
             raise ServiceError("A count cannot be negative.")
-        existing = take.counts.filter(**{field: owner}).first()
+        existing = existing_by_pk.get(pk)
         if pcs is None and ct is None:
             if existing:
                 existing.delete()
@@ -133,7 +150,8 @@ def _frozen(take):
     for owner in owners(take):
         c = counts.get(owner.pk)
         var_pcs, var_ct = variances(c) if c else (None, None)
-        rows.append({"pk": owner.pk, "ref": owner.ref, "label": str(owner),
+        rows.append({"pk": owner.pk, "ref": owner.ref, "label": label(take, owner),
+                     "countable": owner.countable if take.side == StockTake.STONES else False,
                      "book_pcs": c.book_pcs if c else getattr(owner, "on_pcs", None),
                      "book_ct": str(c.book_ct if c else (owner.on_ct or ledger.ZERO)),
                      "counted_pcs": c.counted_pcs if c else None,
@@ -142,13 +160,30 @@ def _frozen(take):
     return {"rows": rows, "counted": len(counts), "total": len(rows)}
 
 
+def _not_recounted_since(take, by_pk, counts):
+    """Owner's ruling: refuse to close while a counted owner has had a Recount Adjustment —
+    on any document, or none (a bare diamond recount) — recorded after it was counted here."""
+    field = _field(take)
+    for count in counts:
+        owner_pk = count.pouch_id or count.diamond_id
+        later = Movement.objects.filter(**{field: owner_pk}, reason=Movement.Reason.RECOUNT_ADJUSTMENT,
+                                        occurred_at__gt=count.counted_at)
+        if take.document_id:
+            later = later.exclude(document_id=take.document_id)
+        if later.exists():
+            raise ServiceError(f"{label(take, by_pk[owner_pk])} was recounted since it was counted here; "
+                               f"count it again or clear it.")
+
+
 @transaction.atomic
 def close(user, take):
     require(user, INV_MOVE, RIGHT)
     take = _open(take)
     by_pk = {o.pk: o for o in owners(take)}
+    counts = list(take.counts.order_by("pk"))
+    _not_recounted_since(take, by_pk, counts)
     lines = []
-    for count in take.counts.order_by("pk"):
+    for count in counts:
         owner = by_pk[count.pouch_id or count.diamond_id]
         for field, delta in zip(("pcs", "ct"), variances(count)):
             if delta:
