@@ -42,9 +42,5 @@ disappearing, so nobody has to guess why a colleague sees more screens.{% endcom
 {% if 'admin' in tabs %}<a href="{{ u }}" {% if nav == 'admin' %}aria-current="page"{% endif %}><span class="ico">⚙</span>Users &amp; Settings</a>
 {% else %}<button disabled><span class="ico">⚙</span>Users &amp; Settings<span class="lockicon">🔒</span></button>{% endif %}
 
-{% comment %}The legacy Stock app was a separate deployment with nowhere else
-to go. This one is half of an app, so the other half has to be reachable.{% endcomment %}
-<div class="navgrp">Inventory</div>
-
 <div class="navgrp">CRM</div>
 <a href="{% url 'crm:dashboard' %}"><span class="ico">☺</span>Customers &amp; Orders</a>

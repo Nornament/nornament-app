@@ -1,0 +1,35 @@
+"""The removal migration, run against the state just before it."""
+import pytest
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
+
+pytestmark = pytest.mark.django_db(transaction=True)
+
+BEFORE = [("accounts", "0005_inv_move")]
+AFTER = [("accounts", "0006_remove_rm")]
+
+
+def test_karigar_only_logins_are_deactivated_and_the_rights_are_gone():
+    executor = MigrationExecutor(connection)
+    executor.migrate(BEFORE)
+    old = executor.loader.project_state(BEFORE).apps
+    Group, User = old.get_model("auth", "Group"), old.get_model("accounts", "User")
+    karigar, _ = Group.objects.get_or_create(name="KARIGAR")
+    sales, _ = Group.objects.get_or_create(name="SALES")
+    desk = User.objects.create(username="desk", is_active=True)
+    desk.groups.add(karigar)
+    both = User.objects.create(username="both", is_active=True)
+    both.groups.add(karigar, sales)
+
+    executor = MigrationExecutor(connection)
+    executor.loader.build_graph()
+    executor.migrate(AFTER)
+    new = executor.loader.project_state(AFTER).apps
+    User, Group, Permission = new.get_model("accounts", "User"), new.get_model("auth", "Group"), new.get_model("auth", "Permission")
+    assert User.objects.get(username="desk").is_active is False
+    assert User.objects.get(username="both").is_active is True
+    assert not Group.objects.filter(name="KARIGAR").exists()
+    assert not Permission.objects.filter(codename__startswith="inv_").exists()
+    with connection.cursor() as cursor:
+        cursor.execute("select count(*) from information_schema.tables where table_name like 'inv\\_%'")
+        assert cursor.fetchone()[0] == 0
