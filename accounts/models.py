@@ -24,11 +24,6 @@ class Capability(models.Model):
             ("adjust_stock", "Can adjust stock"),
             ("melt", "Can melt a piece"),
             ("edit_bom", "Can edit a bill of materials"),
-            ("inv_masters", "Can edit inventory records and import stock"),
-            ("inv_purchase", "Can post inventory purchases"),
-            ("inv_job", "Can post job-card movements"),
-            ("inv_assort", "Can post assortments"),
-            ("inv_move", "Can record stock movements"),
         ]
 
 

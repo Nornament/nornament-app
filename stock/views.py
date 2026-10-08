@@ -116,8 +116,6 @@ def _visible_pieces(request):
 
 @login_required
 def dashboard(request):
-    if _role_code(request.user) == "KARIGAR":
-        return redirect("inventory:shelf")      # where login lands; the desk has no stock screens
     pieces = _visible_pieces(request)
     live = pieces.filter(stock_state__in=list(COUNTABLE_STATES))
     by_location = (
@@ -2338,11 +2336,6 @@ CAPABILITY_MATRIX = [
     ("adjust_stock", "Backfill & reverse sales", "Record old sales and reverse entries"),
     ("edit_bom", "Edit the BOM", "Fork a correction version"),
     ("melt", "Melt", "Destroy a piece. Irreversible."),
-    ("inv_masters", "Edit inventory records", "Stones: import, pouch details, prices, photos"),
-    ("inv_purchase", "Record purchases", "Stones bought in"),
-    ("inv_job", "Job cards", "Issue to and receive from karigars"),
-    ("inv_assort", "Assort", "Split and merge pouches"),
-    ("inv_move", "Record stock movements", "Stones: sales, returns, memos, losses, samples, recounts"),
 ]
 
 

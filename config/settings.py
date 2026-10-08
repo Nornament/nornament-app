@@ -62,7 +62,6 @@ INSTALLED_APPS = [
     "crm",
     "mediahub",
     "etl",
-    "inventory",
 ]
 
 # Background work (an import's photos) is queued in Postgres and run by the
@@ -79,7 +78,6 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "accounts.middleware.MustChangePasswordMiddleware",
-    "accounts.middleware.KarigarDeskMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"

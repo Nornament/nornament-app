@@ -11,7 +11,7 @@ permanent regression test in ``stock/tests/test_masking.py`` is what keeps this
 honest — it logs in as a SALES user, renders every screen and asserts no cost,
 vendor or margin value appears anywhere in the response.
 """
-from accounts.capabilities import INV_JOB, MANAGE_MATERIALS, VIEW_COST, VIEW_MARGIN, VIEW_SALE, VIEW_VENDOR
+from accounts.capabilities import MANAGE_MATERIALS, VIEW_COST, VIEW_MARGIN, VIEW_SALE, VIEW_VENDOR
 
 #: field name -> the permission required to see it
 GATED_FIELDS = {
@@ -47,9 +47,7 @@ GATED_FIELDS = {
     "purchase_rate": VIEW_COST,
     "list_rate": VIEW_SALE,
     "supplier_name": VIEW_VENDOR,
-    # the stones ledger's counterparties: a karigar is seen by those who post job work
-    # (the Karigar desk has no view_vendor), a customer by those who see sales
-    "karigar_name": INV_JOB,
+    # a customer is seen by those who see sales
     "customer_name": VIEW_SALE,
 }
 
