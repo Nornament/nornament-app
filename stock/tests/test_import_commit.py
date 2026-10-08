@@ -1,4 +1,6 @@
 """Deciding what an import will do, and then doing it."""
+import re
+
 import pytest
 
 from stock.importers import analyse as analyse_mod, ivy
@@ -339,7 +341,14 @@ def test_the_whole_flow_works_through_the_browser(client, admin_user_, materials
     # stub only the network call. Everything above it — including whether an
     # xlsx is allowed through at all — is what this test exists to exercise.
     put = {}
-    monkeypatch.setattr(storage, "upload_from", lambda key, fileobj, mime: put.update(key=key, mime=mime))
+    def upload_from(key, fileobj, mime):
+        # boto3's upload_fileobj closes the file it was handed, and code that
+        # touched the upload afterwards 500'd every small workbook in production
+        fileobj.read()
+        fileobj.close()
+        put.update(key=key, mime=mime)
+
+    monkeypatch.setattr(storage, "upload_from", upload_from)
     monkeypatch.setattr(storage, "download_to", lambda key, fileobj: fileobj.write(book))
 
     client.force_login(admin_user_)
@@ -721,3 +730,32 @@ def test_the_code_list_follows_the_category_and_matches_codes_only(
     row = re.search(r'name="materials:DRFGH SI-I:category".*?name="materials:DRFGH SI-I:map_to"', page, re.S)
     assert row, "the category comes before the code"
     assert 'list="codes-DIAMOND" name="materials:DRFGH SI-I:map_to"' in page
+
+
+def test_ticking_update_shows_on_the_confirm_screen(
+    client, admin_user_, piece, materials, import_reference, monkeypatch, settings
+):
+    """The confirm summary and button count what the reviewer chose, not the
+    importer's first guess: ticking update used to read back as "skipped"."""
+    settings.ALLOWED_HOSTS = ["testserver"]
+    from mediahub import storage
+    from mediahub.models import MediaAsset
+
+    existing = Piece.objects.first()
+    existing.jewel_code = "24P00095"
+    existing.sub_category = "Old"
+    existing.save(update_fields=["jewel_code", "sub_category"])
+    book = build_workbook().getvalue()
+    monkeypatch.setattr(storage, "download_to", lambda key, fileobj: fileobj.write(book))
+    batch = ImportBatch.objects.create(
+        media=MediaAsset.objects.create(file_name="x.xlsx", scope="import", scope_id="w", storage_key="k"),
+        created_by=admin_user_,
+    )
+    client.force_login(admin_user_)
+    client.get(reverse("stock:import_review", args=[batch.batch_id]))
+    client.post(reverse("stock:import_step", args=[batch.batch_id, "pieces"]), {"update:24P00095": "on"})
+
+    page = client.get(reverse("stock:import_step", args=[batch.batch_id, "confirm"])).content.decode()
+    assert "Import 2 new · update 1" in page
+    pieces_row = page[page.index("<td>Pieces</td>"):].split("</tr>", 1)[0]
+    assert [cell for cell in re.findall(r'class="num">(\d+)<', pieces_row)] == ["3", "2", "0", "1", "0"]

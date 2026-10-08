@@ -9,6 +9,8 @@ Nothing here writes: a form validates, a service in ``stock/services.py``
 writes. That is the rule the whole app is built on and it is what keeps the
 ledger honest.
 """
+import re
+
 from django import forms
 from django.utils import timezone
 
@@ -252,6 +254,24 @@ class MoveForm(forms.Form):
 
 
 # ── reference data ───────────────────────────────────────────────────────
+class CategoryForm(forms.ModelForm):
+    """A product category, from Settings rather than the superuser-only admin."""
+
+    class Meta:
+        model = Category
+        fields = ["name", "code", "code_prefix", "sort_order"]
+        labels = {"name": "Category", "code": "Code", "code_prefix": "Code prefix", "sort_order": "Order"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["code"].required = False
+
+    def clean_code(self):
+        # blank means "from the name", the way the IVY importer makes one
+        code = (self.cleaned_data.get("code") or "").strip().upper()
+        return code or re.sub(r"[^A-Z0-9]", "", (self.cleaned_data.get("name") or "").upper())[:32]
+
+
 class LocationForm(forms.ModelForm):
     class Meta:
         model = Location

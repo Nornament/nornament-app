@@ -11,14 +11,28 @@
   <div class="spread" style="margin-bottom:4px">
     <div><h3>Categories</h3></div>
   </div>
-  <table style="margin-top:14px"><thead><tr><th>Code prefix</th><th>Category</th>
-    <th class="num">Designs</th><th class="num">Pieces</th></tr></thead><tbody>
+  <table style="margin-top:14px"><thead><tr><th>Code prefix</th><th>Category</th><th>Code</th>
+    <th class="num">Designs</th><th class="num">Pieces</th><th></th></tr></thead><tbody>
     {% for row in categories %}
     <tr><td class="mono">{{ row.code_prefix|default:"—" }}</td><td>{{ row.name }}</td>
-      <td class="num">{{ row.designs }}</td><td class="num">{{ row.pieces }}</td></tr>
-    {% empty %}<tr><td colspan="4"><div class="empty">No categories.</div></td></tr>{% endfor %}
+      <td class="code">{{ row.code }}</td>
+      <td class="num">{{ row.designs }}</td><td class="num">{{ row.pieces }}</td>
+      <td class="row tight">{% if caps.edit_bom %}
+        <a class="btn sm" href="?tab=cats&amp;edit={{ row.pk }}">Edit</a>
+        {% if not row.designs %}<form method="post" class="inline">{% csrf_token %}
+          <input type="hidden" name="delete" value="{{ row.pk }}">
+          <button class="btn sm danger" onclick="return confirm('Delete {{ row.name|escapejs }}?')">Delete</button></form>{% endif %}
+      {% endif %}</td></tr>
+    {% empty %}<tr><td colspan="6"><div class="empty">No categories.</div></td></tr>{% endfor %}
   </tbody></table>
-  
+  {% if caps.edit_bom %}
+  <form method="post" class="row" style="margin-top:14px">{% csrf_token %}
+    {% if editing %}<input type="hidden" name="pk" value="{{ editing.pk }}">{% endif %}
+    {% for field in form %}<div>{{ field.label_tag }}{{ field }}</div>{% endfor %}
+    <div class="tight"><button class="btn primary">{% if editing %}Save {{ editing.name }}{% else %}Add category{% endif %}</button>
+      {% if editing %}<a class="btn" href="?tab=cats">Cancel</a>{% endif %}</div>
+  </form>
+  {% endif %}
 </div>
 
 {% elif tab == 'locs' %}

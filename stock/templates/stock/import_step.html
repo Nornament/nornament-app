@@ -36,11 +36,11 @@
       {% endif %}
       <table class="imp-table imp-sum">
         <thead><tr><th>Set</th><th class="num">Rows</th><th class="num">New</th>
-          <th class="num">Matched</th><th class="num">Skipped</th></tr></thead>
+          <th class="num">Matched</th><th class="num">Updated</th><th class="num">Skipped</th></tr></thead>
         <tbody>
           {% for label, c in summary %}
           <tr><td>{{ label }}</td><td class="num">{{ c.total }}</td><td class="num">{{ c.create }}</td>
-            <td class="num">{{ c.map }}</td><td class="num">{{ c.skip }}</td></tr>
+            <td class="num">{{ c.map }}</td><td class="num">{{ c.update }}</td><td class="num">{{ c.skip }}</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -142,7 +142,7 @@
 <form method="post" action="{% url 'stock:import_commit' batch.batch_id %}" id="commit-form" class="imp-nav">
   {% csrf_token %}
   <button class="btn primary" type="submit" {% if outstanding %}disabled{% endif %}>
-    Import {{ counts.pieces.create }} pieces
+    Import {{ counts.pieces.create }} new{% if counts.pieces.update %} · update {{ counts.pieces.update }}{% endif %}
   </button>
 </form>
 {% endif %}

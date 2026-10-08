@@ -415,3 +415,40 @@ def test_the_shell_ships_the_mobile_nav_drawer(client, admin_user_, received_pie
     assert 'name="viewport"' in page
     assert 'class="burger"' in page and 'aria-controls="sidenav"' in page
     assert 'class="navscrim"' in page and 'id="sidenav"' in page
+
+
+# ── categories, from Settings now that the admin is superuser-only ─────────
+def test_an_admin_adds_renames_and_deletes_a_category_from_settings(client, admin_user_):
+    from stock.models import Category
+
+    client.force_login(admin_user_)
+    url = reverse("stock:settings") + "?tab=cats"
+    client.post(url, {"name": "Nose Pins", "code": "", "code_prefix": "NP", "sort_order": 80})
+    pins = Category.objects.get(name="Nose Pins")
+    assert pins.code == "NOSEPINS"  # blank code comes from the name
+
+    client.post(url, {"pk": pins.pk, "name": "Nose Rings", "code": pins.code, "code_prefix": "NR", "sort_order": 80})
+    pins.refresh_from_db()
+    assert (pins.name, pins.code_prefix) == ("Nose Rings", "NR")
+
+    client.post(url, {"delete": pins.pk})
+    assert not Category.objects.filter(pk=pins.pk).exists()
+
+
+def test_a_category_with_designs_is_not_deleted(client, admin_user_, piece):
+    category = piece.style.category
+    client.force_login(admin_user_)
+    response = client.post(reverse("stock:settings") + "?tab=cats", {"delete": category.pk}, follow=True)
+    assert category.__class__.objects.filter(pk=category.pk).exists()
+    assert b"still has 1 design" in response.content
+
+
+def test_a_sales_login_cannot_change_categories(client, sales_user):
+    from stock.models import Category
+
+    sales_user.must_change_password = False
+    sales_user.save(update_fields=["must_change_password"])
+    client.force_login(sales_user)
+    response = client.post(reverse("stock:settings") + "?tab=cats", {"name": "Sneaky", "code": "", "sort_order": 1})
+    assert response.status_code == 403
+    assert not Category.objects.filter(name="Sneaky").exists()

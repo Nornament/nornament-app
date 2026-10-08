@@ -306,16 +306,27 @@ PHOTO_CHUNK_SECONDS = 20
 IMPORT_CACHE = Path(tempfile.gettempdir()) / "nornament-imports"
 
 
-def _workbook_path(batch):
+def _cache_path(storage_key):
     # the key carries a uuid, so one path can never mean two workbooks
-    return IMPORT_CACHE / batch.media.storage_key.replace("/", "_")
+    return IMPORT_CACHE / storage_key.replace("/", "_")
 
 
-def keep_workbook(batch, fileobj):
-    """Cache a workbook already in hand (the upload) under this batch."""
+def _workbook_path(batch):
+    return _cache_path(batch.media.storage_key)
+
+
+def keep_workbook(storage_key, fileobj):
+    """Cache a workbook already in hand (the upload); returns where it went.
+
+    Done before the bucket upload, and the bucket is then sent this copy:
+    boto3 closes whatever file it uploads, so the upload itself is unusable
+    afterwards.
+    """
     IMPORT_CACHE.mkdir(parents=True, exist_ok=True)
-    with open(_workbook_path(batch), "wb") as cached:
+    path = _cache_path(storage_key)
+    with open(path, "wb") as cached:
         shutil.copyfileobj(fileobj, cached)
+    return path
 
 
 def workbook_file(batch):

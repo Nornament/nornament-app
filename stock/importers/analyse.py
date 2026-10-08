@@ -287,6 +287,22 @@ def unresolved(plan, decisions):
     return still
 
 
+def decided_counts(plan, decisions):
+    """``plan.counts`` as the reviewer left it, not as the importer proposed.
+
+    The confirm screen is where someone checks what is about to happen. Read
+    off the plan, an existing piece ticked for update still counted as
+    skipped, and the button left it out — so ticking update looked ignored.
+    """
+    out = {}
+    for name, rows in plan.sections.items():
+        chosen = decisions.get(name) or {}
+        actions = [(chosen.get(row.key) or {}).get("action", row.action) for row in rows]
+        out[name] = {"total": len(rows), "blocked": sum(1 for row in rows if row.problem)}
+        out[name].update({action: actions.count(action) for action in ("map", "create", "update", "skip")})
+    return out
+
+
 def with_fresh_fields(plan, decisions):
     """The decisions, each material's fields re-guessed under the reviewer's own.
 

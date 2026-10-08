@@ -57,6 +57,7 @@ from .enums import (
 from .forms import (
     BomLineFormSet,
     RateChartForm,
+    CategoryForm,
     LocationForm,
     MaterialForm,
     MeltForm,
@@ -1869,7 +1870,10 @@ def _store_workbook(upload, user):
     upload.seek(0)
     mime = upload.content_type or storage.guess_mime(upload.name)
     key = storage.build_key("import", "workbook", upload.name)
-    storage.upload_from(key, upload, mime)
+    # cached locally first, so the review pages need not fetch it, and the
+    # bucket is sent that copy — boto3 closes the file it uploads
+    with open(commit_import.keep_workbook(key, upload), "rb") as workbook:
+        storage.upload_from(key, workbook, mime)
     return MediaAsset.objects.create(
         media_ref=media_services.next_media_ref(),
         kind=MediaKind.DOCUMENT,
@@ -1960,8 +1964,6 @@ def import_upload(request):
         return redirect("stock:data")
 
     batch = ImportBatch.objects.create(media=asset, created_by=request.user)
-    upload.seek(0)
-    commit_import.keep_workbook(batch, upload)  # in hand: the first review page need not fetch it
     return redirect("stock:import_review", batch_id=batch.batch_id)
 
 
@@ -2015,10 +2017,8 @@ def import_step(request, batch_id, step):
         row.map_to = choice.get("map_to", "")
         row.category = (choice.get("fields") or {}).get("category_id", "")
 
-    summary = [
-        (label, plan.counts[name]) for name, label, _ in steps
-        if name != "confirm" and name in plan.counts
-    ]
+    counts = analyse_import.decided_counts(plan, batch.decisions)
+    summary = [(label, counts[name]) for name, label, _ in steps if name != "confirm" and name in counts]
     # a handover file lists the same piece twice; say so rather than let the
     # row count quietly disagree with the spreadsheet
     superseded = sum(p.superseded for p in pieces)
@@ -2037,7 +2037,7 @@ def import_step(request, batch_id, step):
         "next_step": names[index + 1] if index + 1 < len(names) else None,
         "rows": rows,
         "decisions": batch.decisions.get(step) or {},
-        "counts": plan.counts,
+        "counts": counts,
         "outstanding": outstanding,
         "summary": summary,
         "superseded": superseded,
@@ -2337,11 +2337,11 @@ def settings_view(request):
         return _settings_post(request, tab)
 
     if tab == "cats":
-        # read only: a category is created and renamed in the Django admin, so
-        # this tab carries no form and _settings_post refuses a "cats" write
         context["categories"] = Category.objects.annotate(
             designs=Count("styles", distinct=True), pieces=Count("styles__pieces", distinct=True)
         ).order_by("sort_order", "name")
+        editing = Category.objects.filter(pk=request.GET.get("edit") or 0).first()
+        context |= {"editing": editing, "form": CategoryForm(instance=editing)}
     elif tab == "locs":
         context["locations"] = Location.objects.annotate(
             live=Count("pieces", filter=~Q(pieces__stock_state__in=TERMINAL_STATES), distinct=True)
@@ -2629,6 +2629,23 @@ def user_edit(request, pk):
     return render(request, "stock/user_form.html", {"nav": "admin", "form": form, "account": account})
 
 
+def _category_delete(request):
+    """Delete a category nothing is filed under. One in use is refused, not cascaded."""
+    category = get_object_or_404(Category, pk=request.POST["delete"])
+    designs = category.styles.count()
+    children = Category.objects.filter(parent=category).count()
+    if designs or children:
+        held = ", ".join(
+            f"{n} {label}{'s' if n != 1 else ''}" for n, label in ((designs, "design"), (children, "sub-category")) if n
+        )
+        messages.error(request, f"{category} still has {held}. Move them to another category first.")
+    else:
+        services.log(request.user, "DELETE", "category", str(category.pk), f"deleted {category.code}")
+        category.delete()
+        messages.success(request, f"{category} deleted.")
+    return redirect(f"{reverse('stock:settings')}?tab=cats")
+
+
 def _settings_post(request, tab):
     """Category, location and material writes. Everything else is read-only here."""
     services.require(request.user, EDIT_BOM, "You cannot change reference data.")
@@ -2646,7 +2663,9 @@ def _settings_post(request, tab):
         return _scenario_post(request)
     if tab == "locs" and request.POST.get("delete"):
         return _location_delete(request)
-    forms = {"locs": (LocationForm, Location), "mats": (MaterialForm, Material)}
+    if tab == "cats" and request.POST.get("delete"):
+        return _category_delete(request)
+    forms = {"cats": (CategoryForm, Category), "locs": (LocationForm, Location), "mats": (MaterialForm, Material)}
     if tab not in forms:
         raise PermissionDenied("That tab has nothing to save.")
     form_class, model = forms[tab]
