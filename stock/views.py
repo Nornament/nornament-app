@@ -2041,10 +2041,26 @@ def import_step(request, batch_id, step):
         "outstanding": outstanding,
         "summary": summary,
         "superseded": superseded,
-        "materials": Material.objects.order_by("item_code"),
+        "codes_by_category": _codes_by_category(plan),
         "material_categories": MaterialCategory.objects.order_by("sort_order"),
         "locations": Location.objects.filter(is_active=True),
     })
+
+
+def _codes_by_category(plan):
+    """Category -> the codes a reviewer may point a row at, for that row's list.
+
+    The register's active materials, plus what this import is about to create:
+    on a fresh catalogue those are the only answers there are, and
+    ``unresolved`` already accepts them.
+    """
+    codes = defaultdict(set)
+    for code, category in Material.objects.filter(is_active=True).values_list("item_code", "category_id"):
+        codes[category].add(code)
+    for row in plan.materials:
+        if row.action == "create" and not row.problem:
+            codes[row.fields.get("category_id")].add(row.fields.get("item_code", row.key))
+    return {category: sorted(found) for category, found in codes.items()}
 
 
 @login_required

@@ -251,3 +251,12 @@ def test_the_settings_tab_marks_a_retired_material(client, admin_user_, material
     client.force_login(admin_user_)
     r = client.get(reverse("stock:settings") + "?tab=mats")
     assert b">retired</span>" in r.content
+
+
+def test_a_new_material_is_not_offered_ratti_but_one_already_in_ratti_keeps_it(materials):
+    from stock.forms import MaterialForm
+
+    offered = lambda form: [value for value, _ in form.fields["default_uom"].choices]
+    assert Uom.RATTI not in offered(MaterialForm())
+    legacy = Material(item_code="OLD", item_name="Old stone", category_id="SETTING", default_uom=Uom.RATTI)
+    assert Uom.RATTI in offered(MaterialForm(instance=legacy))

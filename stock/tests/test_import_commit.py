@@ -694,3 +694,30 @@ def test_a_finished_run_with_refusals_offers_retry_and_a_clean_one_does_not(admi
     assert not clean.images_retryable
     clean.result["images_refused"] = [{"jewel_code": "24P00088", "reason": "401"}]
     assert clean.images_retryable
+
+
+def test_the_code_list_follows_the_category_and_matches_codes_only(
+    client, admin_user_, materials, import_reference, monkeypatch, settings
+):
+    """Category comes before the code, and the code suggests only that category's codes."""
+    import re
+
+    settings.ALLOWED_HOSTS = ["testserver"]
+    from mediahub import storage
+    from mediahub.models import MediaAsset
+
+    book = build_workbook().getvalue()
+    monkeypatch.setattr(storage, "download_to", lambda key, fileobj: fileobj.write(book))
+    batch = ImportBatch.objects.create(
+        media=MediaAsset.objects.create(file_name="x.xlsx", scope="import", scope_id="w", storage_key="k"),
+        created_by=admin_user_,
+    )
+    client.force_login(admin_user_)
+    page = client.get(reverse("stock:import_step", args=[batch.batch_id, "materials"])).content.decode()
+
+    metal = re.search(r'<datalist id="codes-METAL">(.*?)</datalist>', page).group(1)
+    assert 'value="G"' in metal and "DRFGH" not in metal
+    assert re.findall(r"<option[^>]*>([^<\s][^<]*)", metal) == [], "a label would let typing match names"
+    row = re.search(r'name="materials:DRFGH SI-I:category".*?name="materials:DRFGH SI-I:map_to"', page, re.S)
+    assert row, "the category comes before the code"
+    assert 'list="codes-DIAMOND" name="materials:DRFGH SI-I:map_to"' in page

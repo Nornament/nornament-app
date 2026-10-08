@@ -279,6 +279,12 @@ class MaterialForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["category"].queryset = MaterialCategory.objects.all()
+        # Ratti is not offered for new materials; one already in ratti keeps it,
+        # or editing that row would refuse its own unit
+        if self.instance.default_uom != Uom.RATTI:
+            self.fields["default_uom"].choices = [
+                choice for choice in self.fields["default_uom"].choices if choice[0] != Uom.RATTI
+            ]
 
     def clean(self):
         cleaned = super().clean()

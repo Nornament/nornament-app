@@ -3,9 +3,10 @@
 {% block heading %}Import #{{ batch.batch_id }}{% endblock %}
 {% block content %}
 
-<datalist id="material-codes">
-  {% for material in materials %}<option value="{{ material.item_code }}">{{ material.item_name }}</option>{% endfor %}
-</datalist>
+{# one list per material category; options carry the code only, so typing matches codes, never names #}
+{% for category, codes in codes_by_category.items %}
+<datalist id="codes-{{ category }}">{% for code in codes %}<option value="{{ code }}">{% endfor %}</datalist>
+{% endfor %}
 
 <form method="post" action="{% url 'stock:import_step' batch.batch_id step %}" class="imp">
   {% csrf_token %}
@@ -103,17 +104,17 @@
                 <option value="skip" {% if row.action == 'skip' %}selected{% endif %}>skip</option>
               </select>
               {% if step == 'materials' %}
-              <input list="material-codes" name="{{ step }}:{{ row.key }}:map_to" class="imp-code"
-                     value="{{ row.map_to|default:'' }}"
-                     placeholder="{% if row.target %}{{ row.target.item_code }}{% else %}code{% endif %}">
-              <select name="{{ step }}:{{ row.key }}:category" class="imp-cat"
+              {% with picked=row.category|default:row.fields.category_id %}
+              <select name="{{ step }}:{{ row.key }}:category" class="imp-cat" onchange="impCodes(this)"
                       title="What kind of material this is — it sets how the line prices">
                 {% for cat in material_categories %}
-                <option value="{{ cat.pk }}"
-                  {% if row.category %}{% if cat.pk == row.category %}selected{% endif %}
-                  {% elif cat.pk == row.fields.category_id %}selected{% endif %}>{{ cat.name }}</option>
+                <option value="{{ cat.pk }}" {% if cat.pk == picked %}selected{% endif %}>{{ cat.name }}</option>
                 {% endfor %}
               </select>
+              <input list="codes-{{ picked }}" name="{{ step }}:{{ row.key }}:map_to" class="imp-code"
+                     value="{{ row.map_to|default:'' }}" autocomplete="off"
+                     placeholder="{% if row.target %}{{ row.target.item_code }}{% else %}code{% endif %}">
+              {% endwith %}
               {% endif %}
             </td>
             <td class="imp-note">
@@ -147,6 +148,11 @@
 {% endif %}
 
 <script>
+function impCodes(select){
+  // the code list follows the category: a diamond row suggests diamond codes
+  var code = select.parentNode.querySelector('.imp-code');
+  code.setAttribute('list', 'codes-' + select.value);
+}
 function impFilter(box){
   var q = box.value.toLowerCase();
   box.closest('.card').querySelectorAll('tbody tr').forEach(function(tr){
