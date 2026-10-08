@@ -6,17 +6,21 @@ ported into app.css with the rest of the stylesheet and never wired to
 anything. This is what they were for.
 
   {% include "stock/_inline.html" with name="huid" field=inline.huid value=row.huid %}
+
+``on_design`` saves to the design (the Marketing tab's copy) instead of the
+piece; ``multiline`` keeps the line breaks of a long text when it is shown.
 {% endcomment %}
 {% if inline and field %}
-<span class="editable">
-  <span class="shown">{{ value|default:"—" }}<button type="button" class="pen" aria-label="Edit"
+<span class="editable{% if multiline %} block{% endif %}">
+  <span class="shown">{% if multiline %}{{ value|default:"—"|linebreaksbr }}{% elif multiline %}{{ value|default:"—"|linebreaksbr }}{% else %}{{ value|default:"—" }}{% endif %}<button type="button" class="pen" aria-label="Edit"
     onclick="const e=this.closest('.editable');e.classList.add('editing');e.querySelector('.inplace').focus()"
     >✎</button></span>
   {% comment %}No class="inline" here: form.inline{display:inline} in app.css
   matches this at the same specificity and later in source order, so the field
   would never stay hidden.{% endcomment %}
-  <form method="post" action="{% url 'stock:piece_field' piece.jewel_code %}"
+  <form method="post" action="{% if on_design %}{% url 'stock:piece_marketing' piece.jewel_code %}{% else %}{% url 'stock:piece_field' piece.jewel_code %}{% endif %}"
         onkeydown="if(event.key==='Escape'){this.closest('.editable').classList.remove('editing')}">{% csrf_token %}
+    {% if on_design %}<input type="hidden" name="action" value="field">{% endif %}
     <input type="hidden" name="field" value="{{ name }}">
     <input type="hidden" name="next" value="{{ request.get_full_path }}">
     {{ field }}

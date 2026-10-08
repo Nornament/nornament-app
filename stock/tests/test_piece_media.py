@@ -277,3 +277,48 @@ def test_every_write_on_these_tabs_refuses_a_login_without_edit_bom(client, rece
         assert client.post(url, data).status_code == 403, url
     assert PieceLink.objects.count() == 1
     assert MediaAsset.objects.get(pk=asset.pk).is_catalogue_default is False
+
+
+def test_the_design_copy_is_edited_in_place_on_the_marketing_tab(client, received_piece, admin_user_):
+    """Each line of Story & copy has its own editor; nothing leaves the tab."""
+    client.force_login(admin_user_)
+    url = reverse("stock:piece_marketing", kwargs={"jewel_code": received_piece.jewel_code})
+    marketing = reverse("stock:piece_detail", kwargs={"jewel_code": received_piece.jewel_code}) + "?tab=marketing"
+
+    saved = client.post(url, {"action": "field", "field": "story", "story": "Made for a wedding in Jaipur.\nTwice."})
+    assert saved["Location"] == marketing
+    client.post(url, {"action": "field", "field": "name", "name": "Petal studs"})
+    client.post(
+        reverse("stock:piece_field", kwargs={"jewel_code": received_piece.jewel_code}),
+        {"field": "remarks", "remarks": "Polish before display"},
+    )
+
+    received_piece.refresh_from_db()
+    style = received_piece.style
+    style.refresh_from_db()
+    assert (style.story, style.name) == ("Made for a wedding in Jaipur.\nTwice.", "Petal studs")
+    assert received_piece.remarks == "Polish before display"
+
+    page = _detail(client, received_piece, "marketing").content.decode()
+    assert page.count('class="editable') == 5
+    assert reverse("stock:style_edit", kwargs={"style_code": style.style_code}) not in page
+    assert "Made for a wedding in Jaipur.<br>Twice." in page
+
+
+def test_only_the_copy_fields_can_be_edited_from_the_marketing_tab(client, received_piece, admin_user_):
+    client.force_login(admin_user_)
+    url = reverse("stock:piece_marketing", kwargs={"jewel_code": received_piece.jewel_code})
+    response = client.post(url, {"action": "field", "field": "style_code", "style_code": "HIJACK"})
+    assert response.status_code == 403
+    received_piece.style.refresh_from_db()
+    assert received_piece.style.style_code != "HIJACK"
+
+
+def test_a_login_without_edit_bom_sees_the_copy_but_no_editors(client, received_piece, sales_user):
+    sales_user.must_change_password = False
+    sales_user.save(update_fields=["must_change_password"])
+    client.force_login(sales_user)
+    page = _detail(client, received_piece, "marketing").content.decode()
+    assert 'class="editable' not in page
+    url = reverse("stock:piece_marketing", kwargs={"jewel_code": received_piece.jewel_code})
+    assert client.post(url, {"action": "field", "field": "story", "story": "x"}).status_code == 403

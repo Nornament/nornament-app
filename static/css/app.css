@@ -333,6 +333,11 @@ label.f{display:block;font-size:12px;color:var(--ink-2);margin:0 0 5px;font-weig
 .pbtn.ok{border-color:color-mix(in srgb,var(--good) 55%,transparent);color:var(--good-ink)}
 .pbtn.no:hover{border-color:var(--critical);color:var(--critical-ink)}
 .unset{color:var(--muted);font-style:italic;font-weight:400}
+/* a long text edited in place: the box takes the row, and ✓ ✕ sit under it */
+.editable.block{display:block;border-bottom:0}
+.editable.block.editing form{display:flex;flex-wrap:wrap;gap:5px;width:100%}
+textarea.inplace{width:100%;min-height:90px;padding:6px 8px;font-size:13px;border:1px solid var(--brand);
+  border-radius:6px;background:var(--surface);color:var(--ink);font-family:inherit;resize:vertical}
 input.inplace,select.inplace{width:auto;min-width:110px;max-width:230px;padding:3px 7px;
   font-size:13px;border:1px solid var(--brand);border-radius:6px;text-align:right;
   background:var(--surface);color:var(--ink);font-family:inherit}

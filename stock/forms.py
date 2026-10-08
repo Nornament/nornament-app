@@ -354,9 +354,12 @@ class StyleForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["category"].queryset = Category.objects.all()
-        self.fields["collection"].queryset = Collection.objects.all()
-        if self.instance.pk:
+        # also built cut down to one field, for editing the copy in place
+        if "category" in self.fields:
+            self.fields["category"].queryset = Category.objects.all()
+        if "collection" in self.fields:
+            self.fields["collection"].queryset = Collection.objects.all()
+        if self.instance.pk and "style_code" in self.fields:
             self.fields["style_code"].disabled = True
 
 

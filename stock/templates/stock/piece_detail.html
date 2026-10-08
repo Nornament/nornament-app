@@ -265,13 +265,13 @@
   <div class="bio" style="grid-template-columns:1fr">
     <dl>
       <div class="biorow" style="align-items:flex-start"><dt>Story of the jewellery</dt>
-        <dd style="max-width:60ch">{{ piece.style.story|default:"—"|linebreaksbr }}</dd></div>
+        <dd style="max-width:60ch">{% include "stock/_inline.html" with name="story" field=design_inline.story value=piece.style.story on_design=True multiline=True %}</dd></div>
       <div class="biorow" style="align-items:flex-start"><dt>Website description</dt>
-        <dd style="max-width:60ch">{{ piece.style.website_description|default:"—"|linebreaksbr }}</dd></div>
-      <div class="biorow"><dt>Design name</dt><dd>{{ piece.style.name|default:"—" }}</dd></div>
-      <div class="biorow"><dt>Collection</dt><dd>{{ piece.style.collection|default:"—" }}</dd></div>
+        <dd style="max-width:60ch">{% include "stock/_inline.html" with name="website_description" field=design_inline.website_description value=piece.style.website_description on_design=True multiline=True %}</dd></div>
+      <div class="biorow"><dt>Design name</dt><dd>{% include "stock/_inline.html" with name="name" field=design_inline.name value=piece.style.name on_design=True %}</dd></div>
+      <div class="biorow"><dt>Collection</dt><dd>{% include "stock/_inline.html" with name="collection" field=design_inline.collection value=piece.style.collection on_design=True %}</dd></div>
       <div class="biorow" style="align-items:flex-start"><dt>Remarks</dt>
-        <dd style="max-width:60ch">{{ piece.remarks|default:"—"|linebreaksbr }}</dd></div>
+        <dd style="max-width:60ch">{% include "stock/_inline.html" with name="remarks" field=inline.remarks value=piece.remarks multiline=True %}</dd></div>
     </dl>
   </div>
 
@@ -296,9 +296,6 @@
     </div>
   </div>
 
-  {% if caps.edit_bom %}
-  <p style="margin-top:14px"><a class="btn sm" href="{% url 'stock:style_edit' piece.style.style_code %}?next={{ request.get_full_path|urlencode }}">✎ Edit the design copy</a></p>
-  {% endif %}
 </div>
 
 {% if caps.view_sale %}

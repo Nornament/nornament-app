@@ -560,6 +560,8 @@ def piece_detail(request, jewel_code):
             context["linkable"] = _linkable_pieces(request, piece)
     if tab == "marketing":
         context |= _marketing_panel(piece)
+        if request.user.has_perm(EDIT_BOM):
+            context |= {"inline": _inline_form(piece), "design_inline": _design_inline_form(piece.style)}
     if tab == "pricing":
         context |= _scenario_prices(request, piece)
     if tab == "bom" and request.user.has_perm("accounts.manage_materials"):
@@ -775,7 +777,12 @@ INLINE_FIELDS = (
     "huid",
     "hallmarked_on",
     "hallmark_centre",
+    "remarks",
 )
+
+#: the design's copy, edited in place on the piece's Marketing tab. It lives on
+#: the design, so a change shows on every piece cut from it.
+DESIGN_INLINE_FIELDS = ("name", "collection", "story", "website_description")
 
 
 def _inline_form(piece):
@@ -787,6 +794,15 @@ def _inline_form(piece):
     """
     form = PieceForm(instance=piece)
     for name in INLINE_FIELDS:
+        widget = form.fields[name].widget
+        widget.attrs["class"] = f"inplace {widget.attrs.get('class', '')}".strip()
+    return form
+
+
+def _design_inline_form(style):
+    """``StyleForm`` the same way, for the copy on the Marketing tab."""
+    form = StyleForm(instance=style)
+    for name in DESIGN_INLINE_FIELDS:
         widget = form.fields[name].widget
         widget.attrs["class"] = f"inplace {widget.attrs.get('class', '')}".strip()
     return form
@@ -891,7 +907,19 @@ def piece_marketing(request, jewel_code):
     value = (request.POST.get("value") or "").strip()
     back = reverse("stock:piece_detail", args=[piece.jewel_code]) + "?tab=marketing"
 
-    if action == "add_keyword" and value:
+    if action == "field":
+        # one line of the design's copy, edited in place; validated by the
+        # design's own form rather than a second copy of its rules
+        field = request.POST.get("field")
+        if field not in DESIGN_INLINE_FIELDS:
+            raise PermissionDenied(f"{field!r} is not editable here.")
+        form = modelform_factory(Style, form=StyleForm, fields=[field])(request.POST, instance=style)
+        if not form.is_valid():
+            messages.error(request, "; ".join(f"{field}: {e}" for errors in form.errors.values() for e in errors))
+            return _redirect_back(request, back)
+        form.save()
+        action = f"{field} edited"
+    elif action == "add_keyword" and value:
         tag, _ = Tag.objects.get_or_create(tag_group=MARKETING_TAGS, name=value[:80])
         style.tags.add(tag)
     elif action == "remove_keyword" and value:
