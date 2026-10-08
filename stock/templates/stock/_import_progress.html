@@ -1,28 +1,43 @@
-<div class="card" id="import-progress">
-  {% if batch.status == 'DONE' %}
-    <h3>Import finished</h3>
-    <p>{{ batch.result.pieces_created }} pieces created,
-       {{ batch.result.pieces_updated }} updated,
-       {{ batch.result.pieces_skipped }} left alone,
-       {{ batch.result.lines_written }} material lines,
-       {{ batch.images_done }} images.</p>
-    {% if batch.result.variances %}
-    <div class="note bad"><b>{{ batch.result.variances|length }} piece{{ batch.result.variances|length|pluralize }} cost differently here
-      than in IVY.</b> {% for v in batch.result.variances|slice:":10" %}<span class="code">{{ v.jewel_code }}</span>{% if not forloop.last %}, {% endif %}{% endfor %}{% if batch.result.variances|length > 10 %} and {{ batch.result.variances|length|add:"-10" }} more{% endif %}.</div>
-    {% endif %}
-    {% if batch.result.images_refused %}
-    <div class="note"><b>{{ batch.result.images_refused|length }} image{{ batch.result.images_refused|length|pluralize }} refused.</b>
-      {{ batch.result.images_refused|join:", " }}</div>
-    {% endif %}
-    <a class="btn primary" href="{% url 'stock:piece_list' %}">See the pieces</a>
-  {% else %}
-    <h3>Attaching images</h3>
-    
+<div class="card" id="import-progress-{{ batch.batch_id }}"
+  {% if batch.status == 'IMAGES' and not batch.images_stalled %}
+     hx-get="{% url 'stock:import_images' batch.batch_id %}" hx-trigger="every 3s" hx-swap="outerHTML"
+  {% endif %}>
+  <h3>Import #{{ batch.batch_id }} · {{ batch.media.file_name }}</h3>
+  <p>{{ batch.result.pieces_created }} pieces created,
+     {{ batch.result.pieces_updated }} updated,
+     {{ batch.result.pieces_skipped }} left alone,
+     {{ batch.result.lines_written }} material lines.</p>
+
+  {% if batch.status == 'IMAGES' %}
     <progress value="{{ batch.images_done }}" max="{{ batch.images_total }}"></progress>
-    <p class="dim">{{ batch.images_done }} of {{ batch.images_total }} ({{ batch.images_pct }}%)</p>
-    <div hx-post="{% url 'stock:import_images' batch.batch_id %}"
-         hx-target="#import-progress"
-         hx-swap="outerHTML"
-         hx-trigger="load delay:100ms"></div>
+    {% if batch.images_stalled %}
+    <div class="note bad"><b>Photos stopped at {{ batch.images_done }} of {{ batch.images_total }}.</b>
+      The pieces are saved; only the photos are behind.</div>
+    {% else %}
+    <p class="dim">Attaching photos in the background — {{ batch.images_done }} of {{ batch.images_total }}
+      ({{ batch.images_pct }}%). You can leave this page.</p>
+    {% endif %}
+  {% else %}
+    <p>{{ batch.images_done }} of {{ batch.images_total }} photos attached{% if batch.images_missing %}, {{ batch.images_missing|length }} did not{% endif %}.</p>
+  {% endif %}
+
+  {% if batch.result.images_error %}
+  <div class="note bad"><b>Photos could not run.</b> {{ batch.result.images_error|truncatechars:200 }}</div>
+  {% endif %}
+  {% if batch.result.variances %}
+  <div class="note bad"><b>{{ batch.result.variances|length }} piece{{ batch.result.variances|length|pluralize }} cost differently here
+    than in IVY.</b> {% for v in batch.result.variances|slice:":10" %}<span class="code">{{ v.jewel_code }}</span>{% if not forloop.last %}, {% endif %}{% endfor %}{% if batch.result.variances|length > 10 %} and {{ batch.result.variances|length|add:"-10" }} more{% endif %}.</div>
+  {% endif %}
+  {% if batch.images_missing %}
+  <div class="note"><b>{{ batch.images_missing|length }} piece{{ batch.images_missing|length|pluralize }} need{{ batch.images_missing|length|pluralize:"s," }} a photo uploaded by hand.</b>
+    {% for r in batch.images_missing|slice:":30" %}<a class="code" href="{% url 'stock:piece_detail' r.jewel_code %}" title="{{ r.reason }}">{{ r.jewel_code }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}{% if batch.images_missing|length > 30 %} and {{ batch.images_missing|length|add:"-30" }} more{% endif %}.
+    <span class="dim">— {{ batch.images_missing.0.reason|truncatechars:120 }}</span></div>
+  {% endif %}
+  {% if batch.images_retryable %}
+  <form method="post" action="{% url 'stock:import_images' batch.batch_id %}"
+        hx-post="{% url 'stock:import_images' batch.batch_id %}"
+        hx-target="#import-progress-{{ batch.batch_id }}" hx-swap="outerHTML">
+    {% csrf_token %}<button class="btn primary" type="submit">Retry photos</button>
+  </form>
   {% endif %}
 </div>

@@ -10,6 +10,7 @@ in Python: foreign keys, the CHECKs, and the partial unique indexes — the one
 on ``sale.jewel_code_id`` above all, which is what stops a piece being sold
 twice.
 """
+from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
@@ -17,6 +18,7 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from .enums import (
     BomChangeReason,
@@ -1101,3 +1103,28 @@ class ImportBatch(AppModel):
         if not self.images_total:
             return 0
         return int(self.images_done * 100 / self.images_total)
+
+    #: a background run reports after every ten photos; this long without a
+    #: word means it was cut off (a redeploy, a worker restart) and can resume
+    IMAGES_STALL_AFTER = timedelta(minutes=2)
+
+    @property
+    def images_stalled(self):
+        if self.status != self.Status.IMAGES:
+            return False
+        at = parse_datetime((self.result or {}).get("images_at") or "") or self.created_at
+        return timezone.now() - at > self.IMAGES_STALL_AFTER
+
+    @property
+    def images_retryable(self):
+        """Cut off, never able to run, or some photos refused — worth another go."""
+        if self.images_stalled:
+            return True
+        return self.status == self.Status.DONE and bool(
+            self.images_done < self.images_total or self.images_missing or (self.result or {}).get("images_error")
+        )
+
+    @property
+    def images_missing(self):
+        """Pieces whose photo did not make it, for someone to upload by hand."""
+        return [r for r in (self.result or {}).get("images_refused", []) if isinstance(r, dict)]

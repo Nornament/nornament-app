@@ -1779,22 +1779,24 @@ def audit(request):
     )
 
 
+OPEN_IMPORT = (ImportBatch.Status.UPLOADED, ImportBatch.Status.REVIEWING, ImportBatch.Status.FAILED)
+
+
 @login_required
 @tab_required("data")
 def data(request):
     """Import / Export. The counts are what each export would contain."""
+    imports = list(ImportBatch.objects.filter(source="IVY").select_related("media", "created_by")[:5])
     return render(
         request,
         "stock/data.html",
         {
             "nav": "data",
             "wipe": services.stock_wipe_preview() if request.user.is_superuser else None,
-            # an upload that was never committed is otherwise unreachable, and
-            # uploading again just opens a second batch beside it
-            "open_imports": ImportBatch.objects.filter(
-                source="IVY",
-                status__in=[ImportBatch.Status.UPLOADED, ImportBatch.Status.REVIEWING, ImportBatch.Status.FAILED],
-            ).select_related("media", "created_by")[:5],
+            # an upload never committed is otherwise unreachable; one committed
+            # is watched here while its photos attach, and says what is missing
+            "open_imports": [b for b in imports if b.status in OPEN_IMPORT],
+            "done_imports": [b for b in imports if b.status not in OPEN_IMPORT],
             "counts": {
                 "pieces": Piece.objects.count(),
                 "bom_lines": BomLine.objects.count(),
@@ -2072,27 +2074,42 @@ def import_commit(request, batch_id):
         messages.error(request, f"Import failed, nothing was written. {error}")
         return redirect("stock:import_step", batch_id=batch.batch_id, step="confirm")
 
-    batch.result = result
     batch.images_total = sum(1 for p in pieces if p.image)
+    batch.result = {**result, "images_at": timezone.now().isoformat()}
     batch.status = ImportBatch.Status.IMAGES if batch.images_total else ImportBatch.Status.DONE
     batch.finished_at = None if batch.images_total else timezone.now()
     batch.save(update_fields=["result", "images_total", "status", "finished_at"])
-    return render(request, "stock/_import_progress.html", {"batch": batch})
+    created = result["pieces_created"] + result["pieces_updated"]
+    if batch.images_total:
+        # the photos go on a thread so nobody waits on the bucket: the pieces
+        # are already saved, and the Data page shows the photos catching up
+        commit_import.attach_images_in_background(batch.batch_id)
+        messages.success(request, f"{created} pieces imported. Photos are attaching in the background.")
+    else:
+        messages.success(request, f"{created} pieces imported.")
+    return redirect("stock:data")
 
 
 @login_required
 @tab_required("data")
-@require_POST
 def import_images(request, batch_id):
-    """One chunk of image uploads, then the bar that asks for the next."""
+    """The photo progress card. GET is the poll; POST runs the photos again.
+
+    A rerun starts from the top: a piece that already has its photo is passed
+    over, so only what is missing goes up, and refusals are counted afresh.
+    """
     batch = get_object_or_404(ImportBatch, pk=batch_id)
-    if batch.images_done < batch.images_total:
-        commit_import.attach_images(batch, ivy.parse(_batch_workbook(batch)), limit=10)
-        batch.refresh_from_db()
-    if batch.images_done >= batch.images_total and batch.status != ImportBatch.Status.DONE:
-        batch.status = ImportBatch.Status.DONE
-        batch.finished_at = timezone.now()
-        batch.save(update_fields=["status", "finished_at"])
+    if request.method == "POST" and batch.images_retryable:
+        result = {k: v for k, v in (batch.result or {}).items() if k not in ("images_refused", "images_error")}
+        batch.result = {**result, "images_at": timezone.now().isoformat()}
+        batch.images_done = 0
+        batch.status = ImportBatch.Status.IMAGES
+        batch.finished_at = None
+        batch.save(update_fields=["result", "images_done", "status", "finished_at"])
+        commit_import.attach_images_in_background(batch.batch_id)
+    if request.method == "POST" and not request.headers.get("HX-Request"):
+        # a bare card is not a page: that is what left the old bar frozen
+        return redirect("stock:data")
     return render(request, "stock/_import_progress.html", {"batch": batch})
 
 

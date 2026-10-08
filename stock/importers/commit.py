@@ -6,15 +6,17 @@ not: S3 is not transactional, and one refused upload should not roll back 373
 pieces. An orphaned object in the bucket is harmless; a half-imported
 catalogue nobody can describe is not.
 """
+import io
+import threading
 from datetime import datetime, time
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import transaction
+from django.db import connection, transaction
 from django.utils import timezone
 
 from stock import services
 from stock.enums import BomChangeReason, ChargeBasis, Uom
-from stock.importers import guess
+from stock.importers import guess, ivy
 from stock.models import Category, Collection, Material, Piece, Style, Vendor
 
 #: how far our recost may drift from IVY's own total before we mention it
@@ -251,9 +253,10 @@ def commit(pieces, decisions, user, location=None):
 def attach_images(batch, pieces, limit=10):
     """Upload the next few images. Returns how many this call got through.
 
-    Runs outside the commit transaction, and is driven a chunk at a time by the
-    browser, so a closed tab resumes from ``batch.images_done`` rather than
-    starting over or double-attaching.
+    Runs outside the commit transaction and resumes from ``batch.images_done``,
+    so a run that is cut off starts again where it stopped rather than over.
+    One photo the bucket refuses is recorded against its jewel code and the
+    rest carry on — those are the ones a person uploads by hand.
     """
     from mediahub.models import MediaAsset
     from mediahub.services import attach_uploads
@@ -265,21 +268,57 @@ def attach_images(batch, pieces, limit=10):
 
     done, refused = 0, list((batch.result or {}).get("images_refused", []))
     for parsed in todo:
+        done += 1
         piece = Piece.objects.filter(jewel_code=parsed.jewel_code).first()
-        if piece is None:
-            done += 1
-            continue
-        if MediaAsset.objects.filter(scope="piece", scope_id=str(piece.pk)).exists():
-            done += 1
+        if piece is None or MediaAsset.objects.filter(scope="piece", scope_id=str(piece.pk)).exists():
             continue
         upload = SimpleUploadedFile(
             f"{parsed.jewel_code}.jpg", parsed.image, content_type="image/jpeg"
         )
-        saved, rejected = attach_uploads([upload], "piece", piece.pk, batch.created_by)
-        refused.extend(rejected)
-        done += 1
+        try:
+            _, rejected = attach_uploads([upload], "piece", piece.pk, batch.created_by)
+        except Exception as error:  # the bucket said no; the next photo may still go
+            rejected = [str(error)]
+        refused.extend({"jewel_code": parsed.jewel_code, "reason": reason} for reason in rejected)
 
     batch.images_done += done
-    batch.result = {**(batch.result or {}), "images_refused": refused}
+    batch.result = {**(batch.result or {}), "images_refused": refused, "images_at": timezone.now().isoformat()}
     batch.save(update_fields=["images_done", "result"])
     return done
+
+
+def attach_remaining_images(batch_id):
+    """Every image not yet attached, then the batch is done.
+
+    Whatever happens, the batch ends DONE with how far it got, so the Data page
+    can say which pieces still need a photo instead of spinning forever.
+    """
+    from mediahub import storage
+    from stock.models import ImportBatch
+
+    batch = ImportBatch.objects.get(pk=batch_id)
+    try:
+        pieces = ivy.parse(io.BytesIO(storage.get_bytes(batch.media.storage_key)))
+        while attach_images(batch, pieces):
+            pass
+    except Exception as error:
+        batch.result = {**(batch.result or {}), "images_error": str(error)}
+    batch.status = ImportBatch.Status.DONE
+    batch.finished_at = timezone.now()
+    batch.save(update_fields=["result", "status", "finished_at"])
+
+
+def attach_images_in_background(batch_id):
+    """Start ``attach_remaining_images`` on a thread and return at once.
+
+    ponytail: a thread inside the web worker, not a queue. A redeploy or a
+    worker restart kills it mid-run; ``ImportBatch.images_stalled`` notices and
+    the Data page offers Resume. Move to a real task queue if imports outgrow that.
+    """
+    def run():
+        try:
+            attach_remaining_images(batch_id)
+        finally:
+            connection.close()
+
+    threading.Thread(target=run, name=f"import-{batch_id}-images", daemon=True).start()

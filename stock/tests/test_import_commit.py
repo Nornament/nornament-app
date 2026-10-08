@@ -317,9 +317,9 @@ def test_the_progress_partial_stops_asking_once_it_is_done(client, admin_user_):
         created_by=admin_user_,
     )
     client.force_login(admin_user_)
-    response = client.post(reverse("stock:import_images", args=[batch.batch_id]))
+    response = client.get(reverse("stock:import_images", args=[batch.batch_id]))
     assert b"hx-trigger" not in response.content
-    assert b"Import finished" in response.content
+    assert b"3 of 3 photos attached" in response.content
 
 
 def test_the_whole_flow_works_through_the_browser(client, admin_user_, materials, import_reference, monkeypatch, settings):
@@ -374,14 +374,16 @@ def test_the_whole_flow_works_through_the_browser(client, admin_user_, materials
 
     # committing writes the catalogue and hands over to the image loop
     committed = client.post(reverse("stock:import_commit", args=[batch.batch_id]), {"location": ""})
-    assert committed.status_code == 200
+    assert committed.status_code == 302
+    assert committed["Location"] == reverse("stock:data")
     batch.refresh_from_db()
     assert batch.result["pieces_created"] == 3
     assert Piece.objects.filter(jewel_code="24P00088").exists()
     # the fixture carries no images, so it finishes in one go
     assert batch.status == ImportBatch.Status.DONE
-    assert b"Import finished" in committed.content
-    assert b"hx-trigger" not in committed.content
+    landed = client.get(committed["Location"])
+    assert f"Import #{batch.batch_id}".encode() in landed.content
+    assert b"hx-trigger" not in landed.content
 
 
 # ── resolving a blocker ──────────────────────────────────────────────────
@@ -472,7 +474,7 @@ def test_the_commit_screen_refuses_and_keeps_the_form_when_unanswered(
 
     answered = client.post(reverse("stock:import_commit", args=[batch.batch_id]), {"location": ""})
     batch.refresh_from_db()
-    assert answered.status_code == 200
+    assert answered.status_code == 302
     assert batch.result["pieces_created"] == 1
     assert Piece.objects.filter(jewel_code="24P00088").exists()
 
@@ -590,3 +592,78 @@ def test_decisions_saved_before_a_purity_existed_still_commit_once_it_does(
     assert analyse_mod.unresolved(plan, stale) == []
     commit(parsed, analyse_mod.with_fresh_fields(plan, stale), admin_user_)
     assert Material.objects.get(item_code="G12K").metal_id == "GOLD"
+
+
+# ── photos in the background ─────────────────────────────────────────────
+def _images_batch(admin_user_, **extra):
+    from mediahub.models import MediaAsset
+
+    return ImportBatch.objects.create(
+        media=MediaAsset.objects.create(file_name="x.xlsx", scope="import", scope_id="workbook"),
+        created_by=admin_user_,
+        status=ImportBatch.Status.IMAGES,
+        result={"pieces_created": 3, "pieces_updated": 0, "pieces_skipped": 0, "lines_written": 9},
+        **extra,
+    )
+
+
+def test_a_refused_photo_is_listed_for_upload_by_hand_and_the_rest_still_go(
+    parsed, materials, import_reference, admin_user_, monkeypatch
+):
+    """The bucket refusing one photo used to 500 the chunk and freeze the bar."""
+    from mediahub import storage
+    from mediahub.models import MediaAsset
+    from stock.importers import commit as commit_mod
+
+    commit(parsed, default_decisions(analyse(parsed)), admin_user_)
+    for p in parsed:
+        p.image = b"\xff\xd8\xff\xe0fake-jpeg"
+    refused_piece = Piece.objects.get(jewel_code=parsed[0].jewel_code)
+
+    def put(key, data, mime):
+        if key.startswith(f"stock/piece/{refused_piece.pk}/"):
+            raise RuntimeError("401 Unauthorized")
+
+    monkeypatch.setattr(storage, "put_bytes", put)
+    monkeypatch.setattr(storage, "get_bytes", lambda key: b"")
+    monkeypatch.setattr(commit_mod.ivy, "parse", lambda fileobj: parsed)
+    batch = _images_batch(admin_user_, images_total=len(parsed))
+
+    commit_mod.attach_remaining_images(batch.batch_id)
+
+    batch.refresh_from_db()
+    assert batch.status == ImportBatch.Status.DONE
+    assert batch.images_done == len(parsed)
+    assert [r["jewel_code"] for r in batch.images_missing] == [parsed[0].jewel_code]
+    assert MediaAsset.objects.filter(scope="piece").count() == len(parsed) - 1
+
+
+def test_a_run_that_was_cut_off_offers_retry_and_runs_again(client, admin_user_, monkeypatch):
+    from datetime import timedelta
+
+    from django.utils import timezone
+    from stock.importers import commit as commit_mod
+
+    started = []
+    monkeypatch.setattr(commit_mod, "attach_images_in_background", started.append)
+    batch = _images_batch(admin_user_, images_total=10, images_done=4)
+    batch.result["images_at"] = (timezone.now() - timedelta(minutes=10)).isoformat()
+    batch.save(update_fields=["result"])
+    client.force_login(admin_user_)
+
+    page = client.get(reverse("stock:data"))
+    assert b"Photos stopped at 4 of 10" in page.content
+    client.post(reverse("stock:import_images", args=[batch.batch_id]))
+    assert b"Retry photos" in page.content
+    assert started == [batch.batch_id]
+    batch.refresh_from_db()
+    assert not batch.images_stalled
+    assert batch.images_done == 0
+
+
+def test_a_finished_run_with_refusals_offers_retry_and_a_clean_one_does_not(admin_user_):
+    clean = _images_batch(admin_user_, images_total=2, images_done=2)
+    clean.status = ImportBatch.Status.DONE
+    assert not clean.images_retryable
+    clean.result["images_refused"] = [{"jewel_code": "24P00088", "reason": "401"}]
+    assert clean.images_retryable

@@ -48,6 +48,7 @@
   </tbody></table>
   {% endif %}
 </div>
+{% for batch in done_imports %}{% include "stock/_import_progress.html" %}{% endfor %}
 
 <div class="card">
   <h3>Move the bucket</h3>
