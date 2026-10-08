@@ -572,3 +572,21 @@ def test_a_hand_picked_category_drags_its_unit_with_it():
     assert guess.uom_for_category("DIAMOND") == "CT"
     assert guess.uom_for_category("LABOUR") == "PCS"
     assert guess.uom_for_category("OTHER", "GM") == "GM"      # falls back
+
+
+def test_decisions_saved_before_a_purity_existed_still_commit_once_it_does(
+    blocked_book, materials, import_reference, admin_user_
+):
+    """Decisions are saved at first review. If G12K was blocked then and its
+    purity is added before commit, the gate sees the fresh guess — so must the
+    write, or the button is enabled and the commit refuses."""
+    from stock.models import MetalPurity
+
+    parsed = ivy.parse(blocked_book)
+    stale = default_decisions(analyse(parsed))
+    MetalPurity.objects.create(karat="12K", sale_factor="0.5000", true_fineness="0.5000", metal_id="GOLD")
+
+    plan = analyse(parsed)
+    assert analyse_mod.unresolved(plan, stale) == []
+    commit(parsed, analyse_mod.with_fresh_fields(plan, stale), admin_user_)
+    assert Material.objects.get(item_code="G12K").metal_id == "GOLD"

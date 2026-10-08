@@ -1789,6 +1789,12 @@ def data(request):
         {
             "nav": "data",
             "wipe": services.stock_wipe_preview() if request.user.is_superuser else None,
+            # an upload that was never committed is otherwise unreachable, and
+            # uploading again just opens a second batch beside it
+            "open_imports": ImportBatch.objects.filter(
+                source="IVY",
+                status__in=[ImportBatch.Status.UPLOADED, ImportBatch.Status.REVIEWING, ImportBatch.Status.FAILED],
+            ).select_related("media", "created_by")[:5],
             "counts": {
                 "pieces": Piece.objects.count(),
                 "bom_lines": BomLine.objects.count(),
@@ -2053,6 +2059,7 @@ def import_commit(request, batch_id):
         )
         return redirect("stock:import_step", batch_id=batch.batch_id, step="materials")
 
+    decisions = analyse_import.with_fresh_fields(plan, decisions)
     location = Location.objects.filter(pk=request.POST.get("location") or 0).first()
     batch.status = ImportBatch.Status.COMMITTING
     batch.save(update_fields=["status"])

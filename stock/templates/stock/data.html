@@ -37,6 +37,16 @@
     <input type="file" name="workbook" accept=".xlsx" required>
     <button class="btn primary" type="submit">Read the workbook</button>
   </form>
+  {% if open_imports %}
+  <table style="margin-top:14px"><thead><tr><th>Not imported yet</th><th>Uploaded</th><th>Status</th><th></th></tr></thead><tbody>
+    {% for b in open_imports %}
+    <tr><td>#{{ b.batch_id }} · {{ b.media.file_name }}</td>
+      <td class="dim">{{ b.created_at|date:"d M H:i" }}{% if b.created_by %} · {{ b.created_by }}{% endif %}</td>
+      <td>{{ b.get_status_display }}{% if b.result.error %} <span class="dim">— {{ b.result.error|truncatechars:80 }}</span>{% endif %}</td>
+      <td class="num"><a class="btn" href="{% url 'stock:import_review' b.batch_id %}">Continue →</a></td></tr>
+    {% endfor %}
+  </tbody></table>
+  {% endif %}
 </div>
 
 <div class="card">

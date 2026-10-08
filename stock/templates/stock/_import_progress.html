@@ -7,10 +7,12 @@
        {{ batch.result.lines_written }} material lines,
        {{ batch.images_done }} images.</p>
     {% if batch.result.variances %}
-    
+    <div class="note bad"><b>{{ batch.result.variances|length }} piece{{ batch.result.variances|length|pluralize }} cost differently here
+      than in IVY.</b> {% for v in batch.result.variances|slice:":10" %}<span class="code">{{ v.jewel_code }}</span>{% if not forloop.last %}, {% endif %}{% endfor %}{% if batch.result.variances|length > 10 %} and {{ batch.result.variances|length|add:"-10" }} more{% endif %}.</div>
     {% endif %}
     {% if batch.result.images_refused %}
-    
+    <div class="note"><b>{{ batch.result.images_refused|length }} image{{ batch.result.images_refused|length|pluralize }} refused.</b>
+      {{ batch.result.images_refused|join:", " }}</div>
     {% endif %}
     <a class="btn primary" href="{% url 'stock:piece_list' %}">See the pieces</a>
   {% else %}

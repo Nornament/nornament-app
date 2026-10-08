@@ -56,7 +56,7 @@ def _metal_fields(line):
     if metal_id is None:
         return None, None, (
             f"{line.code!r} does not start with G or S, so its metal cannot be read. "
-            "Pick the metal and purity by hand."
+            "Choose “use existing” and type a metal code you already have, or skip it."
         )
     karat = re.search(r"(\d+K|\d{3})", line.name.upper() or code)
     if karat is None:
@@ -65,8 +65,9 @@ def _metal_fields(line):
     purity = MetalPurity.objects.filter(pk=karat).first()
     if purity is None:
         return None, None, (
-            f"Purity {karat!r} is not in the purity table. Create it, or point "
-            f"{line.code!r} at an existing purity."
+            f"Purity {karat!r} is not in the purity table (Settings → Rates), so "
+            f"{line.code!r} cannot be priced. Choose “use existing” and type a metal "
+            "code you already have — skipping it leaves the metal off every piece."
         )
     return metal_id, purity, None
 

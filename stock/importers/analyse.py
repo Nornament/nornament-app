@@ -287,6 +287,21 @@ def unresolved(plan, decisions):
     return still
 
 
+def with_fresh_fields(plan, decisions):
+    """The decisions, each material's fields re-guessed under the reviewer's own.
+
+    Decisions are saved at first review, so a purity added since then is
+    missing from them. ``unresolved`` judges the fresh guess; the commit has to
+    write the same thing, or the button is enabled and the commit refuses.
+    """
+    materials = decisions.get("materials") or {}
+    for row in plan.materials:
+        choice = materials.get(row.key)
+        if choice is not None:
+            choice["fields"] = _jsonable({**(row.fields or {}), **(choice.get("fields") or {})})
+    return decisions
+
+
 def _jsonable(value):
     """Decimals do not survive a JSONField, and purity_factor is one.
 

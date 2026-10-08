@@ -38,6 +38,7 @@ from .models import (
     BomLine,
     BomVersion,
     Location,
+    MaterialCategory,
     MeltRecord,
     Metal,
     MetalPurity,
@@ -1399,7 +1400,7 @@ WIPE_GROUP_TITLES = {
     "pieces": ("Pieces and their history", "Every jewel code, its BOM, movements, sales, repairs, melts, counts and photos."),
     "designs": ("Design catalogue", "The styles those pieces were made from, their tags and design images."),
     "materials": ("Materials and rate charts", "The material register, the rate charts priced off it, and material inventory."),
-    "reference": ("Reference data", "Locations, categories, metals, purities, vendors and pricing scenarios."),
+    "reference": ("Reference data", "Locations, categories, collections, tags, vendors and pricing scenarios."),
 }
 
 
@@ -1414,7 +1415,7 @@ def _wipe_plan(groups=None):
 
     from .models import (
         Catalogue, CatalogueItem, CatalogueTemplate, Category, Collection, ImportBatch, JobCard,
-        Material, MaterialCategory, MaterialInventory, PieceCertificate, RateCard, RateCardLine,
+        Material, MaterialInventory, PieceCertificate, RateCard, RateCardLine,
         RepairMaterialChange, Scenario, ScenarioRole, Style, StyleTag, Tag, Vendor,
     )
 
@@ -1450,16 +1451,16 @@ def _wipe_plan(groups=None):
         ("materials", "rate card lines", RateCardLine.objects.all()),
         ("materials", "rate cards", RateCard.objects.all()),
         ("materials", "materials", Material.objects.all()),
-        ("materials", "material categories", MaterialCategory.objects.all()),
         ("reference", "scenario roles", ScenarioRole.objects.all()),
         ("reference", "scenarios", Scenario.objects.all()),
         ("reference", "collections", Collection.objects.all()),
         ("reference", "tags", Tag.objects.all()),
         ("reference", "vendors", Vendor.objects.all()),
         ("reference", "categories", Category.objects.all()),
-        ("reference", "metal purities", MetalPurity.objects.all()),
-        ("reference", "metals", Metal.objects.all()),
         ("reference", "locations", Location.objects.all()),
+        # metals, purities and material categories are not here on purpose: no
+        # screen can recreate them, and without them every metal line in an
+        # import is a blocker and nothing can be priced
     ]
     if groups is None:
         return plan
@@ -1500,6 +1501,9 @@ def stock_wipe_preview():
             ("CRM orders", Order.objects.count()),
             ("activity log entries", ActivityLog.objects.count()),
             ("system settings", SystemSetting.objects.count()),
+            ("metals", Metal.objects.count()),
+            ("metal purities", MetalPurity.objects.count()),
+            ("material categories", MaterialCategory.objects.count()),
         ],
     }
 
