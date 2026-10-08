@@ -314,6 +314,9 @@ def test_every_stock_and_crm_screen_is_in_the_sales_walk():
         # POST-only and superuser-only; it renders nothing, so there is no row
         # for the walk to inspect. Its gate is the one thing worth asserting.
         "stock:stock_wipe",
+        # gated on the admin tab; asserted to 403 for SALES in
+        # accounts/tests/test_user_management.py
+        "stock:user_add", "stock:user_edit",
     }
     named = set()
     for resolver in get_resolver().url_patterns:

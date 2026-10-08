@@ -63,7 +63,7 @@ a larger app and has to be escapable.
 
       <div class="sb-sec">Admin</div>
       {% url 'crm:settings' as u %}<a class="ni{% if request.path == u %} on{% endif %}" href="{{ u }}"><span class="ni-i">⚙️</span><span>Settings</span></a>
-      {% if is_admin %}<a class="ni" href="{% url 'admin:index' %}"><span class="ni-i">🛠</span><span>Django admin</span></a>{% endif %}
+      {% if user.is_superuser %}<a class="ni" href="{% url 'admin:index' %}"><span class="ni-i">🛠</span><span>Django admin</span></a>{% endif %}
     </div>
 
     <form class="sbf" method="post" action="{% url 'accounts:logout' %}" style="background:none;border-top:1px solid #E8E8E4">{% csrf_token %}

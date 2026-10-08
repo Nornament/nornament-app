@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{% if account %}{{ account }}{% else %}Add a user{% endif %} · Nornament{% endblock %}
+{% block heading %}{% if account %}Edit {{ account }}{% else %}Add a user{% endif %}{% endblock %}
+{% block content %}
+<form method="post" class="card" style="max-width:620px"
+      action="{% if account %}{% url 'stock:user_edit' account.pk %}{% else %}{% url 'stock:user_add' %}{% endif %}">
+  {% csrf_token %}
+  <h3>{% if account %}{{ account }} <span class="dim mono" style="font-weight:400">{{ account.username }}</span>{% else %}New login{% endif %}</h3>
+
+  {% if form.non_field_errors %}<div class="note bad">{{ form.non_field_errors }}</div>{% endif %}
+
+  <div class="fgrid">
+    {% for field in form %}{% if field.name != 'is_active' %}
+    <div class="field{% if field.name == 'locations' %} wide{% endif %}">
+      <label class="f" for="{{ field.id_for_label }}">{{ field.label }}{% if field.name == 'password' and account %} <span class="dim">— leave blank to keep theirs</span>{% endif %}</label>
+      {{ field }}
+      {% if field.errors %}<div class="note bad" style="margin:4px 0 0">{{ field.errors|join:" " }}</div>{% endif %}
+    </div>
+    {% endif %}{% endfor %}
+  </div>
+
+  {% if account %}{% with active=form.is_active %}
+  <div class="toggle-row">
+    <label class="switch">
+      <input type="checkbox" name="{{ active.html_name }}" id="{{ active.id_for_label }}" {% if active.value %}checked{% endif %}>
+      <span class="track"><span class="knob"></span></span>
+    </label>
+    <div><label class="f" for="{{ active.id_for_label }}" style="margin:0">Can log in</label></div>
+  </div>
+  {% if active.errors %}<div class="note bad">{{ active.errors|join:" " }}</div>{% endif %}
+  {% endwith %}{% endif %}
+
+  <div class="row" style="margin-top:16px">
+    <button class="btn primary" type="submit">{% if account %}Save{% else %}Add user{% endif %}</button>
+    <a class="btn" href="{% url 'stock:settings' %}?tab=users">Cancel</a>
+  </div>
+</form>
+{% endblock %}

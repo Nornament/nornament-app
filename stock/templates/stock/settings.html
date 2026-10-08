@@ -509,12 +509,14 @@ function rateEdit(button) {
 <div class="card">
   <div class="spread">
     <div><h3>Users</h3></div>
-    <a class="btn" href="{% url 'admin:accounts_user_changelist' %}">Manage in admin →</a>
+    <button type="button" class="btn primary" onclick="document.getElementById('userdlg').showModal()">+ Add user</button>
   </div>
   <table style="margin-top:12px"><thead><tr><th>User</th><th>Email</th><th>Role</th>
     <th>Home location</th><th>Status</th></tr></thead><tbody>
     {% for row in users %}
-    <tr><td>{{ row.full_name|default:row.username }}<div class="dim mono" style="font-size:12px">{{ row.username }}</div></td>
+    <tr><td><a href="{% url 'stock:user_edit' row.pk %}">{{ row.full_name|default:row.username }}</a>
+      {% if row.is_superuser %}<span class="chip c-warn">superuser</span>{% endif %}
+      <div class="dim mono" style="font-size:12px">{{ row.username }}</div></td>
       <td class="dim">{{ row.email|default:"—" }}</td>
       <td>{% for group in row.groups.all %}<span class="chip c-neutral">{{ group.name }}</span>{% empty %}<span class="dim">none</span>{% endfor %}</td>
       <td class="dim">{{ row.home_location|default:"all" }}</td>
@@ -523,8 +525,21 @@ function rateEdit(button) {
         {% else %}<span class="chip c-good">active</span>{% endif %}</td></tr>
     {% endfor %}
   </tbody></table>
-  
 </div>
+
+<dialog class="modal" id="userdlg">
+  <form method="post" action="{% url 'stock:user_add' %}">{% csrf_token %}
+    <header><h3>Add a user</h3></header>
+    <div class="content">
+      {% for field in user_form %}{% if field.name != 'is_active' %}
+      <div class="field">{{ field.label_tag }}{{ field }}</div>{% endif %}{% endfor %}
+    </div>
+    <footer>
+      <button class="btn" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn primary">Add user</button>
+    </footer>
+  </form>
+</dialog>
 
 {% elif tab == 'perms' %}
 <div class="card">

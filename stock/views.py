@@ -2324,9 +2324,9 @@ def settings_view(request):
     """Users & Settings — the legacy's tabbed admin screen.
 
     Categories, locations and materials are editable here because they were in
-    the old app. Users are not: Django's own admin owns password hashes, group
-    membership and the must-change flag, and a second half-implementation of
-    that is how a role quietly gains a capability.
+    the old app. Users are too (``user_add``/``user_edit``): the Django admin is
+    superuser-only, and ``UserForm`` gives a login one role and nothing else,
+    so no per-user permission or staff flag can be set from here.
     """
     tab = request.GET.get("tab") or "cats"
     if tab not in dict(SETTINGS_TABS):
@@ -2384,7 +2384,10 @@ def settings_view(request):
     elif tab == "users":
         from accounts.models import User
 
-        context["users"] = User.objects.prefetch_related("groups").order_by("username")
+        from accounts.forms import UserForm
+
+        context["users"] = User.objects.prefetch_related("groups").select_related("home_location").order_by("username")
+        context["user_form"] = UserForm(actor=request.user)
     elif tab == "perms":
         from accounts.models import User
 
@@ -2590,6 +2593,40 @@ def _location_delete(request):
         services.log(request.user, "DELETE", "location", str(location.pk), name)
         messages.success(request, f"{name} deleted.{moved}")
     return redirect(back)
+
+
+@login_required
+@tab_required("admin")
+@require_POST
+def user_add(request):
+    """The Users tab's Add modal. Refused input reopens the modal with the errors."""
+    from accounts.forms import UserForm
+
+    form = UserForm(request.POST, actor=request.user)
+    if form.is_valid():
+        user = form.save()
+        services.log(request.user, "INSERT", "user", user.pk, f"added {user.username} as {form.cleaned_data['role']}")
+        messages.success(request, f"{user} added. They set their own password on first login.")
+        return redirect(f"{reverse('stock:settings')}?tab=users")
+    return render(request, "stock/user_form.html", {"nav": "admin", "form": form, "account": None})
+
+
+@login_required
+@tab_required("admin")
+def user_edit(request, pk):
+    """Change one login: details, role, locations, whether it can log in, its password."""
+    from accounts.forms import UserForm
+    from accounts.models import User
+
+    account = get_object_or_404(User, pk=pk)
+    form = UserForm(request.POST or None, instance=account, actor=request.user)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        reset = " and set a temporary password" if form.cleaned_data.get("password") else ""
+        services.log(request.user, "UPDATE", "user", account.pk, f"edited {account.username}{reset}")
+        messages.success(request, f"{account} saved.")
+        return redirect(f"{reverse('stock:settings')}?tab=users")
+    return render(request, "stock/user_form.html", {"nav": "admin", "form": form, "account": account})
 
 
 def _settings_post(request, tab):
