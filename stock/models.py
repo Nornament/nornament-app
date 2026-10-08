@@ -19,6 +19,7 @@ from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from django.utils.functional import cached_property
 
 from .enums import (
     BomChangeReason,
@@ -1104,13 +1105,29 @@ class ImportBatch(AppModel):
             return 0
         return int(self.images_done * 100 / self.images_total)
 
-    #: a background run reports after every ten photos; this long without a
-    #: word means it was cut off (a redeploy, a worker restart) and can resume
+    #: a running job reports after every ten photos; this long without a word
+    #: means it was cut off (a redeploy, a worker restart) and can run again
     IMAGES_STALL_AFTER = timedelta(minutes=2)
+
+    @cached_property
+    def images_waiting(self):
+        """Queued, and no worker has picked it up yet."""
+        if self.status != self.Status.IMAGES:
+            return False
+        from django_tasks.base import TaskResultStatus
+        from django_tasks.exceptions import TaskResultDoesNotExist
+
+        from stock.importers.commit import attach_photos
+
+        try:
+            job = attach_photos.get_result((self.result or {}).get("images_task") or "")
+        except (TaskResultDoesNotExist, ValueError):
+            return False
+        return job.status == TaskResultStatus.READY
 
     @property
     def images_stalled(self):
-        if self.status != self.Status.IMAGES:
+        if self.status != self.Status.IMAGES or self.images_waiting:
             return False
         at = parse_datetime((self.result or {}).get("images_at") or "") or self.created_at
         return timezone.now() - at > self.IMAGES_STALL_AFTER

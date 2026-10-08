@@ -9,6 +9,7 @@ returning the same partials the full page renders.
 """
 import csv
 import datetime
+import hashlib
 import io
 import logging
 import re
@@ -1846,10 +1847,7 @@ def stock_wipe(request):
 
 # ── importing a workbook ─────────────────────────────────────────────────
 def _batch_workbook(batch):
-    """The stored workbook as a file object, straight from the bucket."""
-    from mediahub import storage
-
-    return io.BytesIO(storage.get_bytes(batch.media.storage_key))
+    return commit_import.workbook_file(batch)
 
 
 def _store_workbook(upload, user):
@@ -1864,19 +1862,23 @@ def _store_workbook(upload, user):
     """
     from mediahub import storage
 
-    data = upload.read()
+    # hashed and sent in chunks: a workbook full of photos is never held whole
+    digest = hashlib.sha256()
+    for chunk in upload.chunks():
+        digest.update(chunk)
+    upload.seek(0)
     mime = upload.content_type or storage.guess_mime(upload.name)
     key = storage.build_key("import", "workbook", upload.name)
-    storage.put_bytes(key, data, mime)
+    storage.upload_from(key, upload, mime)
     return MediaAsset.objects.create(
         media_ref=media_services.next_media_ref(),
         kind=MediaKind.DOCUMENT,
         storage_key=key,
         file_name=upload.name,
         mime_type=mime,
-        bytes=len(data),
-        file_size_kb=int(len(data) / 1024) or None,
-        sha256=storage.sha256_of(data),
+        bytes=upload.size,
+        file_size_kb=int(upload.size / 1024) or None,
+        sha256=digest.hexdigest(),
         confirmed_at=timezone.now(),
         uploaded_by=user,
         scope="import",
@@ -1958,6 +1960,8 @@ def import_upload(request):
         return redirect("stock:data")
 
     batch = ImportBatch.objects.create(media=asset, created_by=request.user)
+    upload.seek(0)
+    commit_import.keep_workbook(batch, upload)  # in hand: the first review page need not fetch it
     return redirect("stock:import_review", batch_id=batch.batch_id)
 
 
@@ -2074,16 +2078,16 @@ def import_commit(request, batch_id):
         messages.error(request, f"Import failed, nothing was written. {error}")
         return redirect("stock:import_step", batch_id=batch.batch_id, step="confirm")
 
-    batch.images_total = sum(1 for p in pieces if p.image)
-    batch.result = {**result, "images_at": timezone.now().isoformat()}
-    batch.status = ImportBatch.Status.IMAGES if batch.images_total else ImportBatch.Status.DONE
-    batch.finished_at = None if batch.images_total else timezone.now()
+    batch.images_total = sum(1 for p in pieces if p.photo)
+    batch.result = result
+    batch.status = ImportBatch.Status.DONE
+    batch.finished_at = timezone.now()
     batch.save(update_fields=["result", "images_total", "status", "finished_at"])
     created = result["pieces_created"] + result["pieces_updated"]
     if batch.images_total:
-        # the photos go on a thread so nobody waits on the bucket: the pieces
+        # the photos go on the queue so nobody waits on the bucket: the pieces
         # are already saved, and the Data page shows the photos catching up
-        commit_import.attach_images_in_background(batch.batch_id)
+        commit_import.queue_photos(batch)
         messages.success(request, f"{created} pieces imported. Photos are attaching in the background.")
     else:
         messages.success(request, f"{created} pieces imported.")
@@ -2093,20 +2097,10 @@ def import_commit(request, batch_id):
 @login_required
 @tab_required("data")
 def import_images(request, batch_id):
-    """The photo progress card. GET is the poll; POST runs the photos again.
-
-    A rerun starts from the top: a piece that already has its photo is passed
-    over, so only what is missing goes up, and refusals are counted afresh.
-    """
+    """The photo progress card. GET is the poll; POST queues the photos again."""
     batch = get_object_or_404(ImportBatch, pk=batch_id)
     if request.method == "POST" and batch.images_retryable:
-        result = {k: v for k, v in (batch.result or {}).items() if k not in ("images_refused", "images_error")}
-        batch.result = {**result, "images_at": timezone.now().isoformat()}
-        batch.images_done = 0
-        batch.status = ImportBatch.Status.IMAGES
-        batch.finished_at = None
-        batch.save(update_fields=["result", "images_done", "status", "finished_at"])
-        commit_import.attach_images_in_background(batch.batch_id)
+        commit_import.queue_photos(batch)
     if request.method == "POST" and not request.headers.get("HX-Request"):
         # a bare card is not a page: that is what left the old bar frozen
         return redirect("stock:data")

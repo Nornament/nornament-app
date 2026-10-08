@@ -282,3 +282,31 @@ def test_a_file_with_no_duplicates_folds_nothing():
     pieces = ivy.parse(build_workbook())
     assert len(pieces) == 3
     assert all(p.superseded == 0 for p in pieces)
+
+
+def test_photos_are_found_by_row_without_loading_them_and_a_merged_footer_is_not_a_piece():
+    """Parsing reads where each photo is, not the photo: review pages never load them."""
+    import io
+
+    from openpyxl import load_workbook
+    from openpyxl.drawing.image import Image
+    from PIL import Image as PILImage
+
+    png = io.BytesIO()
+    PILImage.new("RGB", (4, 4), "red").save(png, format="PNG")
+    book = load_workbook(build_workbook())
+    sheet = book[ivy.SHEET]
+    photo = Image(io.BytesIO(png.getvalue()))
+    photo.anchor = "A4"
+    sheet.add_image(photo)
+    footer = sheet.max_row + 2
+    for column in range(1, 30):
+        sheet.cell(row=footer, column=column, value="[admin] : 08:10:2026 03:08")
+    sheet.merge_cells(start_row=footer, start_column=1, end_row=footer, end_column=29)
+    saved = io.BytesIO()
+    book.save(saved)
+
+    pieces = ivy.parse(io.BytesIO(saved.getvalue()))
+    assert [p.jewel_code for p in pieces] == ["24P00088", "24P00111", "24P00095"]
+    assert pieces[0].photo and pieces[1].photo is None
+    assert ivy.read_photo(io.BytesIO(saved.getvalue()), pieces[0].photo).startswith(b"\x89PNG")

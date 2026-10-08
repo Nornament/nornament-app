@@ -237,28 +237,31 @@ def test_updating_an_existing_piece_adds_a_version_and_keeps_the_old_one(
 
 
 def test_images_are_attached_in_chunks_and_are_resumable(
-    parsed, materials, import_reference, admin_user_, settings, tmp_path
+    parsed, materials, import_reference, admin_user_, monkeypatch
 ):
     """Each chunk does its share, and the counter is what makes it resumable."""
+    from mediahub import storage
     from mediahub.models import MediaAsset
 
+    monkeypatch.setattr(storage, "put_bytes", lambda key, data, mime: None)
     plan = analyse(parsed)
     commit(parsed, default_decisions(plan), admin_user_)
 
     # the fixture workbook has no embedded images, so plant one
-    parsed[0].image = b"\xff\xd8\xff\xe0fake-jpeg"
+    parsed[0].photo = "xl/media/image1.jpeg"
+    read = {"xl/media/image1.jpeg": b"\xff\xd8\xff\xe0fake-jpeg"}.__getitem__
     batch = ImportBatch.objects.create(
         # media_asset_has_an_owner needs style, piece or scope set
         media=MediaAsset.objects.create(file_name="x.xlsx", scope="import", scope_id="workbook"),
         images_total=1,
         created_by=admin_user_,
     )
-    done = attach_images(batch, parsed, limit=10)
+    done = attach_images(batch, parsed, read, limit=10)
     batch.refresh_from_db()
     assert done == 1
     assert batch.images_done == 1
     # running again does nothing, rather than attaching a second copy
-    assert attach_images(batch, parsed, limit=10) == 0
+    assert attach_images(batch, parsed, read, limit=10) == 0
 
 
 # ── the screens ──────────────────────────────────────────────────────────
@@ -336,8 +339,8 @@ def test_the_whole_flow_works_through_the_browser(client, admin_user_, materials
     # stub only the network call. Everything above it — including whether an
     # xlsx is allowed through at all — is what this test exists to exercise.
     put = {}
-    monkeypatch.setattr(storage, "put_bytes", lambda key, data, mime: put.update(key=key, mime=mime))
-    monkeypatch.setattr(storage, "get_bytes", lambda key: book)
+    monkeypatch.setattr(storage, "upload_from", lambda key, fileobj, mime: put.update(key=key, mime=mime))
+    monkeypatch.setattr(storage, "download_to", lambda key, fileobj: fileobj.write(book))
 
     client.force_login(admin_user_)
     upload = _xlsx_upload()
@@ -450,7 +453,7 @@ def test_the_commit_screen_refuses_and_keeps_the_form_when_unanswered(
     from mediahub.models import MediaAsset
 
     book = blocked_book.getvalue()
-    monkeypatch.setattr(storage, "get_bytes", lambda key: book)
+    monkeypatch.setattr(storage, "download_to", lambda key, fileobj: fileobj.write(book))
     batch = ImportBatch.objects.create(
         media=MediaAsset.objects.create(file_name="x.xlsx", scope="import", scope_id="w", storage_key="k"),
         created_by=admin_user_,
@@ -538,7 +541,7 @@ def test_the_reviewer_can_set_a_material_category_by_hand(client, admin_user_, m
     from mediahub.models import MediaAsset
 
     book = build_workbook().getvalue()
-    monkeypatch.setattr(storage, "get_bytes", lambda key: book)
+    monkeypatch.setattr(storage, "download_to", lambda key, fileobj: fileobj.write(book))
     batch = ImportBatch.objects.create(
         media=MediaAsset.objects.create(file_name="x.xlsx", scope="import", scope_id="w", storage_key="k"),
         created_by=admin_user_,
@@ -599,7 +602,9 @@ def _images_batch(admin_user_, **extra):
     from mediahub.models import MediaAsset
 
     return ImportBatch.objects.create(
-        media=MediaAsset.objects.create(file_name="x.xlsx", scope="import", scope_id="workbook"),
+        media=MediaAsset.objects.create(
+            file_name="x.xlsx", scope="import", scope_id="workbook", storage_key="crm/import/workbook/x.xlsx"
+        ),
         created_by=admin_user_,
         status=ImportBatch.Status.IMAGES,
         result={"pieces_created": 3, "pieces_updated": 0, "pieces_skipped": 0, "lines_written": 9},
@@ -615,37 +620,54 @@ def test_a_refused_photo_is_listed_for_upload_by_hand_and_the_rest_still_go(
     from mediahub.models import MediaAsset
     from stock.importers import commit as commit_mod
 
+    import zipfile
+
     commit(parsed, default_decisions(analyse(parsed)), admin_user_)
-    for p in parsed:
-        p.image = b"\xff\xd8\xff\xe0fake-jpeg"
+    for n, p in enumerate(parsed):
+        p.photo = f"xl/media/image{n}.jpeg"
     refused_piece = Piece.objects.get(jewel_code=parsed[0].jewel_code)
 
     def put(key, data, mime):
         if key.startswith(f"stock/piece/{refused_piece.pk}/"):
             raise RuntimeError("401 Unauthorized")
 
+    def download_to(key, fileobj):
+        # the workbook as the worker gets it: a zip it reads photos out of
+        with zipfile.ZipFile(fileobj, "w") as book:
+            for p in parsed:
+                book.writestr(p.photo, b"\xff\xd8\xff\xe0fake-jpeg")
+
     monkeypatch.setattr(storage, "put_bytes", put)
-    monkeypatch.setattr(storage, "get_bytes", lambda key: b"")
+    monkeypatch.setattr(storage, "download_to", download_to)
     monkeypatch.setattr(commit_mod.ivy, "parse", lambda fileobj: parsed)
     batch = _images_batch(admin_user_, images_total=len(parsed))
 
-    commit_mod.attach_remaining_images(batch.batch_id)
+    # no time at all: one chunk, then the rest goes back on the queue
+    commit_mod.attach_remaining_images(batch.batch_id, seconds=0)
+    batch.refresh_from_db()
+    assert batch.status == ImportBatch.Status.IMAGES
+    assert batch.images_waiting  # the next chunk, for whichever worker is up
 
+    commit_mod.attach_remaining_images(batch.batch_id)
     batch.refresh_from_db()
     assert batch.status == ImportBatch.Status.DONE
     assert batch.images_done == len(parsed)
     assert [r["jewel_code"] for r in batch.images_missing] == [parsed[0].jewel_code]
-    assert MediaAsset.objects.filter(scope="piece").count() == len(parsed) - 1
+    # on the piece itself, where the piece page and the stock list look
+    assert MediaAsset.objects.filter(piece__isnull=False).count() == len(parsed) - 1
+    assert not refused_piece.media.exists()
+    from mediahub.services import for_pieces
+
+    shown = Piece.objects.get(jewel_code=parsed[1].jewel_code)
+    assert for_pieces([shown.pk])[shown.pk], "the stock list and piece page read photos through for_pieces"
 
 
-def test_a_run_that_was_cut_off_offers_retry_and_runs_again(client, admin_user_, monkeypatch):
+def test_a_run_that_was_cut_off_offers_retry_and_queues_it_again(client, admin_user_):
     from datetime import timedelta
 
     from django.utils import timezone
-    from stock.importers import commit as commit_mod
+    from django_tasks_db.models import DBTaskResult
 
-    started = []
-    monkeypatch.setattr(commit_mod, "attach_images_in_background", started.append)
     batch = _images_batch(admin_user_, images_total=10, images_done=4)
     batch.result["images_at"] = (timezone.now() - timedelta(minutes=10)).isoformat()
     batch.save(update_fields=["result"])
@@ -655,10 +677,15 @@ def test_a_run_that_was_cut_off_offers_retry_and_runs_again(client, admin_user_,
     assert b"Photos stopped at 4 of 10" in page.content
     client.post(reverse("stock:import_images", args=[batch.batch_id]))
     assert b"Retry photos" in page.content
-    assert started == [batch.batch_id]
     batch.refresh_from_db()
-    assert not batch.images_stalled
+    queued = DBTaskResult.objects.get(id=batch.result["images_task"])
+    assert queued.args_kwargs["args"] == [batch.batch_id]
     assert batch.images_done == 0
+    # queued, no worker yet: that is waiting, not stopped, and Retry would not help
+    assert batch.images_waiting and not batch.images_stalled
+    page = client.get(reverse("stock:data"))
+    assert b"waiting for the photo worker" in page.content
+    assert b"Retry photos" not in page.content
 
 
 def test_a_finished_run_with_refusals_offers_retry_and_a_clean_one_does_not(admin_user_):

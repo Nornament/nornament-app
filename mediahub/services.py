@@ -91,6 +91,20 @@ def to_webp(asset, data=None, quality=None):
     return saved
 
 
+def _owner(scope, entity_id):
+    """Stock media hangs off its FK, as the presigned upload does; CRM off scope.
+
+    Piece pages read ``piece.media``. A piece photo saved with only
+    ``scope='piece'`` is in the bucket and on no screen — which is where every
+    photo the IVY import attached used to end up.
+    """
+    if scope == "piece":
+        return {"piece_id": entity_id}
+    if scope == "style":
+        return {"style_id": entity_id}
+    return {"scope": scope, "scope_id": str(entity_id)}
+
+
 def attach_uploads(files, scope, entity_id, user, kind=None):
     """Take files off a normal form POST and put them in the bucket.
 
@@ -128,8 +142,7 @@ def attach_uploads(files, scope, entity_id, user, kind=None):
             sha256=storage.sha256_of(data),
             confirmed_at=timezone.now(),
             uploaded_by=user,
-            scope=scope,
-            scope_id=str(entity_id),
+            **_owner(scope, entity_id),
         )
         saved.append(asset)
     return saved, refused

@@ -10,7 +10,9 @@
 
   {% if batch.status == 'IMAGES' %}
     <progress value="{{ batch.images_done }}" max="{{ batch.images_total }}"></progress>
-    {% if batch.images_stalled %}
+    {% if batch.images_waiting %}
+    <p class="dim">{{ batch.images_total }} photos queued — waiting for the photo worker to pick them up.</p>
+    {% elif batch.images_stalled %}
     <div class="note bad"><b>Photos stopped at {{ batch.images_done }} of {{ batch.images_total }}.</b>
       The pieces are saved; only the photos are behind.</div>
     {% else %}

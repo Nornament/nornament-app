@@ -6,13 +6,19 @@ not: S3 is not transactional, and one refused upload should not roll back 373
 pieces. An orphaned object in the bucket is harmless; a half-imported
 catalogue nobody can describe is not.
 """
-import io
-import threading
-from datetime import datetime, time
+import os
+import shutil
+import tempfile
+import time
+import zipfile
+from datetime import datetime
+from datetime import time as clock
+from pathlib import Path
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import connection, transaction
+from django.db import transaction
 from django.utils import timezone
+from django_tasks import task
 
 from stock import services
 from stock.enums import BomChangeReason, ChargeBasis, Uom
@@ -149,7 +155,7 @@ def _received_at(parsed):
     """
     if not parsed.inw_date:
         return None
-    return timezone.make_aware(datetime.combine(parsed.inw_date, time()))
+    return timezone.make_aware(datetime.combine(parsed.inw_date, clock()))
 
 
 def _apply_header(piece, parsed, style):
@@ -250,19 +256,20 @@ def commit(pieces, decisions, user, location=None):
     return result
 
 
-def attach_images(batch, pieces, limit=10):
+def attach_images(batch, pieces, read_photo, limit=10):
     """Upload the next few images. Returns how many this call got through.
 
     Runs outside the commit transaction and resumes from ``batch.images_done``,
     so a run that is cut off starts again where it stopped rather than over.
-    One photo the bucket refuses is recorded against its jewel code and the
-    rest carry on — those are the ones a person uploads by hand.
+    ``read_photo`` turns a piece's photo path into bytes one photo at a time,
+    so memory holds one photo however large the workbook is. One the bucket
+    refuses is recorded against its jewel code and the rest carry on — those
+    are the ones a person uploads by hand.
     """
-    from mediahub.models import MediaAsset
     from mediahub.services import attach_uploads
 
-    with_images = [p for p in pieces if p.image]
-    todo = with_images[batch.images_done:batch.images_done + limit]
+    with_photos = [p for p in pieces if p.photo]
+    todo = with_photos[batch.images_done:batch.images_done + limit]
     if not todo:
         return 0
 
@@ -270,12 +277,12 @@ def attach_images(batch, pieces, limit=10):
     for parsed in todo:
         done += 1
         piece = Piece.objects.filter(jewel_code=parsed.jewel_code).first()
-        if piece is None or MediaAsset.objects.filter(scope="piece", scope_id=str(piece.pk)).exists():
+        if piece is None or piece.media.exists():
             continue
-        upload = SimpleUploadedFile(
-            f"{parsed.jewel_code}.jpg", parsed.image, content_type="image/jpeg"
-        )
         try:
+            upload = SimpleUploadedFile(
+                f"{parsed.jewel_code}.jpg", read_photo(parsed.photo), content_type="image/jpeg"
+            )
             _, rejected = attach_uploads([upload], "piece", piece.pk, batch.created_by)
         except Exception as error:  # the bucket said no; the next photo may still go
             rejected = [str(error)]
@@ -287,38 +294,101 @@ def attach_images(batch, pieces, limit=10):
     return done
 
 
-def attach_remaining_images(batch_id):
-    """Every image not yet attached, then the batch is done.
+#: a photo job works this long, then queues the rest as a fresh job. A redeploy
+#: waits out at most one chunk, and the remainder is still on the queue for the
+#: new worker — nobody has to press Retry because a deploy landed mid-import.
+PHOTO_CHUNK_SECONDS = 20
 
-    Whatever happens, the batch ends DONE with how far it got, so the Data page
-    can say which pieces still need a photo instead of spinning forever.
+#: uploaded workbooks kept on local disk while they are reviewed and their
+#: photos attached, so neither re-fetches hundreds of MB from the bucket.
+#: ponytail: per-container and only emptied by a redeploy or a finished import;
+#: put it on a volume with a sweep if abandoned uploads ever pile up.
+IMPORT_CACHE = Path(tempfile.gettempdir()) / "nornament-imports"
+
+
+def _workbook_path(batch):
+    # the key carries a uuid, so one path can never mean two workbooks
+    return IMPORT_CACHE / batch.media.storage_key.replace("/", "_")
+
+
+def keep_workbook(batch, fileobj):
+    """Cache a workbook already in hand (the upload) under this batch."""
+    IMPORT_CACHE.mkdir(parents=True, exist_ok=True)
+    with open(_workbook_path(batch), "wb") as cached:
+        shutil.copyfileobj(fileobj, cached)
+
+
+def workbook_file(batch):
+    """The batch's workbook as an open file, off local disk.
+
+    The bucket stays the truth: a copy missing here (a redeploy, the other
+    container) is fetched once, into a temporary name, then moved into place so
+    a half-written file is never read.
     """
     from mediahub import storage
+
+    path = _workbook_path(batch)
+    if not path.exists():
+        IMPORT_CACHE.mkdir(parents=True, exist_ok=True)
+        partial = path.with_name(f"{path.name}.{os.getpid()}.part")
+        with open(partial, "wb") as workbook:
+            storage.download_to(batch.media.storage_key, workbook)
+        partial.replace(path)
+    return open(path, "rb")
+
+
+def attach_remaining_images(batch_id, seconds=PHOTO_CHUNK_SECONDS):
+    """Attach photos for about ``seconds``, then queue the rest or finish.
+
+    Photos come out of the workbook one at a time, so memory holds one photo
+    however large the file is. Whatever happens, the batch ends DONE with how
+    far it got, so the Data page can say which pieces still need a photo
+    instead of spinning forever.
+    """
     from stock.models import ImportBatch
 
     batch = ImportBatch.objects.get(pk=batch_id)
+    deadline = time.monotonic() + seconds
     try:
-        pieces = ivy.parse(io.BytesIO(storage.get_bytes(batch.media.storage_key)))
-        while attach_images(batch, pieces):
-            pass
+        with workbook_file(batch) as workbook:
+            pieces = ivy.parse(workbook)
+            with zipfile.ZipFile(workbook) as archive:
+                while attach_images(batch, pieces, archive.read):
+                    if time.monotonic() > deadline:
+                        _queue_next(batch)
+                        return
     except Exception as error:
         batch.result = {**(batch.result or {}), "images_error": str(error)}
     batch.status = ImportBatch.Status.DONE
     batch.finished_at = timezone.now()
     batch.save(update_fields=["result", "status", "finished_at"])
+    _workbook_path(batch).unlink(missing_ok=True)
 
 
-def attach_images_in_background(batch_id):
-    """Start ``attach_remaining_images`` on a thread and return at once.
+@task()
+def attach_photos(batch_id):
+    """The queued job: run by ``manage.py db_worker``, never by the web process."""
+    attach_remaining_images(batch_id)
 
-    ponytail: a thread inside the web worker, not a queue. A redeploy or a
-    worker restart kills it mid-run; ``ImportBatch.images_stalled`` notices and
-    the Data page offers Resume. Move to a real task queue if imports outgrow that.
+
+def _queue_next(batch):
+    queued = attach_photos.enqueue(batch.batch_id)
+    batch.result = {**(batch.result or {}), "images_task": str(queued.id), "images_at": timezone.now().isoformat()}
+    batch.save(update_fields=["result"])
+    batch.__dict__.pop("images_waiting", None)  # cached before this job existed
+
+
+def queue_photos(batch):
+    """Put the batch's photos on the queue from the top.
+
+    Pieces that already have their photo are passed over, so a rerun only
+    sends what is missing, and refusals are counted afresh.
     """
-    def run():
-        try:
-            attach_remaining_images(batch_id)
-        finally:
-            connection.close()
+    from stock.models import ImportBatch
 
-    threading.Thread(target=run, name=f"import-{batch_id}-images", daemon=True).start()
+    batch.result = {k: v for k, v in (batch.result or {}).items() if k not in ("images_refused", "images_error")}
+    batch.images_done = 0
+    batch.status = ImportBatch.Status.IMAGES
+    batch.finished_at = None
+    batch.save(update_fields=["status", "finished_at", "result", "images_done"])
+    _queue_next(batch)

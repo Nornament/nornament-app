@@ -27,7 +27,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    environment:
+    environment: &app-env
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
       DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS}
@@ -58,6 +58,23 @@ services:
     networks:
       - default
       - dokploy-network
+
+  worker:
+    # Runs queued background jobs (an import's photos) out of Postgres. Same
+    # image as web, but straight to the worker: web has already migrated by the
+    # time it is healthy, so the two never run migrations against each other.
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    environment: *app-env
+    entrypoint: ["python", "manage.py", "db_worker", "--queue-name", "*"]
+    # a photo job saves its progress every ten photos and can be retried, so
+    # this only needs to cover finishing the photo in hand
+    stop_grace_period: 30s
 
   backup:
     # Nightly pg_dump to Contabo, 14 days kept, and a dead-man ping so a

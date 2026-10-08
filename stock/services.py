@@ -1440,7 +1440,7 @@ def _wipe_plan(groups=None):
         # filtered, not emptied: the CRM's attachments live in this table.
         # Deleted before the rows they hang off so the bucket keys can be read
         # first — that FK is CASCADE and would take them silently.
-        ("pieces", "piece photos", MediaAsset.objects.filter(Q(piece__isnull=False) | Q(scope="import"))),
+        ("pieces", "piece photos", MediaAsset.objects.filter(Q(piece__isnull=False) | Q(scope__in=["import", "piece"]))),
         ("pieces", "pieces", Piece.objects.all()),
         ("designs", "style tags", StyleTag.objects.all()),
         ("designs", "design images", MediaAsset.objects.filter(style__isnull=False)),

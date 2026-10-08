@@ -90,6 +90,11 @@ Then **Deploy**. The first build takes a few minutes: it installs the Python
 dependencies, fetches htmx, then the entrypoint migrates and runs
 collectstatic before gunicorn starts.
 
+The `worker` service starts once `web` is healthy. It runs queued background
+jobs out of Postgres (`manage.py db_worker`) — today, attaching an IVY
+import's photos. If it is down, imports still commit; their photos wait on the
+Data page as "queued" until it is back. It needs no domain.
+
 ## 5. First login
 
 Once the deploy is green, from Dokploy's terminal for the `web` container:

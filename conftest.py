@@ -50,6 +50,12 @@ def _deployment_settings_off(settings):
 
 
 @pytest.fixture(autouse=True)
+def _import_cache(monkeypatch, tmp_path):
+    """Tests reuse storage keys across runs; a shared cache would serve stale books."""
+    monkeypatch.setattr("stock.importers.commit.IMPORT_CACHE", tmp_path / "imports")
+
+
+@pytest.fixture(autouse=True)
 def _reference_data(db):
     """The seed migration runs for real databases; tests get it explicitly."""
     sync_role_groups()

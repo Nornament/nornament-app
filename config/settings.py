@@ -55,6 +55,8 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django_tasks",
+    "django_tasks_db",
     "accounts",
     "stock",
     "crm",
@@ -62,6 +64,10 @@ INSTALLED_APPS = [
     "etl",
     "inventory",
 ]
+
+# Background work (an import's photos) is queued in Postgres and run by the
+# ``worker`` service: ``manage.py db_worker``. No broker to run or lose.
+TASKS = {"default": {"BACKEND": "django_tasks_db.DatabaseBackend"}}
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

@@ -147,6 +147,16 @@ def get_bytes(key):
     return client().get_object(Bucket=settings.MEDIA_BUCKET, Key=key)["Body"].read()
 
 
+def upload_from(key, fileobj, content_type):
+    """Stream a file into the bucket in parts, never holding it whole."""
+    client().upload_fileobj(fileobj, settings.MEDIA_BUCKET, key, ExtraArgs={"ContentType": content_type})
+
+
+def download_to(key, fileobj):
+    """Stream an object into a file, for ones too big to hold in memory."""
+    client().download_fileobj(settings.MEDIA_BUCKET, key, fileobj)
+
+
 def delete_keys(keys, chunk=1000):
     """Remove objects from the bucket, in batches of 1000 — the S3 API's limit.
 
