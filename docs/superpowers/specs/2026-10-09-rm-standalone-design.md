@@ -29,6 +29,9 @@ mediahub, the legacy folders, and every screen outside `/inventory/`.
 
 ## The standalone app: `nornament-rm`
 
+The pouch page's **✉ Enquire** button opened a CRM enquiry; with no CRM it is
+removed. Clients still enquire from a lookbook (WhatsApp / email), unchanged.
+
 Same stack as nornament-app: Django 5.2, Postgres, gunicorn, whitenoise,
 openpyxl, Pillow, boto3; deployed with Dokploy from `deploy/`.
 
@@ -36,7 +39,7 @@ openpyxl, Pillow, boto3; deployed with Dokploy from `deploy/`.
 |---|---|
 | `config/` | env-driven settings, URLs, `/healthz`, the public `/lookbook/<token>/` routes |
 | `accounts/` | the user model, the two roles, login, forced password change, the Users screen |
-| `parties/` | RM's own `Customer` and `Vendor` (suppliers and karigars) and their screens |
+| `parties/` | RM's own `Customer` and `Vendor` (suppliers and karigars), and the Customers screen |
 | `core/` | what `inventory` borrowed from stock and mediahub, cut to what it uses |
 | `inventory/` | the module itself, as it is today |
 | `deploy/` | Dockerfile, entrypoint (migrate → collectstatic → gunicorn), compose (web, db, nightly backup), deploy doc |
@@ -82,11 +85,15 @@ nornament-app.
 
 ### Customers and vendors
 
-Both start empty. Admin manages them under Settings → Customers and
-Settings → Vendors (list with search, add, edit, deactivate). Where a
-movement asks for a customer (sale, memo, sales return), Staff picks from the
-list and can add a new customer there; vendors and karigars are Admin-only,
-like the purchase and job-work screens that use them.
+Both start empty.
+
+- **Vendors** (suppliers and karigars share one list, as today) are edited
+  where inventory already edits them: diamonds Settings → Suppliers (code,
+  name, city, terms). No second vendor screen is built.
+- **Customers** get a Customers screen (list with search, add, edit,
+  deactivate). Staff may list and add — a movement that needs a customer
+  (sale, memo, sales return) links to "+ New customer" and comes back to the
+  form; editing and deactivating are Admin's.
 
 ### Look and feel
 
