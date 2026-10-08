@@ -14,7 +14,7 @@ rm -f "$FILE"
 
 # keep the last 14
 aws --endpoint-url "$BACKUP_ENDPOINT_URL" s3 ls "s3://${BACKUP_BUCKET}/backups/" \
-  | awk '{print $4}' | sort | head -n -14 \
+  | awk '$1!="PRE"{print $4}' | sort | head -n -14 \
   | while read -r old; do
       [ -n "$old" ] && aws --endpoint-url "$BACKUP_ENDPOINT_URL" s3 rm "s3://${BACKUP_BUCKET}/backups/${old}"
     done

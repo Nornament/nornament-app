@@ -96,8 +96,8 @@ class User(AbstractUser):
 def sync_role_groups():
     """Create the role groups and give each its default capabilities — once.
 
-    Rights are editable on the inventory's Settings page, so a deploy must never
-    put back a right an admin took away. A group gets its full defaults only when
+    Rights are editable from the Django admin by a superuser, so a deploy must
+    never put back a right someone took away. A group gets its full defaults only when
     it is first created; after that, only a capability that did not exist before
     this run is granted, to the groups that list it by default. For that to work
     a migration that adds a capability runs this before Django's own post-migrate

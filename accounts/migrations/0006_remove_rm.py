@@ -5,6 +5,9 @@ cannot go while the tables stand); then its import batches and photo rows
 (bucket files are left — harmless and recoverable); the five inv_* rights;
 Karigar desk logins (deactivated — the role was only for stones) and the
 group; and what Django kept about the app: its migration rows and content types.
+
+Irreversible: the tables are dropped with CASCADE. The only way back is restoring
+the database backup taken just before this deploy.
 """
 from django.db import migrations
 
@@ -59,7 +62,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(forwards, migrations.RunPython.noop),
+        migrations.RunPython(forwards, None),
         migrations.AlterModelOptions(
             name="capability",
             options={"default_permissions": (), "managed": False, "permissions": [
