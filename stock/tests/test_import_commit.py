@@ -759,3 +759,62 @@ def test_ticking_update_shows_on_the_confirm_screen(
     assert "Import 2 new · update 1" in page
     pieces_row = page[page.index("<td>Pieces</td>"):].split("</tr>", 1)[0]
     assert [cell for cell in re.findall(r'class="num">(\d+)<', pieces_row)] == ["3", "2", "0", "1", "0"]
+
+
+def test_create_new_makes_the_row_in_a_modal_and_points_the_sheet_at_it(
+        client, admin_user_, materials, import_reference, monkeypatch, settings):
+    """The modal creates the material/category at once; the row then uses it."""
+    settings.ALLOWED_HOSTS = ["testserver"]
+    from mediahub import storage
+    from mediahub.models import MediaAsset
+    from stock.models import Category
+
+    book = build_workbook().getvalue()
+    monkeypatch.setattr(storage, "download_to", lambda key, fileobj: fileobj.write(book))
+    batch = ImportBatch.objects.create(
+        media=MediaAsset.objects.create(file_name="x.xlsx", scope="import", scope_id="w", storage_key="k"),
+        created_by=admin_user_,
+    )
+    client.force_login(admin_user_)
+    client.get(reverse("stock:import_review", args=[batch.batch_id]))
+    step = reverse("stock:import_step", args=[batch.batch_id, "materials"])
+    assert 'id="impnewdlg"' in client.get(step).content.decode()
+
+    # another answer on the same screen survives the create
+    page = client.post(step, {
+        "materials:SP01C:category": "SETTING", "materials:SP01C": "create",
+        "create_row": "SP01C", "new-item_code": "SET-PRONG", "new-item_name": "Prong setting",
+        "new-category": "SETTING", "new-default_uom": "PCS",
+    })
+    assert page["Location"].endswith("/step/materials/")
+    made = Material.objects.get(item_code="SET-PRONG")
+    assert made.is_active and made.category_id == "SETTING"
+    batch.refresh_from_db()
+    answer = batch.decisions["materials"]["SP01C"]
+    assert (answer["action"], answer["map_to"]) == ("map", "SET-PRONG")
+
+    # a refused form creates nothing and leaves the answer as it was
+    before = Material.objects.count()
+    client.post(step, {"create_row": "SP01C", "new-item_code": "", "new-category": "SETTING"})
+    assert Material.objects.count() == before
+
+    sheet_category = next(iter(batch.decisions["categories"]))
+    client.post(reverse("stock:import_step", args=[batch.batch_id, "categories"]), {
+        "create_row": sheet_category, "new-name": "Statement pieces", "new-code": "", "new-sort_order": "0",
+    })
+    created = Category.objects.get(name="Statement pieces")
+    assert created.code == "STATEMENTPIECES"
+    batch.refresh_from_db()
+    assert batch.decisions["categories"][sheet_category]["target"] == created.pk
+    page = client.get(reverse("stock:import_step", args=[batch.batch_id, "categories"])).content.decode()
+    assert "→ Statement pieces" in page
+    from stock.models import Collection, Vendor
+
+    for section, model, name in (("collections", Collection, "Monsoon edit"), ("vendors", Vendor, "Kundan works")):
+        key = next(iter(batch.decisions[section]))
+        client.post(reverse("stock:import_step", args=[batch.batch_id, section]),
+                    {"create_row": key, "new-name": name, "new-code": ""})
+        made = model.objects.get(name=name)
+        assert made.code == name.replace(" ", "").upper()
+        batch.refresh_from_db()
+        assert batch.decisions[section][key] == batch.decisions[section][key] | {"action": "map", "target": made.pk}

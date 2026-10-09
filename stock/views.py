@@ -58,6 +58,7 @@ from .forms import (
     BomLineFormSet,
     RateChartForm,
     CategoryForm,
+    CollectionForm,
     LocationForm,
     MaterialForm,
     MeltForm,
@@ -68,6 +69,7 @@ from .forms import (
     SaleForm,
     ScenarioForm,
     StyleForm,
+    VendorForm,
 )
 from .importers import analyse as analyse_import
 from .importers import commit as commit_import
@@ -1967,6 +1969,46 @@ def _merge_step(post, decisions, section):
     return decisions
 
 
+#: the steps whose "create new" opens a modal. The row is made there and then,
+#: and the sheet's name is pointed at it, so the reviewer sees exactly what
+#: will be used instead of trusting the band's guess at commit time.
+IMPORT_CREATE_FORMS = {
+    "materials": MaterialForm,
+    "categories": CategoryForm,
+    "collections": CollectionForm,
+    "vendors": VendorForm,
+}
+
+
+def _create_from_modal(request, decisions, step, key):
+    """Make the material or category the modal describes, and map ``key`` onto it."""
+    choice = (decisions.get(step) or {}).get(key)
+    if choice is None:
+        messages.error(request, f"{key} is not in this import.")
+        return
+    form = IMPORT_CREATE_FORMS[step](request.POST, prefix="new")
+    if not form.is_valid():
+        messages.error(request, f"{key} was not created. " + "; ".join(
+            f"{form.fields[field].label if field in form.fields else field}: {errors[0]}"
+            for field, errors in form.errors.items()
+        ))
+        return
+    row = form.save(commit=False)
+    if step == "materials":
+        # the modal leaves the In-use toggle out: a code made to import onto is in use
+        row.is_active = True
+        guessed = choice.get("fields") or {}
+        if row.metal_id and str(row.metal_id) == str(guessed.get("metal_id")):
+            row.purity_factor = guessed.get("purity_factor")
+    row.save()
+    services.log(request.user, "REFERENCE_SAVED", row._meta.db_table, str(row.pk), f"created for import: {key}")
+    if step == "materials":
+        choice.update(action="map", map_to=row.item_code)
+    else:
+        choice.update(action="map", target=row.pk)
+    messages.success(request, f"{row} created; {key} now uses it.")
+
+
 @login_required
 @tab_required("data")
 @require_POST
@@ -2025,6 +2067,12 @@ def import_step(request, batch_id, step):
     if request.method == "POST":
         if step != "confirm":
             batch.decisions = _merge_step(request.POST, batch.decisions, step)
+        creating = request.POST.get("create_row")
+        if creating and step in IMPORT_CREATE_FORMS:
+            # after the merge, so the step's other answers are kept, not lost
+            _create_from_modal(request, batch.decisions, step, creating)
+            batch.save(update_fields=["decisions"])
+            return redirect("stock:import_step", batch_id=batch.batch_id, step=step)
         batch.save(update_fields=["decisions"])
         wanted = request.POST.get("go_to")
         if wanted in names:
@@ -2042,6 +2090,11 @@ def import_step(request, batch_id, step):
         row.action = choice.get("action", row.action)
         row.map_to = choice.get("map_to", "")
         row.category = (choice.get("fields") or {}).get("category_id", "")
+        if step != "materials" and step in IMPORT_CREATE_FORMS and choice.get("target"):
+            # the saved answer, not the fuzzy guess: a row made in the modal
+            # may not be the one the name happens to resemble
+            target = IMPORT_CREATE_FORMS[step]._meta.model.objects.filter(pk=choice["target"]).first()
+            row.detail = f"→ {target.name}" if target else row.detail
 
     counts = analyse_import.decided_counts(plan, batch.decisions)
     summary = [(label, counts[name]) for name, label, _ in steps if name != "confirm" and name in counts]
@@ -2070,6 +2123,7 @@ def import_step(request, batch_id, step):
         "codes_by_category": _codes_by_category(plan),
         "material_categories": MaterialCategory.objects.order_by("sort_order"),
         "locations": Location.objects.filter(is_active=True),
+        "create_form": IMPORT_CREATE_FORMS[step](prefix="new") if step in IMPORT_CREATE_FORMS else None,
     })
 
 

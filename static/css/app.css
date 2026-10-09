@@ -723,6 +723,9 @@ a.btn,a.chip,a.code,a.fchip{text-decoration:none}
 .imp-sel{width:112px;padding:3px 6px;font-size:12.5px}
 .imp-code{width:76px;padding:3px 6px;font-size:12.5px;font-family:var(--mono)}
 .imp-cat{width:104px;padding:3px 6px;font-size:12px}
+.imp-new[hidden]{display:none}
+/* the create modal's fieldset is only there to switch its fields off while it is shut */
+.imp-newset{border:0;margin:0;padding:0;min-width:0}
 .imp-loc{max-width:280px}
 .imp-check{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap}
 .imp-blocked{background:color-mix(in srgb,var(--critical) 7%,transparent)}

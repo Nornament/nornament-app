@@ -267,9 +267,46 @@ class CategoryForm(forms.ModelForm):
         self.fields["code"].required = False
 
     def clean_code(self):
-        # blank means "from the name", the way the IVY importer makes one
-        code = (self.cleaned_data.get("code") or "").strip().upper()
-        return code or re.sub(r"[^A-Z0-9]", "", (self.cleaned_data.get("name") or "").upper())[:32]
+        return _code_or_name(self)
+
+
+def _code_or_name(form):
+    # blank means "from the name", the way the IVY importer makes one
+    code = (form.cleaned_data.get("code") or "").strip().upper()
+    return code or re.sub(r"[^A-Z0-9]", "", (form.cleaned_data.get("name") or "").upper())[:32]
+
+
+class CollectionForm(forms.ModelForm):
+    """A collection, made from the import review's "create new"."""
+
+    class Meta:
+        model = Collection
+        fields = ["name", "code", "launched_on"]
+        labels = {"name": "Collection", "code": "Code", "launched_on": "Launched on"}
+        widgets = {"launched_on": DateInput()}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["code"].required = False
+
+    def clean_code(self):
+        return _code_or_name(self)
+
+
+class VendorForm(forms.ModelForm):
+    """A vendor, made from the import review's "create new"."""
+
+    class Meta:
+        model = Vendor
+        fields = ["name", "code", "contact", "city", "terms"]
+        labels = {"name": "Vendor", "code": "Code", "contact": "Contact", "city": "City", "terms": "Terms"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["code"].required = False
+
+    def clean_code(self):
+        return _code_or_name(self)
 
 
 class LocationForm(forms.ModelForm):

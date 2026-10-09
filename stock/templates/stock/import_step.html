@@ -98,11 +98,20 @@
             <td class="code">{{ row.key }}</td>
             <td class="imp-trunc" title="{{ row.label }}">{{ row.label }}</td>
             <td class="imp-act">
-              <select name="{{ step }}:{{ row.key }}" class="imp-sel">
+              <select name="{{ step }}:{{ row.key }}" class="imp-sel"
+                {% if create_form %}onchange="impNew(this)" data-was="{{ row.action }}" data-key="{{ row.key }}"
+                {% if step == 'materials' %}data-item_code="{{ row.fields.item_code|default:row.key }}"
+                  data-item_name="{{ row.label }}" data-default_uom="{{ row.fields.default_uom|default:'' }}"
+                  data-metal="{{ row.fields.metal_id|default:'' }}"
+                {% else %}data-name="{{ row.key }}" data-code="{{ row.fields.code|default:'' }}"{% endif %}{% endif %}>
                 <option value="create" {% if row.action == 'create' %}selected{% endif %}>create new</option>
                 <option value="map" {% if row.action == 'map' %}selected{% endif %}>use existing</option>
                 <option value="skip" {% if row.action == 'skip' %}selected{% endif %}>skip</option>
               </select>
+              {% if create_form %}
+              <button type="button" class="btn sm imp-new" onclick="impNew(this)"
+                      {% if row.action != 'create' %}hidden{% endif %}>Set up…</button>
+              {% endif %}
               {% if step == 'materials' %}
               {% with picked=row.category|default:row.fields.category_id %}
               <select name="{{ step }}:{{ row.key }}:category" class="imp-cat" onchange="impCodes(this)"
@@ -136,6 +145,28 @@
     {% endif %}
     <a class="btn" href="{% url 'stock:data' %}">Cancel</a>
   </div>
+
+  {% if create_form %}
+  {# inside the step's form, so creating also keeps every other answer on this screen #}
+  <dialog class="modal" id="impnewdlg">
+    <fieldset class="imp-newset" disabled>
+      <input type="hidden" name="create_row">
+      <header><h3>Create <span class="code imp-newkey"></span></h3>
+        <p>{% if step == 'materials' %}Made now, before the import runs, and the sheet's code is pointed at it.
+          A metal material has to say which metal.{% else %}Made now, before the import runs, and the sheet's
+          name is pointed at it.{% endif %}</p></header>
+      <div class="content">
+        {% for field in create_form %}{% if field.name != 'is_active' %}
+        <div class="field">{{ field.label_tag }}{{ field }}</div>
+        {% endif %}{% endfor %}
+      </div>
+      <footer>
+        <button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button>
+        <button class="btn primary" type="submit">Create and use</button>
+      </footer>
+    </fieldset>
+  </dialog>
+  {% endif %}
 </form>
 
 {% if step == 'confirm' %}
@@ -152,6 +183,28 @@ function impCodes(select){
   // the code list follows the category: a diamond row suggests diamond codes
   var code = select.parentNode.querySelector('.imp-code');
   code.setAttribute('list', 'codes-' + select.value);
+}
+function impNew(el){
+  // "create new" opens the modal, filled from what the sheet says about this row
+  var tr = el.closest('tr'), sel = tr.querySelector('.imp-sel'), data = Object.assign({}, sel.dataset);
+  tr.querySelector('.imp-new').hidden = sel.value !== 'create';
+  if (sel.value !== 'create') return;
+  var dlg = document.getElementById('impnewdlg'), cat = tr.querySelector('.imp-cat');
+  if (cat) data.category = cat.value;
+  dlg.querySelector('fieldset').disabled = false;
+  dlg.querySelector('[name=create_row]').value = data.key;
+  dlg.querySelector('.imp-newkey').textContent = data.key;
+  dlg.querySelectorAll('[name^="new-"]').forEach(function(field){
+    var name = field.name.slice(4);
+    field.value = name in data ? data[name] : field.defaultValue;
+  });
+  dlg.onclose = function(){
+    // shut without creating: the fields go quiet and the row goes back to its answer
+    dlg.querySelector('fieldset').disabled = true;
+    if (sel.value === 'create' && sel.dataset.was !== 'create') sel.value = sel.dataset.was;
+    tr.querySelector('.imp-new').hidden = sel.value !== 'create';
+  };
+  dlg.showModal();
 }
 function impFilter(box){
   var q = box.value.toLowerCase();
