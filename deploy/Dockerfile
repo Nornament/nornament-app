@@ -34,4 +34,6 @@ USER app
 
 EXPOSE 8000
 ENTRYPOINT ["deploy/entrypoint.sh"]
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "60", "--access-logfile", "-"]
+# threads: most requests wait on Postgres or the bucket, and with 3 plain
+# workers one slow request held a third of the site for everyone else
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--worker-class", "gthread", "--threads", "4", "--timeout", "60", "--access-logfile", "-"]

@@ -71,6 +71,10 @@ TASKS = {"default": {"BACKEND": "django_tasks_db.DatabaseBackend"}}
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    # pages go out gzipped; Traefik does not compress unless told to. Static
+    # files never reach this — WhiteNoise answers them, already compressed.
+    # Django pads gzipped responses against BREACH (since 4.2), and CSRF tokens are masked.
+    "django.middleware.gzip.GZipMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",

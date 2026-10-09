@@ -1,16 +1,37 @@
 """Resolving many media URLs in one pass, and re-encoding what is in the bucket."""
+import logging
 from collections import defaultdict
 
+from django.conf import settings
+from django.db.models import BooleanField, ExpressionWrapper, Q
 from django.urls import reverse
 from django.utils import timezone
+from django_tasks import task
 
 from . import storage, webp
 from .models import MediaAsset
 
+logger = logging.getLogger(__name__)
+
+
+def without_bytes(assets):
+    """Media rows for a list: everything but the photo bytes and the embedding.
+
+    A thumbnail only needs the key. Loading whole rows dragged legacy CRM
+    photos (``inline_data``) and 384-float embeddings out of Postgres for every
+    row of a list, only to build a URL. ``has_inline`` is what ``urls_for``
+    asks instead, so it never touches the deferred column.
+    """
+    return assets.defer("inline_data", "embedding").annotate(
+        has_inline=ExpressionWrapper(
+            Q(inline_data__isnull=False) & ~Q(inline_data=b""), output_field=BooleanField()
+        )
+    )
+
 
 def for_pieces(piece_ids, limit_each=None):
     """``get_many`` — one query, then presigned URLs, keyed by piece id."""
-    assets = MediaAsset.objects.filter(
+    assets = without_bytes(MediaAsset.objects).filter(
         piece_id__in=list(piece_ids), is_archived=False, confirmed_at__isnull=False
     ).order_by("piece_id", "-is_catalogue_default", "rank_order")
     grouped = defaultdict(list)
@@ -22,8 +43,11 @@ def for_pieces(piece_ids, limit_each=None):
     return grouped
 
 
-def urls_for(assets):
+def urls_for(assets, thumbs=False):
     """A URL per asset, or ``None`` where there is nothing to serve.
+
+    ``thumbs`` is for list pages: the list-sized copy where one has been made,
+    the photo itself where it has not.
 
     An asset whose bytes are still in the row is served by Django from
     ``/media/<id>/`` rather than presigned — the CRM's photos arrived as base64
@@ -34,12 +58,17 @@ def urls_for(assets):
     urls = {}
     remote = []
     for asset in assets:
-        if asset.inline_data:
+        inline = getattr(asset, "has_inline", None)
+        if inline if inline is not None else asset.inline_data:
             urls[asset.pk] = reverse("mediahub:media", args=[asset.pk])
         else:
             remote.append(asset)
     try:
-        urls |= {a.pk: storage.presign_get(a.storage_key, a.mime_type, a.file_name) for a in remote}
+        urls |= {
+            a.pk: storage.presign_get(a.thumb_key, "image/webp") if thumbs and a.thumb_key
+            else storage.presign_get(a.storage_key, a.mime_type, a.file_name)
+            for a in remote
+        }
     except storage.StorageNotConfigured:
         urls |= {a.pk: None for a in remote}
     return urls
@@ -89,6 +118,68 @@ def to_webp(asset, data=None, quality=None):
     asset.width_px, asset.height_px = width, height
     asset.save(update_fields=fields)
     return saved
+
+
+@task()
+def finish_upload_later(media_id):
+    """:func:`finish_upload` on the queue, run by ``manage.py db_worker``.
+
+    A WebP encode at ``method=6`` and a DINOv2 embedding take seconds per
+    photo. Done inside the upload request, that held one of the web workers —
+    and a form with several photos could outrun gunicorn's timeout.
+    """
+    asset = MediaAsset.objects.filter(pk=media_id).first()
+    if asset is not None:
+        finish_upload(asset)
+
+
+def finish_upload(asset, data=None):
+    """What every new upload gets once its object is in the bucket: WebP, then search.
+
+    Every way in queues this — the browser's presigned PUT, the proxy, and
+    ``attach_uploads`` (form posts and the IVY import). Best effort by design:
+    the upload has already succeeded, so a failure here leaves the original
+    intact, and ``media_to_webp`` / ``media_thumbs`` / ``embed_media`` pick it up later.
+    """
+    mime = asset.mime_type
+    if data is None and asset.storage_key and (webp.convertible(mime) or storage.is_drawable(mime)):
+        # fetched once for every step below, rather than once each
+        data = storage.get_bytes(asset.storage_key)
+    if settings.MEDIA_WEBP_ON_UPLOAD:
+        try:
+            to_webp(asset, data)
+        except Exception:  # noqa: BLE001 — a smaller file is never worth losing an upload over
+            logger.exception("webp conversion failed for media %s", asset.pk)
+    try:
+        make_thumb(asset, data)
+    except Exception:  # noqa: BLE001 — a list falls back to the photo itself
+        logger.exception("thumbnail failed for media %s", asset.pk)
+
+    from stock import identify
+
+    try:
+        identify.embed_asset(asset, data)
+    except Exception:  # noqa: BLE001 — search is never worth losing an upload over
+        logger.exception("embedding failed for media %s", asset.pk)
+
+
+def make_thumb(asset, data=None):
+    """Put a list-sized WebP beside the photo and its key on the row.
+
+    Returns the key, or ``None`` for anything a list cannot draw anyway — a
+    video, a PDF, a HEIC — and for a photo still held in its row rather than
+    the bucket (``push_inline_media`` moves those; ``media_thumbs`` follows).
+    """
+    if asset.inline_data or not asset.storage_key or not asset.is_image:
+        return None
+    if data is None:
+        data = storage.get_bytes(asset.storage_key)
+    encoded, _, _ = webp.thumbnail(data)
+    key = webp.thumb_key(asset.storage_key)
+    storage.put_bytes(key, encoded, "image/webp")
+    asset.thumb_key = key
+    asset.save(update_fields=["thumb_key"])
+    return key
 
 
 def _owner(scope, entity_id):
@@ -144,6 +235,7 @@ def attach_uploads(files, scope, entity_id, user, kind=None):
             uploaded_by=user,
             **_owner(scope, entity_id),
         )
+        finish_upload_later.enqueue(asset.pk)
         saved.append(asset)
     return saved, refused
 

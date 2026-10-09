@@ -86,7 +86,7 @@ def piece_row(user, piece, *, with_prices=True):
     """
     from . import services
 
-    version = piece.current_bom()
+    version = services.current_version(piece)
     row = {
         "jewel_code_id": piece.pk,
         "jewel_code": piece.jewel_code,
@@ -127,13 +127,27 @@ def piece_row(user, piece, *, with_prices=True):
     if with_prices:
         sale_price = services.live_sale_price(piece) if allowed(user, "sale_price") or allowed(user, "margin") else None
         cost_price = version.total_cost_price if version else None
+        cost_today = services.current_cost(piece)
         row |= {
             "sale_price": sale_price,
             "gold_rate_used": services.alloy_sale_rate(piece.metal_purity),
             "cost_price": cost_price,
-            "current_cost": services.current_cost(piece),
+            "current_cost": cost_today,
             "metal_cost_rate": services.alloy_cost_rate(piece.metal_purity),
             "margin": (sale_price - cost_price) if (sale_price is not None and cost_price is not None) else None,
-            "current_margin": (sale_price - services.current_cost(piece)) if sale_price is not None else None,
+            "current_margin": (sale_price - cost_today) if sale_price is not None else None,
         }
     return mask(user, row)
+
+
+def rows_for(user, pieces, **kwargs):
+    """``piece_row`` for a whole list, inside one pricing snapshot.
+
+    Row by row, each piece re-read the metal rate, the rounding settings and
+    its own BOM several times over; this reads them once for the list.
+    """
+    from . import services
+
+    pieces = list(pieces)
+    with services.pricing_snapshot(pieces):
+        return [piece_row(user, piece, **kwargs) for piece in pieces]

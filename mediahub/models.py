@@ -34,6 +34,9 @@ class MediaAsset(models.Model):
     storage_key = models.CharField(max_length=500, blank=True, null=True)
     storage_url = models.URLField(max_length=1000, blank=True, null=True)
     thumb_url = models.URLField(max_length=1000, blank=True, null=True)
+    # a list-sized WebP beside the photo in the bucket; lists show this, the
+    # viewer shows the photo. Null until made — on upload, or ``media_thumbs``
+    thumb_key = models.CharField(max_length=500, blank=True, null=True)
     file_name = models.CharField(max_length=255, blank=True, null=True)
     mime_type = models.CharField(max_length=120, blank=True, null=True)
     sha256 = models.CharField(max_length=64, blank=True, null=True)

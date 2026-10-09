@@ -17,7 +17,7 @@ from django.utils import timezone
 from PIL import Image
 
 from mediahub import storage
-from mediahub import views as media_views
+from mediahub import services as media_services
 from mediahub.models import MediaAsset
 from stock import identify
 from stock.enums import MediaKind
@@ -192,6 +192,7 @@ def test_embed_asset_fetches_bytes_when_it_is_not_given_them(received_piece, fak
 @pytest.mark.django_db
 def test_confirming_a_piece_photo_embeds_it(client, admin_user_, received_piece, fake_embed, monkeypatch, settings):
     settings.MEDIA_WEBP_ON_UPLOAD = False
+    settings.TASKS = {"default": {"BACKEND": "django_tasks.backends.immediate.ImmediateBackend"}}
     photo = _photo(received_piece, None, confirmed=False)
     monkeypatch.setattr(storage, "head", lambda key: {"ContentLength": 10})
     monkeypatch.setattr(storage, "get_bytes", lambda key: b"jpeg")
@@ -212,7 +213,7 @@ def test_an_embedding_failure_never_fails_the_upload(received_piece, monkeypatch
         raise identify.ModelMissing("no model")
 
     monkeypatch.setattr(identify, "embed", boom)
-    media_views._embed(photo, b"jpeg")  # must not raise
+    media_services.finish_upload(photo, b"jpeg")  # must not raise
     photo.refresh_from_db()
     assert photo.embedding is None
 

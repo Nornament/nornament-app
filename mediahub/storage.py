@@ -126,13 +126,32 @@ def presign_put(key, content_type):
     )
 
 
+#: A GET URL is signed for two hours and handed out again for the first one.
+#: Signed fresh on every render, the URL differed on every page load, so the
+#: browser re-downloaded every photo on every visit. Reused, the browser cache
+#: hits; and anything served still has at least an hour left, so a lazy image
+#: scrolled to on a page left open does not 403.
+GET_URL_TTL = 2 * 3600
+GET_URL_REUSE = 3600
+
+
 def presign_get(key, content_type=None, download_name=None):
+    from django.core.cache import cache
+
     params = {"Bucket": settings.MEDIA_BUCKET, "Key": key}
     if content_type:
         params["ResponseContentType"] = content_type
     if download_name:
         params["ResponseContentDisposition"] = f'inline; filename="{download_name}"'
-    return client().generate_presigned_url("get_object", Params=params, ExpiresIn=settings.MEDIA_PRESIGN_TTL)
+    cache_key = "presign:" + sha256_of(repr(sorted(params.items())).encode())
+    url = cache.get(cache_key)
+    if url is None:
+        # the object never changes under its key, so the browser may keep it
+        # for as long as the URL itself stays valid
+        params["ResponseCacheControl"] = f"private, max-age={GET_URL_TTL}"
+        url = client().generate_presigned_url("get_object", Params=params, ExpiresIn=GET_URL_TTL)
+        cache.set(cache_key, url, GET_URL_REUSE)
+    return url
 
 
 def put_bytes(key, data, content_type):

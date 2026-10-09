@@ -19,7 +19,7 @@ client state.{% endcomment %}
 <div class="mob-card">
   <a class="mob-thumb" href="{% url spec.detail_url row.pk %}">
     {% with url=thumbs|lookup:row.pk %}
-    {% if url %}<img src="{{ url }}" alt="" style="width:100%;height:100%;object-fit:cover">
+    {% if url %}<img src="{{ url }}" loading="lazy" decoding="async" alt="" style="width:100%;height:100%;object-fit:cover">
     {% else %}<span style="font-family:'Newsreader',serif;font-size:18px">N</span>{% endif %}
     {% endwith %}
   </a>

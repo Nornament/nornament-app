@@ -15,12 +15,15 @@ a user is allowed to *see* — masking is a view/template concern, stated once i
 from __future__ import annotations
 
 import re
+from collections import defaultdict
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Count, Max, Q
+from django.db.models import Count, F, Max, Q
 from django.utils import timezone
 
 from accounts.capabilities import ADJUST_STOCK, EDIT_BOM, MANAGE_MATERIALS, MELT
@@ -60,10 +63,74 @@ class ServiceError(ValidationError):
     """A rule said no. These were ``RAISE EXCEPTION`` in the SQL."""
 
 
+# ── pricing many pieces at once ──────────────────────────────────────────
+_snapshot = ContextVar("pricing_snapshot", default=None)
+
+
+@contextmanager
+def pricing_snapshot(pieces=()):
+    """Price many pieces for one screen, reading each rate, setting and BOM once.
+
+    Outside one, every price reads the database fresh. A list of 50 pieces did
+    that ~15 times a row — the same metal rate and rounding setting 50 times
+    over, the same BOM lines up to five times a piece — 750 queries a page.
+    Inside one, the first read is reused, and ``pieces`` have their current
+    versions and lines loaded up front in two queries.
+
+    Only ever wrap code that *reads* prices: something that changes a rate, a
+    setting or a BOM and then prices again inside one would see the old value.
+    """
+    owner = _snapshot.get() is None
+    token = _snapshot.set({}) if owner else None
+    try:
+        _preload(pieces)
+        yield
+    finally:
+        if owner:
+            _snapshot.reset(token)
+
+
+def _memo(key, read):
+    memo = _snapshot.get()
+    if memo is None:
+        return read()
+    if key not in memo:
+        memo[key] = read()
+    return memo[key]
+
+
+def _preload(pieces):
+    """Current versions and current lines for ``pieces``, two queries in all."""
+    pieces = list(pieces)
+    if not pieces:
+        return
+    memo = _snapshot.get()
+    ids = [piece.pk for piece in pieces]
+    versions = {v.piece_id: v for v in BomVersion.objects.filter(piece_id__in=ids, is_current=True)}
+    lines = defaultdict(list)
+    for line in (
+        BomLine.objects.filter(piece_id__in=ids, version_no=F("piece__current_bom_version"))
+        .select_related("material")
+        .order_by("line_no")
+    ):
+        lines[line.piece_id].append(line)
+    for piece in pieces:
+        memo[("bom", piece.pk)] = versions.get(piece.pk)
+        memo[("lines", piece.pk, piece.current_bom_version)] = lines[piece.pk]
+
+
+def current_version(piece):
+    """``piece.current_bom()``, answered from the snapshot when there is one."""
+    return _memo(("bom", piece.pk), piece.current_bom)
+
+
 # ── settings and rounding ────────────────────────────────────────────────
 def setting(key, default=None):
-    row = SystemSetting.objects.filter(pk=key).first()
-    return row.value if row else default
+    def read():
+        row = SystemSetting.objects.filter(pk=key).first()
+        return row.value if row else default
+
+    return _memo(("setting", key, default), read)
 
 
 def setting_int(key, default):
@@ -124,11 +191,15 @@ def metal_rate(karat, side="SALE"):
     """``app.metal_rate`` — SALE uses the sale factor, COST the true fineness."""
     if not karat:
         return ZERO
-    purity = MetalPurity.objects.select_related("metal").filter(pk=karat).first()
-    if purity is None:
-        return ZERO
-    factor = purity.true_fineness if side.upper() == "COST" else purity.sale_factor
-    return round_to(purity.metal.pure_rate * factor, 0)
+
+    def read():
+        purity = MetalPurity.objects.select_related("metal").filter(pk=karat).first()
+        if purity is None:
+            return ZERO
+        factor = purity.true_fineness if side.upper() == "COST" else purity.sale_factor
+        return round_to(purity.metal.pure_rate * factor, 0)
+
+    return _memo(("rate", karat, side.upper()), read)
 
 
 def alloy_sale_rate(karat):
@@ -203,11 +274,11 @@ def require(user, permission, message):
 
 # ── costing ──────────────────────────────────────────────────────────────
 def _lines_for(piece_id, version_no):
-    return list(
+    return _memo(("lines", piece_id, version_no), lambda: list(
         BomLine.objects.filter(piece_id=piece_id, version_no=version_no)
         .select_related("material")
         .order_by("line_no")
-    )
+    ))
 
 
 def net_metal_weight(piece_id, version_no):
@@ -1248,16 +1319,21 @@ def should_make(user):
     """``vw_should_make`` — styles below their minimum stock level."""
     from .models import Style
 
+    # counted in the one query, not one COUNT per style
+    styles = (
+        Style.objects.filter(is_active=True)
+        .annotate(live=Count("pieces", filter=Q(pieces__stock_state=StockState.IN_STOCK)))
+        .filter(live__lt=F("nos_min_qty"))
+    )
     return [
         {
             "style_code": style.style_code,
             "name": style.name,
             "nos_min_qty": style.nos_min_qty,
-            "live_pieces": live,
-            "shortfall": style.nos_min_qty - live,
+            "live_pieces": style.live,
+            "shortfall": style.nos_min_qty - style.live,
         }
-        for style in Style.objects.filter(is_active=True)
-        if (live := style.pieces.filter(stock_state=StockState.IN_STOCK).count()) < style.nos_min_qty
+        for style in styles
     ]
 
 
@@ -1565,8 +1641,12 @@ def truncate_stock(user, groups=None, delete_media_files=False):
             going = going | queryset
     keys = []
     if delete_media_files:
-        surviving = set(MediaAsset.objects.exclude(pk__in=going.values("pk")).values_list("storage_key", flat=True))
-        keys = [key for key in going.values_list("storage_key", flat=True) if key and key not in surviving]
+        # a photo's list thumbnail is an object of its own, and goes with it
+        def keys_of(assets):
+            return {key for pair in assets.values_list("storage_key", "thumb_key") for key in pair if key}
+
+        surviving = keys_of(MediaAsset.objects.exclude(pk__in=going.values("pk")))
+        keys = sorted(keys_of(going) - surviving)
 
     deleted = []
     with transaction.atomic():

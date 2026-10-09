@@ -16,6 +16,7 @@ Only the input changed — from a typed array to the ledger.
 from __future__ import annotations
 
 from calendar import monthrange
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -476,19 +477,57 @@ def _days_until(when):
     return None
 
 
-def last_activity(customer, enquiries=None):
+@dataclass
+class ActivityIndex:
+    """What ``last_activity`` and ``computed_temp`` read, for every customer at once.
+
+    One customer at a time, that was two Sale queries per customer and a
+    StatusEvent query per enquiry — 870 queries for the CRM dashboard. A
+    screen that walks the whole book builds this once and passes it in.
+    """
+    enquiries: dict
+    sales: dict
+    events: dict
+
+    @classmethod
+    def build(cls):
+        from .models import Enquiry, StatusEvent
+
+        enquiries, sales, events = defaultdict(list), defaultdict(list), defaultdict(list)
+        for enquiry in Enquiry.objects.all():
+            enquiries[enquiry.customer_id].append(enquiry)
+        for customer_id, sold_on in Sale.objects.values_list("customer_id", "sold_on"):
+            sales[customer_id].append(sold_on)
+        for enquiry_id, when in StatusEvent.objects.filter(entity_type="enquiry").values_list("entity_id", "date"):
+            events[enquiry_id].append(when)
+        return cls(enquiries, sales, events)
+
+
+def _enquiries_of(customer, index):
+    return customer.enquirys.all() if index is None else index.enquiries.get(customer.pk, [])
+
+
+def _sales_of(customer, index):
+    if index is None:
+        return list(Sale.objects.filter(customer=customer).values_list("sold_on", flat=True))
+    return index.sales.get(customer.pk, [])
+
+
+def last_activity(customer, index=None):
     """``lastActivity`` — the most recent date on anything touching them."""
     from .models import StatusEvent
 
     dates = [customer.created_at.date() if customer.created_at else None]
     dates += [entry.date for entry in customer.outreach_log.all()]
-    dates += list(Sale.objects.filter(customer=customer).values_list("sold_on", flat=True))
-    rows = customer.enquirys.all() if enquiries is None else [e for e in enquiries if e.customer_id == customer.pk]
-    for enquiry in rows:
+    dates += _sales_of(customer, index)
+    for enquiry in _enquiries_of(customer, index):
         dates.append(enquiry.enquiry_date)
-        dates += list(
-            StatusEvent.objects.filter(entity_type="enquiry", entity_id=enquiry.pk).values_list("date", flat=True)
-        )
+        if index is None:
+            dates += list(
+                StatusEvent.objects.filter(entity_type="enquiry", entity_id=enquiry.pk).values_list("date", flat=True)
+            )
+        else:
+            dates += index.events.get(enquiry.pk, [])
     dates = [d for d in dates if d]
     return max(dates) if dates else None
 
@@ -505,15 +544,14 @@ def next_occasion(customer):
     return min(live, key=lambda pair: pair[1]) if live else None
 
 
-def computed_temp(customer, enquiries=None):
+def computed_temp(customer, index=None):
     """``computedTemp`` — what the activity says the temperature should be.
 
     Returns ``(temperature, why)``. Advisory only: the screen offers it as a
     chip to apply, exactly as the legacy app did. Nothing writes it silently.
     """
-    rows = customer.enquirys.all() if enquiries is None else [e for e in enquiries if e.customer_id == customer.pk]
-    open_enquiries = [e for e in rows if e.status not in ("Order Confirmed", "Lost")]
-    since = _days_since(last_activity(customer, enquiries))
+    open_enquiries = [e for e in _enquiries_of(customer, index) if e.status not in ("Order Confirmed", "Lost")]
+    since = _days_since(last_activity(customer, index))
     today = timezone.localdate()
 
     for enquiry in open_enquiries:
@@ -529,7 +567,7 @@ def computed_temp(customer, enquiries=None):
     if open_enquiries and since is not None and since <= 14:
         return "Hot", f"Active enquiry · last touch {since}d ago"
 
-    last_purchase = Sale.objects.filter(customer=customer).order_by("-sold_on").values_list("sold_on", flat=True).first()
+    last_purchase = max(_sales_of(customer, index), default=None)
     bought = _days_since(last_purchase)
     if bought is not None and bought <= 30:
         return "Hot", f"Purchased {bought}d ago"
@@ -607,9 +645,9 @@ def lead_gaps(limit=30):
                 }
             )
 
-    all_enquiries = list(Enquiry.objects.all())
+    index = ActivityIndex.build()
     for customer in Customer.objects.exclude(temperature="Cold").prefetch_related("outreach_log"):
-        since = _days_since(last_activity(customer, all_enquiries))
+        since = _days_since(last_activity(customer, index))
         if since is not None and since > 45:
             gaps.append(
                 {
@@ -629,12 +667,10 @@ def lead_gaps(limit=30):
 
 def temperature_spread():
     """What the engine thinks the book looks like, for the gaps panel header."""
-    from .models import Enquiry
-
-    enquiries = list(Enquiry.objects.all())
+    index = ActivityIndex.build()
     spread = {"Hot": 0, "Warm": 0, "Cold": 0}
     for customer in Customer.objects.prefetch_related("outreach_log", "occasions"):
-        spread[computed_temp(customer, enquiries)[0]] += 1
+        spread[computed_temp(customer, index)[0]] += 1
     return spread
 
 

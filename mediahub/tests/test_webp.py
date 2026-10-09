@@ -105,3 +105,104 @@ def test_a_video_is_never_re_encoded(piece):
         piece=Piece.objects.get(pk=piece.pk), storage_key="stock/piece/1/clip.mp4", mime_type="video/mp4"
     )
     assert services.to_webp(asset) is None
+
+
+def test_a_form_or_import_upload_is_converted_too(piece, monkeypatch, settings):
+    """``attach_uploads`` (CRM forms, the IVY import) used to store the JPEG as sent."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    settings.MEDIA_WEBP_ON_UPLOAD = True
+    settings.TASKS = {"default": {"BACKEND": "django_tasks.backends.immediate.ImmediateBackend"}}
+    bucket = {}
+    monkeypatch.setattr(storage, "get_bytes", lambda key: bucket[key])
+    monkeypatch.setattr(storage, "put_bytes", lambda key, body, ct: bucket.update({key: body}))
+    monkeypatch.setattr(storage, "head", lambda key: {"ContentLength": len(bucket[key])})
+    monkeypatch.setattr("stock.identify.embed", lambda data: None)
+
+    data = _jpeg()
+    saved, refused = services.attach_uploads(
+        [SimpleUploadedFile("24P00095.jpg", data, content_type="image/jpeg")], "piece", piece.pk, None
+    )
+    assert refused == []
+    asset = saved[0]
+    asset.refresh_from_db()
+    assert asset.mime_type == "image/webp" and asset.storage_key.endswith(".webp")
+    assert asset.bytes == len(bucket[asset.storage_key]) < len(data)
+
+
+# ── list thumbnails ──────────────────────────────────────────────────────
+def _rotated_jpeg(size=(1600, 1200)):
+    """A landscape-shaped JPEG whose EXIF says "turn me" — a phone portrait."""
+    exif = Image.Exif()
+    exif[0x0112] = 6  # Orientation: rotate 90° clockwise to display
+    buffer = io.BytesIO()
+    _noise(size).save(buffer, format="JPEG", quality=90, exif=exif)
+    return buffer.getvalue()
+
+
+def test_a_thumbnail_is_list_sized_and_stood_upright():
+    encoded, width, height = webp.thumbnail(_rotated_jpeg())
+    assert (width, height) == (480, 640), "the long edge is 640, and the portrait stays a portrait"
+    with Image.open(io.BytesIO(encoded)) as out:
+        assert out.format == "WEBP" and out.size == (480, 640)
+
+
+def test_a_small_photo_is_never_enlarged():
+    _, width, height = webp.thumbnail(_jpeg((200, 100)))
+    assert (width, height) == (200, 100)
+
+
+def test_the_full_size_webp_keeps_a_phone_portrait_upright():
+    _, width, height = webp.encode(_rotated_jpeg())
+    assert (width, height) == (1200, 1600)
+
+
+def test_an_upload_gets_a_thumbnail_and_lists_are_handed_it(piece, monkeypatch, settings):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    settings.MEDIA_WEBP_ON_UPLOAD = True
+    settings.TASKS = {"default": {"BACKEND": "django_tasks.backends.immediate.ImmediateBackend"}}
+    bucket = {}
+    monkeypatch.setattr(storage, "put_bytes", lambda key, body, ct: bucket.update({key: body}))
+    monkeypatch.setattr(storage, "head", lambda key: {"ContentLength": len(bucket[key])})
+    monkeypatch.setattr(storage, "get_bytes", lambda key: bucket[key])
+    monkeypatch.setattr(storage, "presign_get", lambda key, *args, **kwargs: f"https://bucket/{key}")
+    monkeypatch.setattr("stock.identify.embed", lambda data: None)
+
+    saved, _ = services.attach_uploads(
+        [SimpleUploadedFile("p.jpg", _jpeg((1600, 1200)), content_type="image/jpeg")], "piece", piece.pk, None
+    )
+    asset = MediaAsset.objects.get(pk=saved[0].pk)
+    assert asset.thumb_key.endswith(".thumb.webp")
+    with Image.open(io.BytesIO(bucket[asset.thumb_key])) as thumb:
+        assert max(thumb.size) == 640
+    assert services.urls_for([asset], thumbs=True)[asset.pk] == f"https://bucket/{asset.thumb_key}"
+    assert services.urls_for([asset])[asset.pk] == f"https://bucket/{asset.storage_key}"
+
+
+def test_a_list_falls_back_to_the_photo_until_its_thumbnail_exists(piece, monkeypatch):
+    monkeypatch.setattr(storage, "presign_get", lambda key, *args, **kwargs: f"https://bucket/{key}")
+    asset = MediaAsset.objects.create(
+        piece=Piece.objects.get(pk=piece.pk), storage_key="stock/piece/1/a.webp", mime_type="image/webp"
+    )
+    assert services.urls_for([asset], thumbs=True)[asset.pk] == "https://bucket/stock/piece/1/a.webp"
+
+
+def test_the_backfill_makes_the_missing_thumbnails_once(piece, monkeypatch):
+    from django.core.management import call_command
+    from django.utils import timezone
+
+    bucket = {"stock/piece/1/a.webp": _jpeg()}
+    monkeypatch.setattr(storage, "get_bytes", lambda key: bucket[key])
+    monkeypatch.setattr(storage, "put_bytes", lambda key, body, ct: bucket.update({key: body}))
+    asset = MediaAsset.objects.create(
+        piece=Piece.objects.get(pk=piece.pk), storage_key="stock/piece/1/a.webp", mime_type="image/webp",
+        confirmed_at=timezone.now(),
+    )
+    call_command("media_thumbs")
+    asset.refresh_from_db()
+    assert asset.thumb_key == "stock/piece/1/a.thumb.webp" and asset.thumb_key in bucket
+
+    out = io.StringIO()
+    call_command("media_thumbs", stdout=out)
+    assert "0 photo(s) have no thumbnail" in out.getvalue()

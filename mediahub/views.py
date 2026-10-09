@@ -5,7 +5,6 @@ Phase 0 CORS smoke test fails, the flag flips and :func:`proxy_upload` takes the
 bytes through Django instead — a view change, not a redesign.
 """
 import json
-import logging
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, permission_required
@@ -22,7 +21,6 @@ from .models import MediaAsset
 
 CRM_SCOPES = {"customer", "order", "enquiry", "repair", "client_material", "sale"}
 
-logger = logging.getLogger(__name__)
 
 
 def _resolve_owner(scope, entity_id):
@@ -85,36 +83,6 @@ def presign(request):
     return JsonResponse(body)
 
 
-def _shrink(asset, data=None):
-    """Re-encode to WebP once the object is known to be there.
-
-    Best effort by design: the upload has already succeeded and been confirmed
-    by this point, so a conversion that fails leaves the original photo intact
-    and the row pointing at it. ``manage.py media_to_webp`` picks it up later.
-    """
-    if not settings.MEDIA_WEBP_ON_UPLOAD:
-        return
-    try:
-        services.to_webp(asset, data)
-    except Exception:  # noqa: BLE001 — a smaller file is never worth losing an upload over
-        logger.exception("webp conversion failed for media %s", asset.pk)
-
-
-def _embed(asset, data=None):
-    """Make a new piece photo findable by "Identify piece".
-
-    Best effort, like ``_shrink``: the upload is already safe in the bucket, and
-    a photo that could not be embedded now is picked up by
-    ``manage.py embed_media`` later.
-    """
-    from stock import identify
-
-    try:
-        identify.embed_asset(asset, data)
-    except Exception:  # noqa: BLE001 — search is never worth losing an upload over
-        logger.exception("embedding failed for media %s", asset.pk)
-
-
 @login_required
 @require_POST
 def confirm(request):
@@ -132,8 +100,7 @@ def confirm(request):
     asset.sha256 = payload.get("sha256", asset.sha256)
     asset.confirmed_at = timezone.now()
     asset.save(update_fields=["bytes", "file_size_kb", "sha256", "confirmed_at"])
-    _shrink(asset)
-    _embed(asset)
+    services.finish_upload_later.enqueue(asset.pk)
     return JsonResponse(
         {"ok": True, "media_id": asset.pk, "media_ref": asset.media_ref, "bytes": asset.bytes}
     )
@@ -157,8 +124,7 @@ def proxy_upload(request):
     asset.sha256 = storage.sha256_of(data)
     asset.confirmed_at = timezone.now()
     asset.save(update_fields=["bytes", "file_size_kb", "sha256", "confirmed_at"])
-    _shrink(asset, data)
-    _embed(asset, data)
+    services.finish_upload_later.enqueue(asset.pk)
     return JsonResponse({"ok": True, "media_id": asset.pk, "bytes": asset.bytes})
 
 

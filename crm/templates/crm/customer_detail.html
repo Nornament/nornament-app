@@ -175,7 +175,7 @@ summary, then a card per purchase with the amount as the headline. Not a table
 <div class="pc"{% if caps.adjust_stock and sale.source == 'CRM' %} style="cursor:pointer"
      onclick="location='{% url 'crm:edit_purchase' customer.pk sale.pk %}'"{% endif %}>
   {% with thumb=sale_thumbs|lookup:sale.pk %}
-  {% if thumb %}<img class="pi" src="{{ thumb }}" alt="">{% else %}<div class="pip">🪙</div>{% endif %}
+  {% if thumb %}<img class="pi" src="{{ thumb }}" loading="lazy" decoding="async" alt="">{% else %}<div class="pip">🪙</div>{% endif %}
   {% endwith %}
   <div style="flex:1;min-width:0">
     <div class="fl jb ia">

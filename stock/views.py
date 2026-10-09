@@ -75,7 +75,7 @@ from .importers import analyse as analyse_import
 from .importers import commit as commit_import
 from .importers import guess
 from .importers import ivy
-from .masking import allowed, mask, piece_row
+from .masking import allowed, mask, piece_row, rows_for
 from .models import (
     ActivityLog,
     Category,
@@ -256,12 +256,14 @@ def _in_price_bands(pieces, chosen):
     bands = [band for band in (_price_range(value) for value in chosen) if band]
     if not bands:
         return pieces
-    return [
-        piece
-        for piece in pieces
-        if any(low <= (price := services.live_sale_price(piece)) and (high is None or price < high)
-               for low, high in bands)
-    ]
+    pieces = list(pieces)
+    with services.pricing_snapshot(pieces):
+        return [
+            piece
+            for piece in pieces
+            if any(low <= (price := services.live_sale_price(piece)) and (high is None or price < high)
+                   for low, high in bands)
+        ]
 
 
 def _slider_positions(chosen):
@@ -304,7 +306,7 @@ def _pin_thumbs(page):
 def _piece_thumbs(piece_ids):
     """``{piece_id: url}`` for the first confirmed photo of each piece."""
     firsts = [assets[0] for assets in media_services.for_pieces(list(piece_ids), limit_each=1).values() if assets]
-    urls = media_services.urls_for(firsts)
+    urls = media_services.urls_for(firsts, thumbs=True)
     return {asset.piece_id: urls[asset.pk] for asset in firsts if urls.get(asset.pk)}
 
 
@@ -313,7 +315,7 @@ def piece_list(request):
     pieces, query, picked = _filtered(request)
     low, high = _slider_positions(picked["price"])
     page = Paginator(pieces, PAGE_SIZE).get_page(request.GET.get("page"))
-    rows = [piece_row(request.user, piece) for piece in page]
+    rows = rows_for(request.user, page)
     thumbs = _pin_thumbs(page)
     return render(
         request,
@@ -357,7 +359,7 @@ def piece_rows(request):
     return render(
         request,
         "stock/_piece_rows.html",
-        {"page": page, "rows": [piece_row(request.user, piece) for piece in page]},
+        {"page": page, "rows": rows_for(request.user, page)},
     )
 
 
@@ -382,15 +384,14 @@ def _similar_pieces(request, piece, limit=6):
     """
     mine = piece_row(request.user, piece).get("sale_price") or Decimal("0")
     linked = {other.pk for other, _, _ in PieceLink.for_piece(piece)}
-    candidates = (
+    candidates = list(
         _visible_pieces(request)
         .exclude(pk__in=linked | {piece.pk})
         .exclude(stock_state__in=TERMINAL_STATES)
         .filter(style__category_id=piece.style.category_id)[:60]
     )
     scored = []
-    for other in candidates:
-        row = piece_row(request.user, other)
+    for other, row in zip(candidates, rows_for(request.user, candidates)):
         price = row.get("sale_price") or Decimal("0")
         score = abs(price - mine) / max(mine, Decimal("1")) * 10
         if other.metal_purity != piece.metal_purity:
@@ -496,7 +497,8 @@ def _linkable_pieces(request, piece, limit=200):
         .exclude(stock_state__in=TERMINAL_STATES)
         .select_related("style", "location")[:limit]
     )
-    return [{"piece": other, "row": piece_row(request.user, other)} for other in pieces]
+    pieces = list(pieces)
+    return [{"piece": other, "row": row} for other, row in zip(pieces, rows_for(request.user, pieces))]
 
 
 def _margin_panel(row):
@@ -1439,7 +1441,7 @@ def piece_export(request):
     ``piece_row`` like everything else and is logged as an EXPORT.
     """
     pieces, _, _ = _filtered(request)
-    rows = [piece_row(request.user, piece) for piece in pieces[:5000]]
+    rows = rows_for(request.user, pieces[:5000])
     fields = list(rows[0].keys()) if rows else ["jewel_code"]
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="pieces.csv"'
@@ -1513,8 +1515,8 @@ def identify_view(request):
 def _identify_results(request, matches):
     """Cards in match order: the masked row, the photo that matched, a percent."""
     pieces = _visible_pieces(request).in_bulk([match.piece_id for match in matches])
-    photos = MediaAsset.objects.in_bulk([match.media_id for match in matches])
-    urls = media_services.urls_for(photos.values())
+    photos = media_services.without_bytes(MediaAsset.objects).in_bulk([match.media_id for match in matches])
+    urls = media_services.urls_for(photos.values(), thumbs=True)
     return [
         {
             "piece": pieces[match.piece_id],
@@ -1603,7 +1605,7 @@ def _report(request):
         # state chip is an explicit ask for those, so it wins.
         pieces = [piece for piece in pieces if piece.stock_state not in TERMINAL_STATES]
     pieces = list(pieces)[:REPORT_LIMIT]
-    rows = [piece_row(request.user, piece) for piece in pieces]
+    rows = rows_for(request.user, pieces)
     # "unpriced" is a count, not a value, so it is read off the BOM rather than
     # off the masked row — otherwise a SALES login would see everything as
     # unpriced. One query for the page instead of one per piece.

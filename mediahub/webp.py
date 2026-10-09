@@ -38,6 +38,11 @@ def webp_key(key):
     return f"{stem}.webp"
 
 
+def thumb_key(key):
+    """``stock/piece/12/abc.jpg`` -> ``stock/piece/12/abc.thumb.webp``, same folder."""
+    return webp_key(key)[: -len(".webp")] + ".thumb.webp"
+
+
 def webp_name(file_name):
     stem = (file_name or "image").rsplit(".", 1)[0] or "image"
     return f"{stem}.webp"
@@ -53,8 +58,13 @@ def encode(data, quality=None):
 
     from PIL import Image
 
+    from PIL import ImageOps
+
     with Image.open(io.BytesIO(data)) as image:
         image.load()
+        # a phone stores "rotate me" in EXIF, which WebP does not carry over:
+        # turn the pixels instead, or a portrait photo comes out on its side
+        image = ImageOps.exif_transpose(image)
         # a palette or an alpha channel means flat art, and flat art is where
         # lossless actually wins; a photograph is not
         lossless = image.mode in ("P", "LA", "PA") or "transparency" in image.info or image.mode == "RGBA"
@@ -72,3 +82,32 @@ def encode(data, quality=None):
         if len(out) >= len(data):
             raise NotSmaller(f"{len(out)} >= {len(data)} bytes")
         return out, image.width, image.height
+
+
+#: The long edge of a list thumbnail: a ~300px masonry column on a 2x screen.
+THUMB_EDGE = 640
+#: Lower than the photo's own quality: at this size nobody inspects the stones.
+THUMB_QUALITY = 75
+
+
+def thumbnail(data, edge=THUMB_EDGE):
+    """A list-sized WebP of an image: ``(webp_bytes, width, height)``.
+
+    A list of fifty photos at full camera resolution is fifty multi-megabyte
+    downloads into boxes a few hundred pixels wide. This is the box-sized copy.
+    Never enlarged: a photo already smaller than ``edge`` keeps its size.
+    """
+    import io
+
+    from PIL import Image, ImageOps
+
+    with Image.open(io.BytesIO(data)) as image:
+        image.load()
+        image = ImageOps.exif_transpose(image)
+        image.thumbnail((edge, edge))
+        alpha = image.mode in ("RGBA", "LA", "PA") or "transparency" in image.info
+        if image.mode not in ("RGB", "RGBA"):
+            image = image.convert("RGBA" if alpha else "RGB")
+        buffer = io.BytesIO()
+        image.save(buffer, format="WEBP", quality=THUMB_QUALITY, method=4)
+        return buffer.getvalue(), image.width, image.height

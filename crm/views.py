@@ -163,18 +163,18 @@ def _attach_posted_files(request, scope, entity_id, field="photos"):
         messages.error(request, f"Could not attach {name}.")
 
 
-def _crm_media(scope, ids):
+def _crm_media(scope, ids, thumbs=False):
     """Confirmed, live media for CRM rows -> {scope_id: [(asset, url|None), ...]}.
 
     ``urls_for`` already swallows StorageNotConfigured, so a box with no media
     credentials renders the screen with placeholder tiles rather than a 500.
     """
     assets = list(
-        MediaAsset.objects.filter(
+        media_services.without_bytes(MediaAsset.objects).filter(
             scope=scope, scope_id__in=[str(pk) for pk in ids], is_archived=False, confirmed_at__isnull=False
         )
     )
-    urls = media_services.urls_for(assets)
+    urls = media_services.urls_for(assets, thumbs=thumbs)
     grouped = defaultdict(list)
     for asset in assets:
         grouped[asset.scope_id].append((asset, urls[asset.pk]))
@@ -183,7 +183,7 @@ def _crm_media(scope, ids):
 
 def _thumbs(scope, rows):
     """First photo per row, for the 36px column the legacy tables carried."""
-    media = _crm_media(scope, [row.pk for row in rows])
+    media = _crm_media(scope, [row.pk for row in rows], thumbs=True)
     return {int(scope_id): items[0][1] for scope_id, items in media.items() if items}
 
 
@@ -200,7 +200,7 @@ def _sale_thumbs(sales):
     pending = {sale.crm_order_id: sale.pk for sale in sales if sale.pk not in thumbs and sale.crm_order_id}
     if not pending:
         return thumbs
-    media = _crm_media("order", list(pending))
+    media = _crm_media("order", list(pending), thumbs=True)
     for order_id, sale_pk in pending.items():
         items = media.get(str(order_id))
         if items:

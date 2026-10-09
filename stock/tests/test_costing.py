@@ -327,3 +327,57 @@ def test_the_scenario_cost_is_the_same_figure_the_margin_is_measured_against(two
     """``cost_today`` on the row and ``current_cost`` in the margin column were
     two roundings of one number, and could differ by a rupee."""
     assert services.scenario_price(two_stone_piece, scenarios).cost_today == services.current_cost(two_stone_piece)
+
+
+# ── a list of pieces is priced in a fixed number of queries ──────────────
+def _copies(piece, user, count, prefix="CP"):
+    """``count`` more pieces with the fixture piece's BOM, for a list to price."""
+    from stock.models import BomVersion
+
+    lines = [
+        {"material": l.material, "qty_value": l.qty_value, "qty_uom": l.qty_uom, "basis": l.basis,
+         "cost_rate": l.cost_rate, "sale_rate": l.sale_rate}
+        for l in BomLine.objects.filter(piece=piece, version_no=piece.current_bom_version)
+    ]
+    made = []
+    for n in range(count):
+        copy = Piece.objects.create(
+            jewel_code=f"{prefix}{n:04d}", style=piece.style, metal_purity=piece.metal_purity, current_bom_version=1
+        )
+        BomVersion.objects.create(piece=copy, version_no=1, is_current=True)
+        services.set_bom(user, copy, lines)
+        made.append(copy)
+    return made
+
+
+def test_a_list_prices_the_same_as_row_by_row_in_a_fixed_number_of_queries(piece, admin_user_):
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    from stock.masking import piece_row, rows_for
+
+    pieces = [piece, *_copies(piece, admin_user_, 3)]
+    one_by_one = [piece_row(admin_user_, p) for p in pieces]
+    assert rows_for(admin_user_, pieces) == one_by_one
+
+    def queries(count):
+        listed = list(Piece.objects.select_related(
+            "style", "style__category", "style__collection", "location", "vendor"
+        ).order_by("pk")[:count])
+        with CaptureQueriesContext(connection) as captured:
+            rows_for(admin_user_, listed)
+        return len(captured)
+
+    small = queries(2)
+    _copies(piece, admin_user_, 6, prefix="MORE")
+    assert queries(10) == small, "pricing a list must not cost a query per row"
+
+
+def test_outside_a_snapshot_a_rate_change_is_seen_at_once(piece, admin_user_):
+    """The memo is opt-in: a write followed by a read prices off the new rate."""
+    from stock.models import MetalPurity
+
+    metal = MetalPurity.objects.select_related("metal").get(pk=piece.metal_purity).metal
+    before = services.live_sale_price(piece)
+    services.set_metal_rate(admin_user_, metal.pk, metal.pure_rate * Decimal("1.5"))
+    assert services.live_sale_price(piece) > before

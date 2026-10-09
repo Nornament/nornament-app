@@ -10,12 +10,13 @@ Two different waits, and it has to cover both:
     report), so the splash is also raised on submit and on link clicks, before
     navigation begins.
 
-It shows immediately and stays for at least MIN_MS. Most screens here render
-in well under a tenth of a second, so anything that waits before appearing
-simply never appears, and anything that leaves the instant the page is ready
-reads as a flicker rather than a splash. Holding it for a beat is what makes
-it look deliberate. That beat is real added latency on a fast page — a
-deliberate trade, and MIN_MS is the dial.
+It shows immediately and stays for at least MIN_MS, so a fast page does not
+flicker. That beat is real added latency on every navigation, which is why it
+is kept short — MIN_MS is the dial.
+
+It lifts when the document is parsed (DOMContentLoaded), not on ``load``:
+``load`` waits for every image, and on a list of photos that held a blurred
+screen over a page that was already usable until the last photo arrived.
 
 Its CSS is inline because an external stylesheet has not necessarily arrived
 at first paint, and a splash that itself flashes unstyled is worse than none.
@@ -40,7 +41,7 @@ all: a splash that can outlive its own JavaScript is a site nobody can use.
 </div>
 <script>
 (function(){
-  var MIN_MS = 600;                 // how long the splash is guaranteed to show
+  var MIN_MS = 150;                 // how long the splash is guaranteed to show
   var el = document.getElementById('preload');
   if (!el) return;
   el.style.animation = 'none';      // the script is alive; it owns the splash now
@@ -64,8 +65,8 @@ all: a splash that can outlive its own JavaScript is a site nobody can use.
 
   // the initial document load
   shownAt = Date.now() - performance.now();
-  if (document.readyState === 'complete') hide();
-  else window.addEventListener('load', hide);
+  if (document.readyState !== 'loading') hide();
+  else document.addEventListener('DOMContentLoaded', hide);
 
   // Back/forward restores from bfcache without firing load, which would
   // otherwise leave the splash sitting on top of a perfectly good page.
