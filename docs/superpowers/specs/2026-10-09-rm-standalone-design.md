@@ -76,7 +76,8 @@ in inventory works unchanged.
 | `inv_purchase` — purchases | ✓ | |
 | `inv_job` — job work with karigars | ✓ | |
 | `view_cost`, `view_vendor`, `view_margin` | ✓ | |
-| Users, Customers and Vendors screens | ✓ | |
+| Users screen; editing/deactivating customers; vendors (on diamonds Settings → Suppliers) | ✓ | |
+| Listing and adding customers | ✓ | ✓ |
 
 Staff never sees cost, vendor or karigar names, or margin. The per-role
 rights editor on the diamonds Settings page is removed: with two fixed roles

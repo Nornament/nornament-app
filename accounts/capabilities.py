@@ -19,18 +19,6 @@ ADJUST_STOCK = "accounts.adjust_stock"
 MELT = "accounts.melt"
 EDIT_BOM = "accounts.edit_bom"
 
-#: the inventory's rights — the prototype's purchase / job / assort / masters
-#: columns. Seeing money reuses view_cost, view_sale and view_margin, so a
-#: login sees the same numbers in the inventory as in the stock app.
-INV_MASTERS = "accounts.inv_masters"
-INV_PURCHASE = "accounts.inv_purchase"
-INV_JOB = "accounts.inv_job"
-INV_ASSORT = "accounts.inv_assort"
-
-#: everything that moves stock that is not job work, a purchase or an assortment:
-#: sales, returns, memos, losses, samples, recounts (inventory part 2)
-INV_MOVE = "accounts.inv_move"
-
 ALL = (
     VIEW_SALE,
     VIEW_COST,
@@ -40,11 +28,6 @@ ALL = (
     ADJUST_STOCK,
     MELT,
     EDIT_BOM,
-    INV_MASTERS,
-    INV_PURCHASE,
-    INV_JOB,
-    INV_ASSORT,
-    INV_MOVE,
 )
 
 #: legacy ``app.has_cap()`` argument -> permission, so ported logic reads the same
@@ -68,7 +51,6 @@ ROLE_TABS = {
     "SALES": ("dash", "stock", "count", "styles"),
     "GRAPHIC": ("styles",),
     "PRODUCTION": ("stock", "repairs", "styles"),
-    "KARIGAR": (),
 }
 
 #: app.role seed (migration 0004), as groups
@@ -82,7 +64,6 @@ ROLE_GROUPS = {
         "name": "Accounts",
         "caps": (
             VIEW_COST, VIEW_SALE, MANAGE_MATERIALS, VIEW_VENDOR, VIEW_MARGIN, EDIT_BOM, ADJUST_STOCK,
-            INV_MASTERS, INV_PURCHASE, INV_JOB, INV_ASSORT, INV_MOVE,
         ),
         "is_system": False,
     },
@@ -94,11 +75,9 @@ ROLE_GROUPS = {
     "GRAPHIC": {"name": "Graphic / Media", "caps": (), "is_system": False},
     "PRODUCTION": {
         "name": "Production",
-        "caps": (MANAGE_MATERIALS, VIEW_VENDOR, EDIT_BOM, INV_JOB),
+        "caps": (MANAGE_MATERIALS, VIEW_VENDOR, EDIT_BOM),
         "is_system": False,
     },
-    #: the prototype's "Karigar desk": posts job-card movements, sees no money
-    "KARIGAR": {"name": "Karigar desk", "caps": (INV_JOB,), "is_system": False},
 }
 
 

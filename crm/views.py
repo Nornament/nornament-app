@@ -1166,7 +1166,7 @@ def pipeline_form(request, kind, pk=None):
                     initial[field] = timezone.localdate()
             if request.GET.get("customer"):
                 initial["customer"] = request.GET["customer"]
-            # the inventory's client view hands over the stone being asked about
+            # ?item= pre-fills what the enquiry is about
             if kind == "enquiry" and request.GET.get("item"):
                 initial["item_of_interest"] = request.GET["item"][:255]
         form = spec["form"](instance=row, initial=initial, user=request.user)

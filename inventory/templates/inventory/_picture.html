@@ -1,1 +1,0 @@
-{% load inventory_extras %}{% if row.photo_id %}<img class="photo" src="{% url 'inventory:photo' row.photo_id %}" alt="{{ row.stone_name }}" loading="lazy">{% else %}{% silhouette row.shape row.colour_hex %}{% endif %}

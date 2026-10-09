@@ -62,7 +62,6 @@ INSTALLED_APPS = [
     "crm",
     "mediahub",
     "etl",
-    "inventory",
 ]
 
 # Background work (an import's photos) is queued in Postgres and run by the
@@ -79,7 +78,6 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "accounts.middleware.MustChangePasswordMiddleware",
-    "accounts.middleware.KarigarDeskMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -220,11 +218,6 @@ IDENTIFY_MODEL_PATH = Path(env("IDENTIFY_MODEL_PATH", str(BASE_DIR / "models" / 
 #: a starting guess; set it from what real phone photos score.
 IDENTIFY_MIN_SCORE = float(env("IDENTIFY_MIN_SCORE", "0.5"))
 IDENTIFY_MAX_BYTES = 15 * 1024 * 1024
-
-# ── a lookbook's "Enquire" link (part 5e) ────────────────────────────────
-#: WhatsApp wins when both are set; empty hides the button.
-LOOKBOOK_WHATSAPP = env("LOOKBOOK_WHATSAPP", "")
-LOOKBOOK_EMAIL = env("LOOKBOOK_EMAIL", "")
 
 LOGGING = {
     "version": 1,

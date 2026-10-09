@@ -207,6 +207,19 @@ deploy/restore.sh nornament-20260824T210000Z.dump nornament_restore_test
 
 A backup that has never been restored is a hypothesis.
 
+### Before deploying the Stones & Diamonds removal (2026-10)
+
+1. In Dokploy, open nornament-app's `backup` container terminal and run
+   `/usr/local/bin/backup.sh` (where `deploy/docker-compose.yml` mounts it) to
+   take a fresh dump.
+2. Copy that dump out of the rotated `backups/` prefix so the 14-dump prune never
+   removes it:
+   `aws --endpoint-url "$BACKUP_ENDPOINT_URL" s3 cp s3://$BACKUP_BUCKET/backups/<file> s3://$BACKUP_BUCKET/archive/pre-rm-removal-<stamp>.dump`
+3. The deploy drops every stones/diamonds record in nornament-app, including
+   movements, sales and lookbooks posted since the import. RM starts fresh, by the
+   owner's decision. The migration is irreversible; the backup is the only way back.
+4. Deploy RM first.
+
 ### Health
 
 `/healthz` does a `SELECT 1`. Point the uptime monitor at it.

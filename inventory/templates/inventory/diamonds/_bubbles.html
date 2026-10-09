@@ -1,1 +1,0 @@
-{% load inventory_extras %}{% for b in list %}<a class="bub{% if b.on %} on{% endif %}" href="{{ b.href }}"><b>{{ b.value }}</b><span>{{ b.ct|ct }} ct · {{ b.n }}</span></a>{% empty %}<span class="hint">nothing in this category</span>{% endfor %}

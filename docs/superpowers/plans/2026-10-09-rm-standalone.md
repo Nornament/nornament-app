@@ -1779,7 +1779,7 @@ cp $SRC/deploy/Dockerfile deploy/ && cp $SRC/deploy/entrypoint.sh deploy/ && cp 
 Then edit:
 - `Dockerfile`: delete the `ADD --checksum=… dinov2-small.onnx` step and its comment, and the `vendor_assets` `RUN` line; keep the rest (Python 3.12-slim, postgresql-client, requirements, user `app`, entrypoint, gunicorn `--workers 3 --timeout 60`).
 - `entrypoint.sh`: keep only `set -e`, `python manage.py migrate --noinput`, `python manage.py collectstatic --noinput`, `exec "$@"` (drop the legacy-import block and `s3get`).
-- `docker-compose.yml`: keep `db`, `web`, `backup`; delete `worker` and every `LEGACY_*`, `LOGINS_KEY`, `MEDIA_DIRECT_UPLOAD`, `MEDIA_WEBP_*` variable; set the default database name and user to `nornament_rm`; volume `nornament-rm-db`; keep `MEDIA_BUCKET`, `MEDIA_ENDPOINT_URL`, `MEDIA_ACCESS_KEY`, `MEDIA_SECRET_KEY`, add `LOOKBOOK_WHATSAPP`, `LOOKBOOK_EMAIL`; backup prefix: set `BACKUP_PREFIX: rm-db` if `backup.sh` reads a prefix (open it; if it hard-codes a key prefix, change it to `rm-db/`).
+- `docker-compose.yml`: keep `db`, `web`, `backup`; delete `worker` and every `LEGACY_*`, `LOGINS_KEY`, `MEDIA_DIRECT_UPLOAD`, `MEDIA_WEBP_*` variable; set the default database name and user to `nornament_rm`; volume `nornament-rm-db`; keep `MEDIA_BUCKET`, `MEDIA_ENDPOINT_URL`, `MEDIA_ACCESS_KEY`, `MEDIA_SECRET_KEY`, add `LOOKBOOK_WHATSAPP`, `LOOKBOOK_EMAIL`; backup prefix: `backups/rm/` (what was built; the bucket is shared with nornament-app, whose prune only sees `rm/` as a PRE line).
 - `docs/DEPLOY.md`: Dokploy steps — new Compose app from `Nornament/nornament-rm`, compose path `deploy/docker-compose.yml`, Environment tab variables (list them), Domains tab (`rm.<domain>` → service `web`, port 8000, HTTPS), first deploy, then `python manage.py createsuperuser` in the web container's terminal, then log in and add users under Users.
 - `README.md`: what RM is (one paragraph), local setup (`venv`, `createdb nornament_rm`, `.env`, `migrate`, `createsuperuser`, `runserver`), the fake S3 command, `pytest`.
 
@@ -2062,5 +2062,6 @@ git add -A && git commit -m "Migrate: drop the inv_* tables, the inventory right
 
 ### Task 13: Ship
 
+- [ ] **Step 0:** Take and archive the pre-removal backup as described in `docs/RUNBOOK.md` → "Before deploying the Stones & Diamonds removal (2026-10)", and deploy RM first.
 - [ ] **Step 1:** Report to the owner: RM's test count and end-to-end results, nornament-app's suite result, and the Dokploy steps in `nornament-rm/docs/DEPLOY.md`.
 - [ ] **Step 2:** On the owner's go-ahead, merge `feat/rm-standalone-removal` into nornament-app `main` and push — only once RM is deployed or deploying, since this push removes Stones from nornament-app.
