@@ -459,7 +459,7 @@ function rateEdit(button) {
       <td class="dim">{{ scenario.get_method_display }}{% if scenario.method == 'VALUE_ADDED' %}
         · +{{ scenario.target_pct|floatformat:"-2" }}%{% elif scenario.method == 'CHART' and scenario.chart %}
         · {{ scenario.chart.code }}{% endif %}</td>
-      <td class="dim">{% for role in scenario.roles.all %}<span class="chip">{{ role.group }}{% if role.may_switch %} ✎{% endif %}</span> {% empty %}<span class="chip">Everyone</span>{% endfor %}</td>
+      <td class="dim">{% for role in scenario.roles.all %}<span class="chip">{{ role.group.role.name|default:role.group }}{% if role.may_switch %} ✎{% endif %}</span> {% empty %}<span class="chip">Everyone</span>{% endfor %}</td>
       <td>{% if scenario.is_active %}<span class="chip c-good">active</span>{% else %}<span class="chip c-neutral">retired</span>{% endif %}</td>
       <td>{% if caps.edit_bom %}<a href="?tab=scen&amp;scenario={{ scenario.pk }}">edit</a>{% endif %}</td></tr>
     {% empty %}<tr><td colspan="5"><div class="empty">No scenarios.</div></td></tr>{% endfor %}
@@ -523,16 +523,16 @@ function rateEdit(button) {
 <div class="card">
   <div class="spread">
     <div><h3>Users</h3></div>
-    <button type="button" class="btn primary" onclick="document.getElementById('userdlg').showModal()">+ Add user</button>
+    {% if is_admin %}<button type="button" class="btn primary" onclick="document.getElementById('userdlg').showModal()">+ Add user</button>{% endif %}
   </div>
   <table style="margin-top:12px"><thead><tr><th>User</th><th>Email</th><th>Role</th>
     <th>Home location</th><th>Status</th></tr></thead><tbody>
     {% for row in users %}
-    <tr><td><a href="{% url 'stock:user_edit' row.pk %}">{{ row.full_name|default:row.username }}</a>
+    <tr><td>{% if is_admin %}<a href="{% url 'stock:user_edit' row.pk %}">{{ row.full_name|default:row.username }}</a>{% else %}{{ row.full_name|default:row.username }}{% endif %}
       {% if row.is_superuser %}<span class="chip c-warn">superuser</span>{% endif %}
       <div class="dim mono" style="font-size:12px">{{ row.username }}</div></td>
       <td class="dim">{{ row.email|default:"—" }}</td>
-      <td>{% for group in row.groups.all %}<span class="chip c-neutral">{{ group.name }}</span>{% empty %}<span class="dim">none</span>{% endfor %}</td>
+      <td>{% for group in row.groups.all %}<span class="chip c-neutral">{{ group.role.name|default:group.name }}</span>{% empty %}<span class="dim">none</span>{% endfor %}</td>
       <td class="dim">{{ row.home_location|default:"all" }}</td>
       <td>{% if not row.is_active %}<span class="chip c-crit">disabled</span>
         {% elif row.must_change_password %}<span class="chip c-warn">must change password</span>
@@ -556,21 +556,65 @@ function rateEdit(button) {
 </dialog>
 
 {% elif tab == 'perms' %}
-<div class="card">
-  <h3>Permissions</h3>
-  
-  <table><thead><tr><th>Capability</th><th>What it means</th>
-    {% for code, name, caps_of in roles %}<th class="num">{{ code }}</th>{% endfor %}</tr></thead><tbody>
+{# one form for the whole matrix: what you see ticked is what is saved #}
+<form method="post" class="card">{% csrf_token %}
+  <div class="spread">
+    <div><h3>Roles &amp; permissions</h3>
+      <p class="dim" style="margin:2px 0 0">What each role may see and do, and which screens it opens.
+        Admin / Owner always has everything and cannot be changed{% if not is_admin %}; only an admin can change roles{% endif %}.</p></div>
+    {% if is_admin %}<button type="button" class="btn" onclick="document.getElementById('roledlg').showModal()">+ New role</button>{% endif %}
+  </div>
+  <div style="overflow-x:auto">
+  <table class="rolegrid" style="margin-top:14px"><thead><tr><th>Capability</th>
+    {% for role in roles %}<th class="num">
+      {% if role.is_admin or not is_admin %}{{ role.name }}
+      {% else %}<input name="name:{{ role.code }}" value="{{ role.name }}" aria-label="Role name" required maxlength="80">{% endif %}
+      <div class="dim" style="font-weight:400;font-size:11.5px">{{ role.users }} login{{ role.users|pluralize }}</div>
+    </th>{% endfor %}</tr></thead><tbody>
     {% for cap, label, meaning in matrix %}
-    <tr><td><b>{{ label }}</b><div class="dim mono" style="font-size:11.5px">{{ cap }}</div></td>
-      <td class="dim">{{ meaning }}</td>
-      {% for code, name, caps_of in roles %}
-      <td class="num">{% if cap in caps_of %}<span class="chip c-good">yes</span>{% else %}<span class="dim">—</span>{% endif %}</td>
-      {% endfor %}</tr>
+    <tr><td><b>{{ label }}</b><div class="dim" style="font-size:11.5px">{{ meaning }}</div></td>
+      {% for role in roles %}<td class="num"><input type="checkbox" name="cap:{{ role.code }}:{{ cap }}"
+        aria-label="{{ role.name }}: {{ label }}" {% if cap in role.caps %}checked{% endif %}
+        {% if role.is_admin or not is_admin %}disabled{% endif %}></td>{% endfor %}</tr>
     {% endfor %}
+    <tr><th colspan="{{ roles|length|add:1 }}" style="padding-top:18px">Screens it opens</th></tr>
+    {% for code, label in screens %}
+    <tr><td><b>{{ label }}</b></td>
+      {% for role in roles %}<td class="num"><input type="checkbox" name="screen:{{ role.code }}:{{ code }}"
+        aria-label="{{ role.name }}: {{ label }}" {% if code in role.screen_set %}checked{% endif %}
+        {% if role.is_admin or not is_admin %}disabled{% endif %}></td>{% endfor %}</tr>
+    {% endfor %}
+    {% if is_admin %}
+    <tr><td></td>{% for role in roles %}<td class="num">
+      {% if not role.is_builtin and not role.users %}
+      <button class="btn sm danger" name="delete_role" value="{{ role.code }}" formnovalidate
+              onclick="return confirm('Delete the {{ role.name|escapejs }} role?')">Delete</button>{% endif %}
+    </td>{% endfor %}</tr>
+    {% endif %}
   </tbody></table>
-  
-</div>
+  </div>
+  {% if is_admin %}<div class="row" style="margin-top:14px"><button class="btn primary">Save roles</button></div>{% endif %}
+</form>
+
+{% if is_admin %}
+<dialog class="modal" id="roledlg">
+  <form method="post">{% csrf_token %}
+    <header><h3>New role</h3>
+      <p>Start empty, or copy another role's rights and screens and adjust from there.</p></header>
+    <div class="content">
+      <div class="field"><label class="f" for="new_role">Name</label>
+        <input id="new_role" name="new_role" required maxlength="80" placeholder="e.g. Store manager"></div>
+      <div class="field"><label class="f" for="copy_from">Copy from</label>
+        <select id="copy_from" name="copy_from"><option value="">— nothing, start empty —</option>
+          {% for role in copy_choices %}<option value="{{ role.code }}">{{ role.name }}</option>{% endfor %}</select></div>
+    </div>
+    <footer>
+      <button class="btn" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn primary">Add role</button>
+    </footer>
+  </form>
+</dialog>
+{% endif %}
 
 {% elif tab == 'rates' %}
 <div class="card">

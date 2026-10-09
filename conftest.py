@@ -10,7 +10,7 @@ import pytest
 from django.contrib.auth.models import Group
 from django.utils import timezone
 
-from accounts.models import User, sync_role_groups
+from accounts.models import User, sync_roles
 from stock import services
 from stock.enums import ChargeBasis, StockState, Uom
 from stock.models import (
@@ -58,7 +58,7 @@ def _import_cache(monkeypatch, tmp_path):
 @pytest.fixture(autouse=True)
 def _reference_data(db):
     """The seed migration runs for real databases; tests get it explicitly."""
-    sync_role_groups()
+    sync_roles()
     return None
 
 

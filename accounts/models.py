@@ -1,7 +1,13 @@
 from django.contrib.auth.models import AbstractUser, Group
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
+from django.utils.functional import cached_property
 
-from .capabilities import ALL
+from .capabilities import ALL, ROLE_GROUPS, ROLE_TABS, SCREEN_CODES
+
+#: the role that holds every right and cannot be edited, so nobody can take
+#: the last way back into Users & Settings away from everyone
+ADMIN_ROLE = "ADMIN"
 
 
 class Capability(models.Model):
@@ -25,6 +31,39 @@ class Capability(models.Model):
             ("melt", "Can melt a piece"),
             ("edit_bom", "Can edit a bill of materials"),
         ]
+
+
+class Role(models.Model):
+    """A role as people see it: a name and the screens it opens.
+
+    The group behind it holds the capabilities, as Django permissions, so
+    ``user.has_perm`` keeps answering every capability question. This row adds
+    what a group cannot carry, and what an admin edits from Users & Settings.
+    """
+
+    group = models.OneToOneField(Group, on_delete=models.CASCADE, primary_key=True, related_name="role")
+    name = models.CharField(max_length=80, unique=True)
+    screens = ArrayField(models.CharField(max_length=16), default=list, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def code(self):
+        return self.group.name
+
+    @property
+    def is_admin(self):
+        """Admin / Owner: every screen and right, never edited."""
+        return self.group.name == ADMIN_ROLE
+
+    @property
+    def is_builtin(self):
+        """One of the five the app shipped with — editable, but not deletable."""
+        return self.group.name in ROLE_GROUPS
 
 
 class User(AbstractUser):
@@ -77,6 +116,25 @@ class User(AbstractUser):
             return True
         return location_id in set(self.visible_location_ids())
 
+    # ── role and screens ─────────────────────────────────────────────────
+    @cached_property
+    def role(self):
+        """This login's role, or ``None``. One role per login, by policy."""
+        return Role.objects.select_related("group").filter(group__user=self).first()
+
+    @property
+    def role_name(self):
+        if self.role:
+            return self.role.name
+        return "Superuser" if self.is_superuser else "No role"
+
+    @property
+    def screens(self):
+        """The screens this login may open. No role means none at all."""
+        if self.is_superuser or (self.role and self.role.is_admin):
+            return SCREEN_CODES
+        return tuple(self.role.screens) if self.role else ()
+
     # ── capabilities ─────────────────────────────────────────────────────
     @property
     def capabilities(self):
@@ -90,7 +148,7 @@ class User(AbstractUser):
 
     def is_admin(self):
         """``app.is_admin()`` — the ``role.is_system`` flag, as a group."""
-        return self.is_superuser or self.groups.filter(name="ADMIN").exists()
+        return self.is_superuser or bool(self.role and self.role.is_admin)
 
 
 def sync_role_groups():
@@ -128,3 +186,20 @@ def sync_role_groups():
         else:
             group.permissions.add(*[p for p in defaults if p.codename in new])
     return by_codename
+
+
+def sync_roles():
+    """:func:`sync_role_groups`, then a :class:`Role` for every group without one.
+
+    Kept apart from ``sync_role_groups`` because the migrations that call that
+    run before the role table exists. A built-in role starts with its seeded
+    screens; any other group (one made in the Django admin) starts with none.
+    """
+    sync_role_groups()
+    for group in Group.objects.filter(role__isnull=True):
+        spec = ROLE_GROUPS.get(group.name)
+        Role.objects.create(
+            group=group,
+            name=spec["name"] if spec else group.name.title(),
+            screens=list(ROLE_TABS.get(group.name, ())),
+        )

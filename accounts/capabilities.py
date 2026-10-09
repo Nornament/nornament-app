@@ -42,18 +42,38 @@ LEGACY_NAMES = {
     "editBom": EDIT_BOM,
 }
 
-#: which stock tabs a role may open — the legacy app's ``ROLES[role].tabs``,
-#: copied across. A tab it does not list is rendered locked, not hidden: the
-#: legacy nav showed a padlock so people could see what the role withheld.
+#: Every screen a role can be given, in nav order. A screen a role lacks is
+#: rendered locked, not hidden: the legacy nav showed a padlock so people
+#: could see what the role withheld.
+SCREENS = [
+    ("dash", "Dashboard"),
+    ("stock", "Stock & Identify"),
+    ("count", "Stock Count"),
+    ("repairs", "Repairs"),
+    ("melt", "Melt"),
+    ("styles", "Design Library"),
+    ("reports", "Reports & Margin"),
+    ("data", "Import / Export"),
+    ("audit", "Audit Log"),
+    ("admin", "Users & Settings"),
+    ("crm", "Customers & Orders (CRM)"),
+]
+SCREEN_CODES = tuple(code for code, _ in SCREENS)
+
+#: The screens each built-in role starts with — the legacy app's
+#: ``ROLES[role].tabs``, plus the CRM, which every role could open before it
+#: was a screen. Seed only: once a role exists, ``Role.screens`` is the truth
+#: and an admin edits it from Users & Settings.
 ROLE_TABS = {
-    "ADMIN": ("dash", "stock", "repairs", "melt", "count", "styles", "reports", "data", "audit", "admin"),
-    "ACCOUNTS": ("dash", "stock", "repairs", "count", "styles", "reports"),
-    "SALES": ("dash", "stock", "count", "styles"),
-    "GRAPHIC": ("styles",),
-    "PRODUCTION": ("stock", "repairs", "styles"),
+    "ADMIN": SCREEN_CODES,
+    "ACCOUNTS": ("dash", "stock", "repairs", "count", "styles", "reports", "crm"),
+    "SALES": ("dash", "stock", "count", "styles", "crm"),
+    "GRAPHIC": ("styles", "crm"),
+    "PRODUCTION": ("stock", "repairs", "styles", "crm"),
 }
 
-#: app.role seed (migration 0004), as groups
+#: app.role seed (migration 0004), as groups — the built-in roles. Their
+#: capabilities are seeded once; after that the group's permissions are the truth.
 ROLE_GROUPS = {
     "ADMIN": {
         "name": "Admin / Owner",

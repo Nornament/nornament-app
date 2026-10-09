@@ -3,7 +3,7 @@ from django.contrib.auth import password_validation
 from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm
 from django.contrib.auth.models import Group
 
-from .models import User
+from .models import Role, User
 
 
 class LoginForm(AuthenticationForm):
@@ -51,13 +51,10 @@ class UserForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         from stock.models import Location
 
-        from .capabilities import ROLE_GROUPS
-        from .context_processors import _role_code
-
         self.actor = actor
-        self.fields["role"].choices = [(code, spec["name"]) for code, spec in ROLE_GROUPS.items()]
+        self.fields["role"].choices = [(role.code, role.name) for role in Role.objects.select_related("group")]
         if self.instance.pk:
-            self.fields["role"].initial = _role_code(self.instance)
+            self.fields["role"].initial = self.instance.role.code if self.instance.role else None
         else:
             # a new login is active; an unticked box would otherwise create it disabled
             del self.fields["is_active"]
@@ -84,12 +81,10 @@ class UserForm(forms.ModelForm):
         if user.pk and user.is_superuser and not self.actor.is_superuser:
             raise forms.ValidationError("Only a superuser can change a superuser.")
         if user.pk and user.pk == self.actor.pk:
-            from .context_processors import _role_code
-
             # the way to lock everyone out is an admin disabling or demoting themselves
             if not cleaned.get("is_active"):
                 self.add_error("is_active", "You cannot disable your own login.")
-            if cleaned.get("role") and cleaned["role"] != _role_code(user):
+            if cleaned.get("role") and cleaned["role"] != (user.role.code if user.role else None):
                 self.add_error("role", "You cannot change your own role.")
         password = cleaned.get("password")
         if password:
@@ -107,4 +102,5 @@ class UserForm(forms.ModelForm):
         user.save()
         self.save_m2m()
         user.groups.set([Group.objects.get(name=self.cleaned_data["role"])])
+        user.__dict__.pop("role", None)  # cached before the change
         return user

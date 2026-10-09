@@ -43,4 +43,5 @@ disappearing, so nobody has to guess why a colleague sees more screens.{% endcom
 {% else %}<button disabled><span class="ico">⚙</span>Users &amp; Settings<span class="lockicon">🔒</span></button>{% endif %}
 
 <div class="navgrp">CRM</div>
-<a href="{% url 'crm:dashboard' %}"><span class="ico">☺</span>Customers &amp; Orders</a>
+{% if 'crm' in tabs %}<a href="{% url 'crm:dashboard' %}"><span class="ico">☺</span>Customers &amp; Orders</a>
+{% else %}<button disabled><span class="ico">☺</span>Customers &amp; Orders<span class="lockicon">🔒</span></button>{% endif %}

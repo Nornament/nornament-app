@@ -16,7 +16,7 @@ from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 
-from accounts.models import User, sync_role_groups
+from accounts.models import User, sync_roles
 from crm.models import (
     ClientMaterial,
     CrmSetting,
@@ -140,7 +140,7 @@ class Command(BaseCommand):
         counts = {}
         try:
             with transaction.atomic():
-                sync_role_groups()
+                sync_roles()
                 counts |= self.load_users(write=("users" in parts))
                 if "stock" in parts:
                     counts |= self.load_stock()

@@ -25,7 +25,7 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, F, ProtectedError, Q, Sum
+from django.db.models import Count, F, Prefetch, ProtectedError, Q, Sum
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.forms import modelform_factory
@@ -35,8 +35,8 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 from openpyxl import Workbook
 
-from accounts.capabilities import ADJUST_STOCK, EDIT_BOM, ROLE_GROUPS, ROLE_TABS, VIEW_COST, VIEW_MARGIN, VIEW_SALE
-from accounts.context_processors import _role_code
+from accounts.capabilities import ADJUST_STOCK, ALL, EDIT_BOM, SCREEN_CODES, SCREENS, VIEW_COST, VIEW_MARGIN, VIEW_SALE
+from accounts.models import ADMIN_ROLE, Role
 from crm import services as crm_services
 from crm.models import Customer
 from mediahub import services as media_services
@@ -1464,9 +1464,8 @@ def tab_required(tab):
     def decorator(view):
         @wraps(view)
         def wrapped(request, *args, **kwargs):
-            code = _role_code(request.user)
-            if tab not in ROLE_TABS[code]:
-                raise PermissionDenied(f"{ROLE_GROUPS[code]['name']} cannot open this screen.")
+            if tab not in request.user.screens:
+                raise PermissionDenied(f"{request.user.role_name} cannot open this screen.")
             return view(request, *args, **kwargs)
 
         return wrapped
@@ -2378,7 +2377,7 @@ SETTINGS_TABS = [
     ("charts", "Rate charts"),
     ("scen", "Scenarios"),
     ("users", "Users"),
-    ("perms", "Permissions"),
+    ("perms", "Roles & permissions"),
     ("rates", "Rates"),
 ]
 
@@ -2461,20 +2460,21 @@ def settings_view(request):
     elif tab == "users":
         from accounts.models import User
 
+        from django.contrib.auth.models import Group
+
         from accounts.forms import UserForm
 
-        context["users"] = User.objects.prefetch_related("groups").select_related("home_location").order_by("username")
+        context["users"] = (
+            User.objects.prefetch_related(Prefetch("groups", queryset=Group.objects.select_related("role")))
+            .select_related("home_location").order_by("username")
+        )
         context["user_form"] = UserForm(actor=request.user)
     elif tab == "perms":
-        from accounts.models import User
-
         context |= {
             "matrix": CAPABILITY_MATRIX,
-            "roles": [
-                (code, spec["name"], {cap.split(".", 1)[1] for cap in spec["caps"]})
-                for code, spec in ROLE_GROUPS.items()
-            ],
-            "role_tabs": ROLE_TABS,
+            "screens": SCREENS,
+            "roles": _roles_for_matrix(),
+            "copy_choices": Role.objects.select_related("group"),
         }
     elif tab == "rates":
         context |= {
@@ -2494,13 +2494,13 @@ def _scenario_role_rows(scenario):
 
     granted = {r.group_id: r for r in scenario.roles.all()} if scenario and scenario.pk else {}
     rows = []
-    for group in Group.objects.prefetch_related("permissions").order_by("name"):
+    for group in Group.objects.select_related("role").prefetch_related("permissions").order_by("name"):
         may_price = any(p.codename == "view_sale" for p in group.permissions.all())
         role = granted.get(group.pk)
         rows.append(
             {
                 "group": group,
-                "label": ROLE_GROUPS.get(group.name, {}).get("name", group.name),
+                "label": group.role.name if hasattr(group, "role") else group.name,
                 "may_price": may_price,
                 "may_see": bool(role and role.may_see) and may_price,
                 "may_switch": bool(role and role.may_switch) and may_price,
@@ -2679,6 +2679,7 @@ def user_add(request):
     """The Users tab's Add modal. Refused input reopens the modal with the errors."""
     from accounts.forms import UserForm
 
+    _require_admin(request.user)
     form = UserForm(request.POST, actor=request.user)
     if form.is_valid():
         user = form.save()
@@ -2695,6 +2696,7 @@ def user_edit(request, pk):
     from accounts.forms import UserForm
     from accounts.models import User
 
+    _require_admin(request.user)
     account = get_object_or_404(User, pk=pk)
     form = UserForm(request.POST or None, instance=account, actor=request.user)
     if request.method == "POST" and form.is_valid():
@@ -2704,6 +2706,126 @@ def user_edit(request, pk):
         messages.success(request, f"{account} saved.")
         return redirect(f"{reverse('stock:settings')}?tab=users")
     return render(request, "stock/user_form.html", {"nav": "admin", "form": form, "account": account})
+
+
+# ── roles ────────────────────────────────────────────────────────────────
+def _require_admin(user):
+    """Users and roles hand out rights. Only Admin may, so nobody gives themselves more.
+
+    A role with Users & Settings but not Admin could otherwise make a login in
+    a stronger role and sign in as it.
+    """
+    if not user.is_admin():
+        raise PermissionDenied("Only an admin can manage users and roles.")
+
+
+def _capability_permissions():
+    """The eight capabilities as Permission rows, by codename."""
+    from django.contrib.auth.models import Permission
+
+    codenames = [perm.split(".", 1)[1] for perm in ALL]
+    return {p.codename: p for p in Permission.objects.filter(content_type__app_label="accounts", codename__in=codenames)}
+
+
+def _roles_for_matrix():
+    """Every role with what it holds, read from the database — not the seed in code."""
+    roles = list(
+        Role.objects.select_related("group").prefetch_related("group__permissions")
+        .annotate(users=Count("group__user"))
+        .order_by("name")
+    )
+    for role in roles:
+        role.caps = {p.codename for p in role.group.permissions.all()}
+        role.screen_set = set(SCREEN_CODES if role.is_admin else role.screens)
+    # Admin first: it is the fixed reference the others are read against
+    return sorted(roles, key=lambda role: not role.is_admin)
+
+
+def _role_code_for(name):
+    """A group name for a new role: ``Store manager`` -> ``STORE_MANAGER``, made unique."""
+    from django.contrib.auth.models import Group
+
+    base = re.sub(r"[^A-Z0-9]+", "_", name.upper()).strip("_")[:40] or "ROLE"
+    code, n = base, 1
+    while Group.objects.filter(name=code).exists():
+        n += 1
+        code = f"{base}_{n}"
+    return code
+
+
+def _roles_post(request):
+    """The Roles & permissions tab: save the matrix, add a role, or delete one."""
+    _require_admin(request.user)
+    back = f"{reverse('stock:settings')}?tab=perms"
+    if request.POST.get("new_role") is not None:
+        return _role_create(request, back)
+    if request.POST.get("delete_role"):
+        return _role_delete(request, back)
+
+    roles = list(Role.objects.select_related("group").exclude(group__name=ADMIN_ROLE))
+    names = {role.code: (request.POST.get(f"name:{role.code}") or "").strip() or role.name for role in roles}
+    taken = set(Role.objects.filter(group__name=ADMIN_ROLE).values_list("name", flat=True))
+    clashes = {name for name in names.values() if list(names.values()).count(name) > 1 or name in taken}
+    if clashes:
+        messages.error(request, f"Two roles cannot share a name: {', '.join(sorted(clashes))}.")
+        return redirect(back)
+
+    capabilities = _capability_permissions()
+    with transaction.atomic():
+        for role in roles:
+            role.name = names[role.code]
+            role.screens = [code for code in SCREEN_CODES if request.POST.get(f"screen:{role.code}:{code}")]
+            role.save(update_fields=["name", "screens"])
+            # only the eight capabilities are this screen's to change; anything
+            # else a superuser put on the group in the Django admin stays
+            granted = [p for codename, p in capabilities.items() if request.POST.get(f"cap:{role.code}:{codename}")]
+            role.group.permissions.remove(*capabilities.values())
+            role.group.permissions.add(*granted)
+            services.log(
+                request.user, "ROLE_SAVED", "role", role.code,
+                f"{role.name}: rights {sorted(p.codename for p in granted)}, screens {role.screens}",
+            )
+    messages.success(request, "Roles saved. Each login picks up the change on its next page.")
+    return redirect(back)
+
+
+def _role_create(request, back):
+    """A new role, empty or copied from an existing one."""
+    from django.contrib.auth.models import Group
+
+    name = (request.POST.get("new_role") or "").strip()
+    if not name:
+        messages.error(request, "Give the new role a name.")
+        return redirect(back)
+    if Role.objects.filter(name__iexact=name).exists():
+        messages.error(request, f"There is already a role called {name}.")
+        return redirect(back)
+    source = Role.objects.select_related("group").filter(group__name=request.POST.get("copy_from") or "").first()
+    with transaction.atomic():
+        group = Group.objects.create(name=_role_code_for(name))
+        role = Role.objects.create(
+            group=group, name=name,
+            screens=list(SCREEN_CODES if source and source.is_admin else (source.screens if source else [])),
+        )
+        if source:
+            group.permissions.set(source.group.permissions.all())
+        services.log(request.user, "ROLE_CREATED", "role", group.name, f"{name}, copied from {source or 'nothing'}")
+    messages.success(request, f"{role} added. Tick what it may see and do, then save.")
+    return redirect(back)
+
+
+def _role_delete(request, back):
+    """Delete a role nobody is in. A built-in role stays: the seed would bring it back."""
+    role = get_object_or_404(Role.objects.select_related("group"), group__name=request.POST["delete_role"])
+    if role.is_builtin:
+        messages.error(request, f"{role} is one of the built-in roles and cannot be deleted.")
+    elif role.group.user_set.exists():
+        messages.error(request, f"{role} still has logins in it. Move them to another role first.")
+    else:
+        services.log(request.user, "ROLE_DELETED", "role", role.code, f"deleted {role.name}")
+        role.group.delete()
+        messages.success(request, f"{role} deleted.")
+    return redirect(back)
 
 
 def _category_delete(request):
@@ -2724,7 +2846,9 @@ def _category_delete(request):
 
 
 def _settings_post(request, tab):
-    """Category, location and material writes. Everything else is read-only here."""
+    """Category, location, material and role writes. Everything else is read-only here."""
+    if tab == "perms":
+        return _roles_post(request)
     services.require(request.user, EDIT_BOM, "You cannot change reference data.")
     if tab == "charts":
         if request.FILES.get("csv"):
