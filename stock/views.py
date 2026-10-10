@@ -105,6 +105,30 @@ from .models import (
     Vendor,
 )
 
+
+# ── screens ──────────────────────────────────────────────────────────────
+def tab_required(*tabs):
+    """Refuse a view to a login whose role opens none of ``tabs``.
+
+    The old nav rendered a padlock, but the gate that mattered lived in the
+    database function — "a bug in the UI cannot let it through". The nav still
+    renders the padlock; this is the half that actually refuses. More than one
+    screen means any of them: a piece is browsed from Stock and from the
+    Design Library alike.
+    """
+
+    def decorator(view):
+        @wraps(view)
+        def wrapped(request, *args, **kwargs):
+            if not set(tabs) & set(request.user.screens):
+                raise PermissionDenied(f"{request.user.role_name} cannot open this screen.")
+            return view(request, *args, **kwargs)
+
+        return wrapped
+
+    return decorator
+
+
 PAGE_SIZE = 50
 
 logger = logging.getLogger(__name__)
@@ -116,8 +140,30 @@ def _visible_pieces(request):
     )
 
 
+#: where each screen starts, for a login whose role has no dashboard
+SCREEN_HOME = {
+    "stock": "stock:piece_list",
+    "count": "stock:count_list",
+    "repairs": "stock:repair_list",
+    "melt": "stock:melt_list",
+    "styles": "stock:style_list",
+    "reports": "stock:reports",
+    "data": "stock:data",
+    "audit": "stock:audit",
+    "admin": "stock:settings",
+    "crm": "crm:dashboard",
+}
+
+
 @login_required
 def dashboard(request):
+    # everyone lands here after login, so a role without the dashboard is sent
+    # on to the first screen it does have rather than shown a refusal
+    if "dash" not in request.user.screens:
+        home = next((SCREEN_HOME[code] for code in request.user.screens if code in SCREEN_HOME), None)
+        if home is None:
+            raise PermissionDenied(f"{request.user.role_name} opens no screens. Ask an admin to give it some.")
+        return redirect(home)
     pieces = _visible_pieces(request)
     live = pieces.filter(stock_state__in=list(COUNTABLE_STATES))
     by_location = (
@@ -311,6 +357,7 @@ def _piece_thumbs(piece_ids):
 
 
 @login_required
+@tab_required("stock", "styles")
 def piece_list(request):
     pieces, query, picked = _filtered(request)
     low, high = _slider_positions(picked["price"])
@@ -352,6 +399,7 @@ def piece_list(request):
 
 
 @login_required
+@tab_required("stock", "styles")
 def piece_rows(request):
     """The HTMX half of the list: the same rows, no chrome."""
     pieces, _, _ = _filtered(request)
@@ -521,6 +569,7 @@ def _margin_panel(row):
 
 
 @login_required
+@tab_required("stock", "styles")
 def piece_detail(request, jewel_code):
     piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
     row = piece_row(request.user, piece)
@@ -688,6 +737,7 @@ def _bom_context(request, piece):
 
 
 @login_required
+@tab_required("stock", "styles")
 @permission_required("accounts.manage_materials", raise_exception=True)
 def piece_bom(request, jewel_code):
     """The material breakup. Gated whole — this is the ``materials`` capability."""
@@ -753,6 +803,7 @@ def _scenario_prices(request, piece):
 
 
 @login_required
+@tab_required("stock", "styles")
 def piece_scenarios(request, jewel_code):
     piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
     if not (request.user.has_perm(VIEW_SALE) or request.user.has_perm(VIEW_COST)):
@@ -811,6 +862,7 @@ def _design_inline_form(style):
 
 
 @login_required
+@tab_required("stock")
 @require_POST
 def piece_field(request, jewel_code):
     """Save one field edited in place on the detail screen."""
@@ -830,6 +882,7 @@ def piece_field(request, jewel_code):
 
 
 @login_required
+@tab_required("stock", "styles")
 @require_POST
 def piece_media_display(request, jewel_code, media_id):
     """Make one photograph the picture every list and the catalogue pulls.
@@ -858,6 +911,7 @@ def _media_tab(piece):
 
 
 @login_required
+@tab_required("stock")
 @require_POST
 def piece_link(request, jewel_code):
     """Link another piece to this one. One row, read from both ends."""
@@ -882,6 +936,7 @@ def piece_link(request, jewel_code):
 
 
 @login_required
+@tab_required("stock")
 @require_POST
 def piece_unlink(request, jewel_code, link_id):
     piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
@@ -895,6 +950,7 @@ def piece_unlink(request, jewel_code, link_id):
 
 
 @login_required
+@tab_required("stock", "styles")
 @require_POST
 def piece_marketing(request, jewel_code):
     """The marketing tab's small edits — keywords and talking points.
@@ -980,6 +1036,7 @@ def _sale_customer(request, new_name):
 
 
 @login_required
+@tab_required("stock")
 @require_POST
 def sell_piece_view(request, jewel_code):
     piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
@@ -1010,6 +1067,7 @@ def sell_piece_view(request, jewel_code):
 
 
 @login_required
+@tab_required("melt")
 @require_POST
 def melt_piece_view(request, jewel_code):
     piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
@@ -1023,6 +1081,7 @@ def melt_piece_view(request, jewel_code):
 
 
 @login_required
+@tab_required("stock")
 @require_POST
 def set_piece_scenario_view(request, jewel_code):
     """The Pricing tab's radio: put this piece on a scenario, or back on its own lines."""
@@ -1043,6 +1102,7 @@ def set_piece_scenario_view(request, jewel_code):
 
 
 @login_required
+@tab_required("stock")
 @require_POST
 def move_piece_view(request, jewel_code):
     piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
@@ -1098,6 +1158,7 @@ def _message(error):
 
 
 @login_required
+@tab_required("admin")
 @permission_required("accounts.manage_materials", raise_exception=True)
 def material_list(request):
     query = (request.GET.get("q") or "").strip()
@@ -1122,6 +1183,7 @@ def material_list(request):
 
 
 @login_required
+@tab_required("admin")
 @permission_required("accounts.manage_materials", raise_exception=True)
 def material_edit(request, item_code):
     """Change one material. The form already refuses metal without a metal."""
@@ -1147,6 +1209,7 @@ def material_edit(request, item_code):
 
 
 @login_required
+@tab_required("admin")
 @permission_required("accounts.manage_materials", raise_exception=True)
 def material_delete(request, item_code):
     """The checkpoint: what points at this material, and what to do about it.
@@ -1201,6 +1264,7 @@ def material_delete(request, item_code):
 
 
 @login_required
+@tab_required("admin")
 def rate_list(request):
     if not (request.user.has_perm(VIEW_SALE) or request.user.has_perm(VIEW_COST)):
         raise PermissionDenied("You cannot see rates.")
@@ -1256,6 +1320,7 @@ def rate_list(request):
 
 
 @login_required
+@tab_required("admin")
 @require_POST
 def set_rate_view(request):
     try:
@@ -1278,6 +1343,7 @@ def set_rate_view(request):
 
 # ── stock count ──────────────────────────────────────────────────────────
 @login_required
+@tab_required("count")
 def count_list(request):
     counts = StockCount.objects.select_related("location", "counted_by").filter(
         location_id__in=request.user.visible_location_ids()
@@ -1296,6 +1362,7 @@ def count_list(request):
 
 
 @login_required
+@tab_required("count")
 @require_POST
 def count_open(request):
     try:
@@ -1307,6 +1374,7 @@ def count_open(request):
 
 
 @login_required
+@tab_required("count")
 def count_detail(request, count_id):
     count = get_object_or_404(StockCount, pk=count_id)
     state = services.count_state(request.user, count)
@@ -1314,6 +1382,7 @@ def count_detail(request, count_id):
 
 
 @login_required
+@tab_required("count")
 @require_POST
 def count_scan(request, count_id):
     """The scan flow: one POST, one row partial back. No page reload, ever."""
@@ -1327,6 +1396,7 @@ def count_scan(request, count_id):
 
 
 @login_required
+@tab_required("count")
 @require_POST
 def count_unscan(request, count_id):
     count = get_object_or_404(StockCount, pk=count_id)
@@ -1339,6 +1409,7 @@ def count_unscan(request, count_id):
 
 
 @login_required
+@tab_required("count")
 @require_POST
 def count_close(request, count_id):
     count = get_object_or_404(StockCount, pk=count_id)
@@ -1353,12 +1424,14 @@ def count_close(request, count_id):
 
 # ── repairs, sales, reports ──────────────────────────────────────────────
 @login_required
+@tab_required("repairs")
 def repair_list(request):
     jobs = RepairJob.objects.select_related("piece", "vendor").all()
     return render(request, "stock/repair_list.html", {"jobs": jobs})
 
 
 @login_required
+@tab_required("repairs")
 @require_POST
 def repair_complete(request, job_id):
     job = get_object_or_404(RepairJob, pk=job_id)
@@ -1372,6 +1445,7 @@ def repair_complete(request, job_id):
 
 
 @login_required
+@tab_required("reports")
 @permission_required("accounts.view_sale", raise_exception=True)
 def sale_list(request):
     sales = Sale.objects.select_related("piece", "location", "customer").all()[:200]
@@ -1395,6 +1469,7 @@ def sale_list(request):
 
 
 @login_required
+@tab_required("reports")
 @permission_required("accounts.view_margin", raise_exception=True)
 def margin_report(request):
     """Margin is only meaningful where a cost exists — stock-sourced sales."""
@@ -1434,6 +1509,7 @@ def margin_report(request):
 
 
 @login_required
+@tab_required("stock")
 def piece_export(request):
     """CSV of what this user may see — the same gate as the screen.
 
@@ -1452,25 +1528,6 @@ def piece_export(request):
     return response
 
 
-# ── the tabs the legacy nav carried that had no screen here ──────────────
-def tab_required(tab):
-    """Enforce the legacy ``ROLES[role].tabs`` list on the server.
-
-    The old nav rendered a padlock, but the gate that mattered lived in the
-    database function — "a bug in the UI cannot let it through". The nav still
-    renders the padlock; this is the half that actually refuses.
-    """
-
-    def decorator(view):
-        @wraps(view)
-        def wrapped(request, *args, **kwargs):
-            if tab not in request.user.screens:
-                raise PermissionDenied(f"{request.user.role_name} cannot open this screen.")
-            return view(request, *args, **kwargs)
-
-        return wrapped
-
-    return decorator
 
 
 @login_required
@@ -3299,6 +3356,7 @@ def _chart_line_post(request):
 
 # ── writes the legacy had and this app did not expose ────────────────────
 @login_required
+@tab_required("stock")
 @permission_required("accounts.edit_bom", raise_exception=True)
 def piece_form(request, jewel_code=None):
     """New piece / Edit details.
@@ -3336,6 +3394,7 @@ def piece_form(request, jewel_code=None):
 
 
 @login_required
+@tab_required("stock")
 @permission_required("accounts.edit_bom", raise_exception=True)
 def piece_bom_edit(request, jewel_code):
     """Edit the bill of materials.
@@ -3424,6 +3483,7 @@ def piece_bom_edit(request, jewel_code):
 
 
 @login_required
+@tab_required("repairs")
 @require_POST
 @permission_required("accounts.edit_bom", raise_exception=True)
 def repair_open(request, jewel_code):
@@ -3448,6 +3508,7 @@ def repair_open(request, jewel_code):
 
 
 @login_required
+@tab_required("stock")
 @require_POST
 def reserve_piece_view(request, jewel_code):
     """On approval, and back again. Both are movements, not a flag."""

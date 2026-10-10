@@ -154,3 +154,35 @@ def test_a_new_role_appears_in_the_add_user_form(client, admin_user_):
     client.post(ROLES, {"new_role": "Store manager", "copy_from": "SALES"})
     page = client.get(reverse("stock:settings") + "?tab=users").content.decode()
     assert '<option value="STORE_MANAGER">Store manager</option>' in page
+
+
+# ── stock pages check their screen too ───────────────────────────────────
+def test_the_design_library_browses_pieces_but_cannot_act_on_them(client, graphic_user, piece):
+    """Graphic manages piece photos, so it reaches pieces — but never sells or moves one."""
+    client.force_login(graphic_user)
+    assert client.get(reverse("stock:piece_list")).status_code == 200
+    assert client.get(reverse("stock:piece_detail", args=[piece.jewel_code])).status_code == 200
+    assert client.post(reverse("stock:move_piece", args=[piece.jewel_code])).status_code == 403
+    assert client.post(reverse("stock:reserve_piece", args=[piece.jewel_code])).status_code == 403
+    assert client.get(reverse("stock:piece_export")).status_code == 403
+    assert client.get(reverse("stock:count_list")).status_code == 403
+
+
+def test_a_role_without_the_dashboard_lands_on_its_first_screen(client, production_user, graphic_user):
+    client.force_login(production_user)
+    assert client.get(reverse("stock:dashboard"))["Location"] == reverse("stock:piece_list")
+    client.force_login(graphic_user)
+    assert client.get(reverse("stock:dashboard"))["Location"] == reverse("stock:style_list")
+    nobody = _user("nobody", None)
+    client.force_login(nobody)
+    assert client.get(reverse("stock:dashboard")).status_code == 403
+
+
+def test_unticking_stock_and_the_library_closes_the_piece_pages(client, admin_user_, sales_user, piece):
+    caps, screens, names = _as_now()
+    screens["SALES"] = [s for s in screens["SALES"] if s not in ("stock", "styles")]
+    client.force_login(admin_user_)
+    client.post(ROLES, _matrix(caps.keys(), caps, screens, names))
+    client.force_login(sales_user)
+    assert client.get(reverse("stock:piece_list")).status_code == 403
+    assert client.get(reverse("stock:piece_detail", args=[piece.jewel_code])).status_code == 403

@@ -95,10 +95,6 @@ SALES_SCREENS = [
     ("stock:identify", {}),
     ("stock:piece_detail", {"jewel_code": "ER00738"}),
     ("stock:piece_scenarios", {"jewel_code": "ER00738"}),
-    ("stock:rate_list", {}),
-    ("stock:material_list", {}),
-    ("stock:repair_list", {}),
-    ("stock:sale_list", {}),
     ("stock:piece_export", {}),
     ("stock:style_list", {}),
     ("crm:dashboard", {}),
@@ -191,6 +187,9 @@ def test_the_locked_tabs_refuse_a_sales_login(client, sales_user, priced_and_sol
     for name in (
         "stock:melt_list", "stock:data", "stock:audit", "stock:settings", "stock:reports",
         "stock:reports_export", "stock:material_export", "stock:rate_chart_export",
+        # screens Sales does not have: rates and materials live under Settings,
+        # repairs under Repairs, the sales list under Reports
+        "stock:rate_list", "stock:material_list", "stock:repair_list", "stock:sale_list",
     ):
         assert client.get(reverse(name)).status_code == 403, f"{name} let a SALES login in"
     # the importer hangs off the data tab and writes reference data, so it is
@@ -305,6 +304,7 @@ def test_every_stock_and_crm_screen_is_in_the_sales_walk():
         "stock:reports_export", "stock:material_export", "stock:rate_chart_export",
         "stock:import_upload", "stock:import_review", "stock:import_commit", "stock:import_images",
         "stock:import_step",
+        "stock:rate_list", "stock:material_list", "stock:repair_list", "stock:sale_list",
         # gated on edit_bom, and asserted to 403 below
         "stock:piece_new", "stock:piece_edit", "stock:piece_bom_edit",
         "stock:style_new", "stock:style_edit",
