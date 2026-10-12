@@ -29,11 +29,14 @@ def without_bytes(assets):
     )
 
 
-def for_pieces(piece_ids, limit_each=None):
+def for_pieces(piece_ids, limit_each=None, kinds=None):
     """``get_many`` — one query, then presigned URLs, keyed by piece id."""
     assets = without_bytes(MediaAsset.objects).filter(
         piece_id__in=list(piece_ids), is_archived=False, confirmed_at__isnull=False
-    ).order_by("piece_id", "-is_catalogue_default", "rank_order")
+    )
+    if kinds:
+        assets = assets.filter(kind__in=kinds)
+    assets = assets.order_by("piece_id", "-is_catalogue_default", "rank_order")
     grouped = defaultdict(list)
     for asset in assets:
         bucket = grouped[asset.piece_id]

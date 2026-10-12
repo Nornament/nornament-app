@@ -181,6 +181,8 @@ label.f{display:block;font-size:12px;color:var(--ink-2);margin:0 0 5px;font-weig
 .th{display:inline-block;border-radius:9px;overflow:hidden;border:1px solid var(--line);
   flex:none;vertical-align:middle;background:var(--surface-2)}
 .th .thart{width:100%;height:100%;display:block}
+.th .thnone{display:flex;width:100%;height:100%;align-items:center;justify-content:center;
+  font-size:11px;color:var(--muted);text-align:center}
 .cellrow{display:flex;align-items:center;gap:10px}
 .dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:16px}
 .dcard{background:var(--surface);border:1px solid var(--line);border-radius:13px;overflow:hidden;
@@ -341,6 +343,8 @@ textarea.inplace{width:100%;min-height:90px;padding:6px 8px;font-size:13px;borde
 input.inplace,select.inplace{width:auto;min-width:110px;max-width:230px;padding:3px 7px;
   font-size:13px;border:1px solid var(--brand);border-radius:6px;text-align:right;
   background:var(--surface);color:var(--ink);font-family:inherit}
+input[type=checkbox].inplace{min-width:0}
+input[type=url].inplace{width:28em;max-width:100%;text-align:left}
 .gate{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:22px;background:var(--page);padding:24px}
 .gate[hidden]{display:none}

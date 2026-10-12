@@ -149,6 +149,43 @@ def test_a_field_edited_in_place_is_saved(client, admin_user_, received_piece):
     assert received_piece.sub_category == "Jhumka"
 
 
+def test_social_and_web_is_edited_in_place_on_the_marketing_tab(client, admin_user_, received_piece):
+    client.force_login(admin_user_)
+    _edit(client, "on_website", "on")
+    _edit(client, "website_url", "https://nornament.com/p/er00738")
+    received_piece.refresh_from_db()
+    assert received_piece.on_website and received_piece.website_url == "https://nornament.com/p/er00738"
+    page = client.get(reverse("stock:piece_detail", args=["ER00738"]) + "?tab=marketing").content.decode()
+    assert 'name="website_url"' in page and "Social &amp; web" in page
+    # an unticked checkbox posts nothing for the field, and that has to mean "off"
+    client.post(reverse("stock:piece_field", kwargs={"jewel_code": "ER00738"}), {"field": "on_website"})
+    received_piece.refresh_from_db()
+    assert not received_piece.on_website
+
+
+def test_the_vendor_is_edited_in_place_but_only_by_a_role_that_sees_vendors(client, production_user, received_piece):
+    from django.contrib.auth.models import Permission
+
+    from stock.models import Vendor
+
+    vendor = Vendor.objects.create(code="VEN01", name="Sharma Karigars")
+    client.force_login(production_user)
+    page = client.get(reverse("stock:piece_detail", args=["ER00738"]) + "?tab=overview").content.decode()
+    assert 'name="vendor"' in page
+    assert page.count('value="huid"') == 1  # one HUID editor, in Compliance
+    _edit(client, "vendor", vendor.pk)
+    received_piece.refresh_from_db()
+    assert received_piece.vendor_id == vendor.pk
+
+    # roles are editable, so edit_bom without view_vendor is a real combination
+    production_user.groups.get().permissions.remove(Permission.objects.get(content_type__app_label="accounts", codename="view_vendor"))
+    production_user = type(production_user).objects.get(pk=production_user.pk)
+    client.force_login(production_user)
+    assert _edit(client, "vendor", "").status_code == 403
+    received_piece.refresh_from_db()
+    assert received_piece.vendor_id == vendor.pk
+
+
 def test_the_jewel_code_cannot_be_edited_in_place(client, admin_user_, received_piece):
     """It is the identity of a physical object; every ledger row points at it."""
     client.force_login(admin_user_)

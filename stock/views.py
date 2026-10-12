@@ -35,7 +35,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 from openpyxl import Workbook
 
-from accounts.capabilities import ADJUST_STOCK, ALL, EDIT_BOM, SCREEN_CODES, SCREENS, VIEW_COST, VIEW_MARGIN, VIEW_SALE
+from accounts.capabilities import ADJUST_STOCK, ALL, EDIT_BOM, SCREEN_CODES, SCREENS, VIEW_COST, VIEW_MARGIN, VIEW_SALE, VIEW_VENDOR
 from accounts.models import ADMIN_ROLE, Role
 from crm import services as crm_services
 from crm.models import Customer
@@ -350,8 +350,13 @@ def _pin_thumbs(page):
 
 
 def _piece_thumbs(piece_ids):
-    """``{piece_id: url}`` for the first confirmed photo of each piece."""
-    firsts = [assets[0] for assets in media_services.for_pieces(list(piece_ids), limit_each=1).values() if assets]
+    """``{piece_id: url}`` for the first confirmed photo of each piece.
+
+    Only a photo or render an ``<img>`` can draw: a job-card PDF or a TIFF
+    ranked first would otherwise be a broken picture in every list.
+    """
+    grouped = media_services.for_pieces(list(piece_ids), kinds=HERO_KINDS).values()
+    firsts = [first for assets in grouped if (first := next((a for a in assets if a.is_image), None))]
     urls = media_services.urls_for(firsts, thumbs=True)
     return {asset.piece_id: urls[asset.pk] for asset in firsts if urls.get(asset.pk)}
 
@@ -591,6 +596,7 @@ def piece_detail(request, jewel_code):
         "reconciliation": services.weight_reconciliation(piece),
         "movements": piece.movements.select_related("from_location", "to_location", "user")[:20],
         "media": piece.media.filter(is_archived=False).order_by("rank_order"),
+        "thumb": _piece_thumbs([piece.pk]).get(piece.pk),
         "locations": Location.objects.filter(is_active=True),
         "sale": Sale.objects.filter(piece=piece).first() if allowed(request.user, "sold_price") else None,
         "certificate": PieceCertificate.objects.filter(piece=piece).first(),
@@ -823,6 +829,7 @@ INLINE_FIELDS = (
     "size_label",
     "diamond_quality",
     "received_on",
+    "vendor",
     "measured_gross_wt_gm",
     "length_mm",
     "breadth_mm",
@@ -831,6 +838,8 @@ INLINE_FIELDS = (
     "hallmarked_on",
     "hallmark_centre",
     "remarks",
+    "on_website",
+    "website_url",
 )
 
 #: the design's copy, edited in place on the piece's Marketing tab. It lives on
@@ -872,6 +881,8 @@ def piece_field(request, jewel_code):
     field = request.POST.get("field")
     if field not in INLINE_FIELDS:
         raise PermissionDenied(f"{field!r} is not editable here.")
+    if field == "vendor" and not request.user.has_perm(VIEW_VENDOR):
+        raise PermissionDenied("You cannot see vendors, so you cannot change one.")
     form = modelform_factory(Piece, form=PieceForm, fields=[field])(request.POST, instance=piece)
     if form.is_valid():
         form.save()

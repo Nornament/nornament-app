@@ -112,13 +112,6 @@ so it is untrusted, and markup built around one would run it.{% endcomment %}
   </div>
 </dialog>
 
-<div class="card"><h3>Social &amp; web</h3>
-  <div class="bio"><dl>
-    <div class="biorow"><dt>On website</dt><dd>{% if piece.on_website %}<span class="chip c-good">live</span>{% else %}<span class="chip c-neutral">not published</span>{% endif %}</dd></div>
-    <div class="biorow"><dt>URL</dt><dd class="mono">{% if piece.website_url %}<a href="{{ piece.website_url }}" target="_blank" rel="noopener">{{ piece.website_url }}</a>{% else %}—{% endif %}</dd></div>
-  </dl></div>
-</div>
-
 {% if caps.edit_bom %}
 {% comment %}One modal for every kind. The kind picker carries its own scope and
 accept list, so choosing "CAD / 3DM" uploads against the design and offers .3dm

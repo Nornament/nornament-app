@@ -7,6 +7,9 @@
 
 <div class="spread" style="margin-bottom:14px">
   <div class="hero">
+    {# the list's own picture: the display photo if one is set, else the first #}
+    <a href="?tab=media" class="th{% if thumb %} thpic{% endif %}" style="width:72px;height:72px" title="Media">
+      {% if thumb %}<img src="{{ thumb }}" alt="{{ piece.jewel_code }}">{% else %}<span class="thnone">no photo</span>{% endif %}</a>
     <div>
       <div style="font-family:var(--mono);font-size:24px;font-weight:600;letter-spacing:-.02em">{{ piece.jewel_code }}</div>
       <div class="dim" style="font-size:13px">{{ row.design_name|default:row.style_code }} · {{ row.karat|default:"—" }} ·
@@ -51,7 +54,7 @@
       <div class="biorow"><dt>Quality</dt><dd>{% include "stock/_inline.html" with name="diamond_quality" field=inline.diamond_quality value=row.diamond_quality %}</dd></div>
       <div class="biorow"><dt>Size</dt><dd>{% include "stock/_inline.html" with name="size_label" field=inline.size_label value=row.size_label %}</dd></div>
       <div class="biorow"><dt>FG date</dt><dd>{% include "stock/_inline.html" with name="received_on" field=inline.received_on value=row.received_on %}</dd></div>
-      {% if caps.view_vendor %}<div class="biorow"><dt>Vendor</dt><dd>{{ row.vendor_name|default:"—" }}</dd></div>{% endif %}
+      {% if caps.view_vendor %}<div class="biorow"><dt>Vendor</dt><dd>{% include "stock/_inline.html" with name="vendor" field=inline.vendor value=row.vendor_name %}</dd></div>{% endif %}
     </dl>
   </div>
 </div>
@@ -72,7 +75,6 @@
       <div class="biorow"><dt>Length</dt><dd class="mono">{% include "stock/_inline.html" with name="length_mm" field=inline.length_mm value=piece.length_mm %}</dd></div>
       <div class="biorow"><dt>Breadth</dt><dd class="mono">{% include "stock/_inline.html" with name="breadth_mm" field=inline.breadth_mm value=piece.breadth_mm %}</dd></div>
       <div class="biorow"><dt>Height</dt><dd class="mono">{% include "stock/_inline.html" with name="height_mm" field=inline.height_mm value=piece.height_mm %}</dd></div>
-      <div class="biorow"><dt>HUID</dt><dd class="mono">{% include "stock/_inline.html" with name="huid" field=inline.huid value=row.huid %}</dd></div>
     </dl>
   </div>
 </div>
@@ -296,6 +298,14 @@
     </div>
   </div>
 
+</div>
+
+<div class="card"><h3>Social &amp; web</h3>
+  <div class="bio"><dl>
+    <div class="biorow"><dt>On website</dt><dd>{% include "stock/_inline.html" with name="on_website" field=inline.on_website value=piece.on_website|yesno:"live,not published" %}</dd></div>
+    <div class="biorow"><dt>URL</dt><dd class="mono">{% include "stock/_inline.html" with name="website_url" field=inline.website_url value=piece.website_url %}
+      {% if piece.website_url %}<a href="{{ piece.website_url }}" target="_blank" rel="noopener" title="Open">↗</a>{% endif %}</dd></div>
+  </dl></div>
 </div>
 
 {% if caps.view_sale %}

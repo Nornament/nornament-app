@@ -86,6 +86,22 @@ def test_the_display_picture_toggles_and_is_what_the_lists_pull(client, received
     assert MediaAsset.objects.get(pk=first.pk).is_catalogue_default is False
 
 
+def test_the_header_thumbnail_is_the_display_photo_and_never_a_file(client, received_piece, admin_user_):
+    client.force_login(admin_user_)
+    assert _detail(client, received_piece, "overview").context["thumb"] is None
+
+    _asset(MediaKind.JOB_CARD_SCAN, piece=received_piece, name="job.pdf", mime="application/pdf")
+    _asset(MediaKind.PHOTO, piece=received_piece, name="studio.tif", mime="image/tiff")
+    _asset(MediaKind.PHOTO, piece=received_piece, name="front.jpg")
+    response = _detail(client, received_piece, "overview")
+    assert "front.jpg" in response.context["thumb"]
+    assert 'class="th thpic"' in response.content.decode()
+
+    best = _asset(MediaKind.PHOTO, piece=received_piece, name="best.jpg")
+    MediaAsset.objects.filter(pk=best.pk).update(is_catalogue_default=True)
+    assert "best.jpg" in _detail(client, received_piece, "overview").context["thumb"]
+
+
 def test_only_a_photograph_can_be_the_display_picture(client, received_piece, admin_user_):
     card = _asset(MediaKind.JOB_CARD_SCAN, piece=received_piece, name="job.pdf", mime="application/pdf")
     client.force_login(admin_user_)
@@ -300,7 +316,7 @@ def test_the_design_copy_is_edited_in_place_on_the_marketing_tab(client, receive
     assert received_piece.remarks == "Polish before display"
 
     page = _detail(client, received_piece, "marketing").content.decode()
-    assert page.count('class="editable') == 5
+    assert page.count('class="editable') == 7  # Story & copy's five, plus Social & web's two
     assert reverse("stock:style_edit", kwargs={"style_code": style.style_code}) not in page
     assert "Made for a wedding in Jaipur.<br>Twice." in page
 
