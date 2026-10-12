@@ -113,9 +113,9 @@ so it is untrusted, and markup built around one would run it.{% endcomment %}
 </dialog>
 
 {% if caps.edit_bom %}
-{% comment %}One modal for every kind. The kind picker carries its own scope and
-accept list, so choosing "CAD / 3DM" uploads against the design and offers .3dm
-— the piece's own photographs never land on the style by accident.{% endcomment %}
+{% comment %}One modal for every kind, and any file type. The kind picker carries
+its own scope, so choosing "CAD / 3DM" uploads against the design — the piece's
+own photographs never land on the style by accident.{% endcomment %}
 <dialog class="modal" id="uploaddlg">
   <form data-upload-form>
     <header><h3>Add media to {{ piece.jewel_code }}</h3>
@@ -127,7 +127,6 @@ accept list, so choosing "CAD / 3DM" uploads against the design and offers .3dm
           <option value="{{ spec.kind }}"
                   data-scope="{% if spec.on == 'design' %}style{% else %}piece{% endif %}"
                   data-entity="{% if spec.on == 'design' %}{{ style_id }}{% else %}{{ piece.pk }}{% endif %}"
-                  data-accept="{{ spec.accept }}"
                   data-note="{{ spec.note }}">{{ spec.label }}{% if spec.on == 'design' %} · on the design{% endif %}</option>
           {% endfor %}
         </select>

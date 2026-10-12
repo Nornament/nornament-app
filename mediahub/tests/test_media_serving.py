@@ -72,14 +72,38 @@ def test_the_importer_refuses_a_type_it_would_not_serve():
     assert media_from_blob({"photo": "data:text/html;base64,PGgxPmhpPC9oMT4="}) == []
 
 
-def test_an_upload_of_a_type_we_would_not_serve_is_rejected(client, admin_user_):
+def test_any_file_type_may_be_uploaded(client, admin_user_, received_piece, settings):
+    settings.MEDIA_DIRECT_UPLOAD = False
     client.force_login(admin_user_)
     response = client.post(
         reverse("mediahub:presign"),
-        data='{"scope":"order","entity_id":1,"file_name":"x.svg","mime_type":"image/svg+xml"}',
+        data=f'{{"scope":"piece","entity_id":{received_piece.pk},"file_name":"x.svg","mime_type":"image/svg+xml"}}',
         content_type="application/json",
     )
-    assert response.status_code == 400
+    assert response.status_code == 200
+
+
+def test_a_type_we_would_not_show_comes_back_as_a_download(monkeypatch):
+    """Anything may go up, so what comes down decides: an SVG or HTML page in
+    the bucket must never render, only save."""
+    from django.core.cache import cache
+
+    cache.clear()
+    signed = {}
+
+    class Client:
+        def generate_presigned_url(self, op, Params, ExpiresIn):
+            signed.update(Params)
+            return "https://bucket/x"
+
+    monkeypatch.setattr(storage, "client", lambda: Client())
+    storage.presign_get("stock/piece/1/a.svg", "image/svg+xml", 'evil".svg')
+    assert signed["ResponseContentType"] == "application/octet-stream"
+    assert signed["ResponseContentDisposition"] == 'attachment; filename="evil.svg"'
+
+    storage.presign_get("stock/piece/1/b.jpg", "image/jpeg", "front.jpg")
+    assert signed["ResponseContentType"] == "image/jpeg"
+    assert signed["ResponseContentDisposition"] == 'inline; filename="front.jpg"'
 
 
 def test_push_inline_media_moves_bytes_into_the_bucket_and_clears_the_row(monkeypatch, admin_user_):

@@ -35,22 +35,6 @@ SERVEABLE_TYPES = frozenset(
 )
 
 
-#: Extensions that belong in the bucket but never come back from our origin.
-#:
-#: A studio TIFF, a Rhino file and a zip of STLs are all legitimate stock media
-#: and none of them is in :data:`SERVEABLE_TYPES`, because a browser cannot
-#: draw them and we will not hand them back same-origin. They are fetched with
-#: a presigned GET straight from the bucket instead, so widening this does not
-#: widen what this app will serve — :func:`is_serveable` still decides that.
-STORABLE_SUFFIXES = frozenset(
-    {
-        ".tif", ".tiff",
-        ".3dm", ".stl", ".obj", ".step", ".stp", ".iges", ".igs", ".dwg", ".dxf",
-        ".zip", ".rar",
-    }
-)
-
-
 #: What an ``<img>`` can actually draw, which is narrower than "an image".
 #:
 #: A studio TIFF and an iPhone HEIC are images and are stored as such, but only
@@ -67,14 +51,6 @@ def is_serveable(mime_type):
 
 def is_drawable(mime_type):
     return (mime_type or "").split(";", 1)[0].strip().lower() in DRAWABLE_TYPES
-
-
-def is_storable(mime_type, file_name=None):
-    """May this file go into the bucket at all? Wider than :func:`is_serveable`."""
-    if is_serveable(mime_type):
-        return True
-    name = (file_name or "").lower()
-    return any(name.endswith(suffix) for suffix in STORABLE_SUFFIXES)
 
 
 class StorageNotConfigured(RuntimeError):
@@ -139,10 +115,14 @@ def presign_get(key, content_type=None, download_name=None):
     from django.core.cache import cache
 
     params = {"Bucket": settings.MEDIA_BUCKET, "Key": key}
-    if content_type:
-        params["ResponseContentType"] = content_type
-    if download_name:
-        params["ResponseContentDisposition"] = f'inline; filename="{download_name}"'
+    # Any file may be uploaded, so the type is whatever the uploader's browser
+    # said. Only an allowlisted one is shown inline; the rest — an .html, an
+    # .svg, a .3dm — come back as a plain download that nothing renders.
+    serveable = is_serveable(content_type)
+    params["ResponseContentType"] = content_type if serveable else "application/octet-stream"
+    if download_name or not serveable:
+        name = (download_name or "file").replace('"', "")
+        params["ResponseContentDisposition"] = f'{"inline" if serveable else "attachment"}; filename="{name}"'
     cache_key = "presign:" + sha256_of(repr(sorted(params.items())).encode())
     url = cache.get(cache_key)
     if url is None:

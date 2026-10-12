@@ -100,13 +100,12 @@
     dialog.showModal();
   });
 
-  /* the accept list and the note follow whatever kind is picked */
+  /* the note follows whatever kind is picked; any file type may go up */
   document.addEventListener('change', function (event) {
     const select = event.target.closest('#uploaddlg [name="kind"]');
     if (!select) return;
     const option = select.selectedOptions[0];
     const form = select.closest('form');
-    form.querySelector('input[type="file"]').accept = option.dataset.accept || '';
     const note = form.querySelector('#uploadnote');
     if (note) note.textContent = option.dataset.note || '';
   });

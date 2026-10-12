@@ -52,10 +52,6 @@ def presign(request):
         return HttpResponseBadRequest(str(error))
     file_name = payload.get("file_name") or "upload.bin"
     content_type = payload.get("mime_type") or storage.guess_mime(file_name)
-    if not storage.is_storable(content_type, file_name):
-        # the browser names its own content type; a type this app will neither
-        # serve nor recognise as stock media has no business in the bucket
-        return HttpResponseBadRequest(f"{content_type} is not an accepted media type")
     kind = payload.get("kind") or MediaKind.PHOTO
     if kind not in MediaKind.values:
         return HttpResponseBadRequest(f"{kind!r} is not a media kind")

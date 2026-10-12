@@ -123,13 +123,11 @@ def test_a_tiff_is_a_file_card_not_a_broken_image(client, received_piece, admin_
     assert "TIF" in body
 
 
-def test_a_cad_file_may_be_reserved_even_though_it_is_never_served_from_here(client, received_piece, admin_user_):
+def test_a_cad_file_is_never_served_inline():
     """A 3DM is legitimate stock media and is not in ``SERVEABLE_TYPES``."""
     from mediahub import storage
 
-    assert storage.is_storable("application/octet-stream", "ring.3dm") is True
     assert storage.is_serveable("application/octet-stream") is False
-    assert storage.is_storable("text/html", "evil.html") is False
 
 
 # ── similar ──────────────────────────────────────────────────────────────
