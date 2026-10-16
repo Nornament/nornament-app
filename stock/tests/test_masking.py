@@ -279,7 +279,7 @@ def test_every_stock_and_crm_screen_is_in_the_sales_walk():
     covered = {name for name, _ in SALES_SCREENS}
     exempt = {
         # POST-only endpoints; their permission gates are tested in test_ledger
-        "stock:sell_piece", "stock:melt_piece", "stock:move_piece", "stock:set_rate",
+        "stock:sell_piece", "stock:melt_piece", "stock:lose_piece", "stock:move_piece", "stock:set_rate",
         "stock:set_piece_scenario",
         "stock:piece_field",
         # POST-only and gated on edit_bom; asserted in stock/tests/test_piece_media.py

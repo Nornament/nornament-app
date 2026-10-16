@@ -76,6 +76,21 @@ def test_melt_needs_a_real_reason(received_piece, admin_user_):
     assert record.cost_written_off == MeltRecord.objects.get(pk=record.pk).cost_written_off
 
 
+def test_marking_a_piece_lost_is_terminal_and_gated(client, received_piece, admin_user_, sales_user):
+    with pytest.raises(PermissionDenied):
+        services.lose_piece(sales_user, received_piece, "Not found after two counts")
+    with pytest.raises(ValidationError, match="at least 10 characters"):
+        services.lose_piece(admin_user_, received_piece, "gone")
+    client.force_login(admin_user_)
+    url = reverse("stock:lose_piece", kwargs={"jewel_code": received_piece.jewel_code})
+    assert client.post(url, {"reason": "Not found after two counts"}).status_code == 302
+    received_piece.refresh_from_db()
+    assert received_piece.stock_state == StockState.LOST and received_piece.location is None
+    assert StockMovement.objects.filter(piece=received_piece, move_type=MovementType.LOST).exists()
+    with pytest.raises(ValidationError, match="terminal"):
+        services.transfer_piece(admin_user_, received_piece, "HO")
+
+
 def test_sale_requires_adjust_stock(received_piece, graphic_user):
     with pytest.raises(PermissionDenied):
         services.sell_piece(graphic_user, received_piece, sold_price=Decimal("1"))

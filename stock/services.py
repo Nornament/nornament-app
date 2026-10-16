@@ -865,6 +865,28 @@ def melt_piece(user, piece, reason):
     return record
 
 
+
+@transaction.atomic
+def lose_piece(user, piece, reason):
+    """Write a piece off as lost — gone for good, not just missed by one count.
+
+    As final as a melt, so the same right and the same ten-character reason;
+    the ledger's LOST movement is what makes it terminal.
+    """
+    if not (user and user.is_authenticated and user.has_perm(MELT)):
+        raise PermissionDenied("You are not authorised to write a piece off as lost. Admin only.")
+    if not reason or len(reason.strip()) < 10:
+        raise ServiceError("A reason of at least 10 characters is required.")
+    piece = _as_piece(piece)
+    version = piece.current_bom()
+    movement = record_movement(user, piece, MovementType.LOST, StockState.LOST, reason=reason.strip())
+    log(
+        user, "UPDATE", "jewel_code", piece.jewel_code, f"Written off as lost: {reason.strip()[:120]}",
+        new_values={"cost_written_off": str(version.total_cost_price) if version and version.total_cost_price else None},
+    )
+    return movement
+
+
 # ── BOM ──────────────────────────────────────────────────────────────────
 @transaction.atomic
 def set_bom(user, piece, lines, reason=BomChangeReason.CORRECTION, note=None):

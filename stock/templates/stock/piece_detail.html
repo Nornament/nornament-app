@@ -22,7 +22,8 @@
       {% if caps.adjust_stock or caps.edit_bom %}<button class="btn" onclick="document.getElementById('movedlg').showModal()">⇄ Move</button>{% endif %}
       {% if caps.edit_bom and not open_repair %}<button class="btn" onclick="document.getElementById('repairdlg').showModal()">⚒ Send for repair</button>{% endif %}
       {% if caps.adjust_stock %}<button class="btn primary" onclick="document.getElementById('selldlg').showModal()">₹ Sell</button>{% endif %}
-      {% if caps.melt %}<button class="btn danger" onclick="document.getElementById('meltdlg').showModal()">♨ Melt</button>{% endif %}
+      {% if caps.melt %}<button class="btn danger" onclick="document.getElementById('meltdlg').showModal()">♨ Melt</button>
+        <button class="btn danger" onclick="document.getElementById('lostdlg').showModal()">✕ Mark lost</button>{% endif %}
     {% endif %}
   </div>
 </div>
@@ -534,6 +535,21 @@
     <footer>
       <button class="btn" formmethod="dialog" formnovalidate>Cancel</button>
       <button class="btn danger">♨ Melt permanently</button>
+    </footer>
+  </form>
+</dialog>
+<dialog class="modal" id="lostdlg" style="border-color:var(--critical)">
+  <form method="post" action="{% url 'stock:lose_piece' piece.jewel_code %}">{% csrf_token %}
+    <header><h3>Mark {{ piece.jewel_code }} lost</h3>
+      <p>For a piece that is gone for good, not one a count just missed. It leaves stock, refuses every
+        further movement, and its cost is written off.</p></header>
+    <div class="content">
+      <div class="field"><label class="f" for="lostreason">What happened (at least 10 characters)</label>
+        <textarea id="lostreason" name="reason" rows="3" style="width:100%" required minlength="10"></textarea></div>
+    </div>
+    <footer>
+      <button class="btn" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn danger">✕ Mark lost permanently</button>
     </footer>
   </form>
 </dialog>

@@ -20,6 +20,7 @@ urlpatterns = [
     path("pieces/<str:jewel_code>/scenario/", views.set_piece_scenario_view, name="set_piece_scenario"),
     path("pieces/<str:jewel_code>/sell/", views.sell_piece_view, name="sell_piece"),
     path("pieces/<str:jewel_code>/melt/", views.melt_piece_view, name="melt_piece"),
+    path("pieces/<str:jewel_code>/lost/", views.lose_piece_view, name="lose_piece"),
     path("pieces/<str:jewel_code>/move/", views.move_piece_view, name="move_piece"),
     path("pieces/<str:jewel_code>/reserve/", views.reserve_piece_view, name="reserve_piece"),
     path("pieces/<str:jewel_code>/repair/", views.repair_open, name="repair_open"),
