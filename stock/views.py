@@ -702,10 +702,16 @@ def _bom_context(request, piece):
         label = line.material.category.name
         if not groups or groups[-1]["label"] != label:
             groups.append({"label": label, "rows": []})
-            breakup.append({"label": label, "pcs": 0, "qty": Decimal("0"), "uom": line.qty_uom, "amount": Decimal("0")})
+            breakup.append({"label": label, "pcs": 0, "qty": Decimal("0"), "uom": line.qty_uom, "amount": Decimal("0"),
+                            "materials": [], "remarks": []})
         groups[-1]["rows"].append({key: value for key, value in row.items() if allowed(request.user, key)})
         breakup[-1]["pcs"] += line.pcs or 0
         breakup[-1]["qty"] += line.qty_value or 0
+        # clubbed lines keep what they are and what was said about them; the
+        # same material or remark twice in one group shows once
+        for key, value in (("materials", line.material.item_name), ("remarks", (line.remarks or "").strip())):
+            if value and value not in breakup[-1][key]:
+                breakup[-1][key].append(value)
 
     # the customer-facing breakup carries one money column: sale if you may see
     # it, else cost — same rule as the legacy screen
@@ -1088,6 +1094,20 @@ def melt_piece_view(request, jewel_code):
         messages.error(request, _message(error))
     else:
         messages.success(request, f"{piece.jewel_code} melted.")
+    return redirect("stock:piece_detail", jewel_code=piece.jewel_code)
+
+
+@login_required
+@tab_required("stock")
+@require_POST
+def lose_piece_view(request, jewel_code):
+    piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
+    try:
+        services.lose_piece(request.user, piece, request.POST.get("reason", ""))
+    except (ValidationError, PermissionDenied) as error:
+        messages.error(request, _message(error))
+    else:
+        messages.success(request, f"{piece.jewel_code} written off as lost.")
     return redirect("stock:piece_detail", jewel_code=piece.jewel_code)
 
 

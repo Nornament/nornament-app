@@ -8,15 +8,16 @@ the standalone /bom/ page, which is the same screen deep-linked.
   <h3>Sale breakup</h3>
   
   <div class="breakup">
-    <div class="brow bhead"><span>Component</span><span class="n">Pcs</span>
+    <div class="brow bhead"><span>Component</span><span>Remarks</span><span class="n">Pcs</span>
       <span class="n">Weight</span><span class="n">Amount</span></div>
     {% for group in breakup %}
-    <div class="brow"><span>{{ group.label }}</span>
+    <div class="brow"><span>{{ group.label }}{% if group.materials %}<div class="dim bmat">{{ group.materials|join:", " }}</div>{% endif %}</span>
+      <span class="dim bmat">{{ group.remarks|join:" | "|default:"—" }}</span>
       <span class="n">{{ group.pcs|default:"—" }}</span>
       <span class="n">{% if group.qty %}{{ group.qty|floatformat:2 }} {{ group.uom }}{% else %}—{% endif %}</span>
       <span class="n">{{ group.amount|inr }}</span></div>
     {% endfor %}
-    <div class="brow btot"><span>Total{% if money == "sale" %} sale price{% else %} cost{% endif %}</span><span></span>
+    <div class="brow btot"><span>Total{% if money == "sale" %} sale price{% else %} cost{% endif %}</span><span></span><span></span>
       <span class="n">{% if piece.measured_gross_wt_gm %}{{ piece.measured_gross_wt_gm|floatformat:3 }} g gross{% endif %}</span>
       <span class="n">{{ breakup_total|inr }}</span></div>
   </div>

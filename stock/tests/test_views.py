@@ -441,6 +441,22 @@ def test_a_bom_remark_is_saved_and_shown_on_the_breakup(client, admin_user_, rec
     assert "Centre stone re-measured" in client.get(edit).content.decode()
 
 
+
+def test_the_sale_breakup_clubs_materials_and_pipes_the_remarks(client, admin_user_, received_piece):
+    """Two diamond lines club into one Diamond row: its material once, both remarks split by |."""
+    client.force_login(admin_user_)
+    lines = BomLine.objects.filter(piece=received_piece, version_no=received_piece.current_bom_version)
+    centre = lines.get(material__category__code="DIAMOND")
+    centre.remarks = "Centre"
+    centre.save(update_fields=["remarks"])
+    halo = BomLine.objects.get(pk=centre.pk)
+    halo.pk, halo.line_no, halo.remarks = None, centre.line_no + 10, "Halo"
+    halo.save()
+    page = client.get(reverse("stock:piece_bom", kwargs={"jewel_code": "ER00738"})).content.decode()
+    breakup = page.split('class="breakup"')[1].split("Full bill of materials")[0]
+    assert "Centre | Halo" in breakup
+    assert breakup.count(centre.material.item_name) == 1
+
 def test_the_shell_ships_the_mobile_nav_drawer(client, admin_user_, received_piece):
     """Below 860px the sidebar is off-canvas and the burger is the only way in.
 

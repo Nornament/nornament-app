@@ -392,12 +392,13 @@ input[type=url].inplace{width:28em;max-width:100%;text-align:left}
 
 /* customer breakup */
 .breakup{border:1px solid var(--line);border-radius:11px;overflow:hidden}
-.breakup .brow{display:grid;grid-template-columns:1.6fr .9fr .9fr 1fr;gap:10px;
+.breakup .brow{display:grid;grid-template-columns:1.4fr 1.4fr .6fr .9fr 1fr;gap:10px;
   padding:10px 14px;border-bottom:1px solid var(--line);font-size:13.5px;align-items:center}
 .breakup .brow:last-child{border-bottom:0}
 .breakup .bhead{background:var(--surface-2);font-size:10.5px;text-transform:uppercase;
   letter-spacing:.07em;color:var(--muted);font-weight:600}
 .breakup .btot{background:var(--brand-soft);font-weight:600}
+.breakup .bmat{font-size:11.5px;font-weight:400;white-space:normal;overflow-wrap:anywhere}
 .breakup .n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px}
 
 
