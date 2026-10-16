@@ -310,3 +310,26 @@ def test_photos_are_found_by_row_without_loading_them_and_a_merged_footer_is_not
     assert [p.jewel_code for p in pieces] == ["24P00088", "24P00111", "24P00095"]
     assert pieces[0].photo and pieces[1].photo is None
     assert ivy.read_photo(io.BytesIO(saved.getvalue()), pieces[0].photo).startswith(b"\x89PNG")
+
+
+def test_the_blank_template_is_read_like_an_ivy_export():
+    """The download on the Data page: a block filled into it parses, so it cannot drift from the importer."""
+    import io
+    from pathlib import Path
+
+    from openpyxl import load_workbook
+
+    template = Path(__file__).resolve().parents[2] / "static/downloads/stock-upload-template.xlsx"
+    assert ivy.header_problems(template.open("rb")) == []
+    book = load_workbook(template)
+    sheet = book["Sheet1"]
+    for letter, value in {"C": "RG001", "D": "RG001-1", "E": "Ring", "H": "2026-10-01", "BI": "18KT",
+                          "U": "DRKL", "AE": 0.5, "AK": "G18", "AN": 3.2, "BS": "MAKING"}.items():
+        sheet[f"{letter}4"] = value
+    sheet["U5"], sheet["AE5"] = "DRKL", 0.25  # a second diamond on the same piece
+    filled = io.BytesIO()
+    book.save(filled)
+    filled.seek(0)
+    [piece] = ivy.parse(filled)
+    assert (piece.jewel_code, piece.metal_purity) == ("RG001-1", "18KT")
+    assert [line.band for line in piece.lines] == ["diamond", "diamond", "metal", "charge"]

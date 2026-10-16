@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Import / Export · Nornament{% endblock %}
 {% block heading %}Import / Export{% endblock %}
 {% block content %}
@@ -31,7 +32,7 @@
   <h3>Bringing a spreadsheet in</h3>
 
   <h3 style="margin-top:18px">IVY stock export</h3>
-  
+  <p class="dim" style="font-size:13px">Not from IVY? <a href="{% static 'downloads/stock-upload-template.xlsx' %}" download>⇩ Download the blank template</a>, fill it in the same layout, and upload it here.</p>
   <form method="post" action="{% url 'stock:import_upload' %}" enctype="multipart/form-data" class="row">
     {% csrf_token %}
     <input type="file" name="workbook" accept=".xlsx" required>
