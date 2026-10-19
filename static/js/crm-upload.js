@@ -24,7 +24,7 @@
     const slot = await reserve.json();
 
     if (slot.direct) {
-      const put = await fetch(slot.url, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
+      const put = await fetch(slot.url, { method: 'PUT', headers: { 'Content-Type': slot.content_type || file.type }, body: file });
       if (!put.ok) throw new Error('the storage bucket rejected the file');
     } else {
       const body = new FormData();

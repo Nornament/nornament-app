@@ -68,7 +68,15 @@ def presign(request):
         uploaded_by=request.user,
         **owner,
     )
-    body = {"media_id": asset.pk, "media_ref": asset.media_ref, "key": key, "direct": settings.MEDIA_DIRECT_UPLOAD}
+    # A .3dm or .step has no type in the browser, so the signed type is the
+    # guessed one: the PUT has to send exactly that, or the bucket refuses it
+    body = {
+        "media_id": asset.pk,
+        "media_ref": asset.media_ref,
+        "key": key,
+        "direct": settings.MEDIA_DIRECT_UPLOAD,
+        "content_type": content_type,
+    }
     if settings.MEDIA_DIRECT_UPLOAD:
         try:
             body["url"] = storage.presign_put(key, content_type)

@@ -83,6 +83,21 @@ def test_any_file_type_may_be_uploaded(client, admin_user_, received_piece, sett
     assert response.status_code == 200
 
 
+def test_a_cad_file_is_signed_with_the_type_the_browser_will_send(client, admin_user_, received_piece, monkeypatch):
+    """A browser gives a .3dm no type at all. The PUT must carry the type the
+    URL was signed for, so presign says which one that is."""
+    signed = {}
+    monkeypatch.setattr(storage, "presign_put", lambda key, content_type: signed.setdefault("type", content_type))
+    client.force_login(admin_user_)
+    response = client.post(
+        reverse("mediahub:presign"),
+        data=f'{{"scope":"style","entity_id":{received_piece.style_id},"file_name":"ring.3dm","mime_type":"","kind":"CAD"}}',
+        content_type="application/json",
+    )
+    assert response.status_code == 200
+    assert response.json()["content_type"] == signed["type"] == "application/octet-stream"
+
+
 def test_a_type_we_would_not_show_comes_back_as_a_download(monkeypatch):
     """Anything may go up, so what comes down decides: an SVG or HTML page in
     the bucket must never render, only save."""
