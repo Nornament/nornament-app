@@ -8,17 +8,18 @@ mix, the piece table and the workbook — is the same filtered set.{% endcomment
 <form class="filterbar scrolls" method="get" action="{% url 'stock:reports' %}">
   {% for key, values in picked.items %}{% for value in values %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}{% endfor %}
   <input type="hidden" name="by" value="{{ by }}">
+  {% for field in fields %}<input type="hidden" name="f" value="{{ field }}">{% endfor %}
   <div class="frow">
     <label class="flabel" for="q">Search</label>
     <input id="q" type="search" name="q" value="{{ q }}" placeholder="Jewel code, style, HUID" style="flex:1;max-width:340px">
     <button class="btn sm" type="submit">Apply</button>
-    {% if filter_qs %}<a class="btn sm" href="{% url 'stock:reports' %}?by={{ by }}">Clear</a>{% endif %}
+    {% if filter_qs %}<a class="btn sm" href="{% url 'stock:reports' %}?by={{ by }}&amp;{{ fields_qs }}">Clear</a>{% endif %}
   </div>
   {% for group in chip_rows %}{% if group.chips %}
   <div class="frow">
     <div class="flabel">{{ group.label }}</div>
     <div class="fchips">
-      {% for chip in group.chips %}<a class="fchip" aria-pressed="{% if chip.active %}true{% else %}false{% endif %}" href="{% url 'stock:reports' %}?{{ chip.qs }}&amp;by={{ by }}">{{ chip.label }}</a>{% endfor %}
+      {% for chip in group.chips %}<a class="fchip" aria-pressed="{% if chip.active %}true{% else %}false{% endif %}" href="{% url 'stock:reports' %}?{{ chip.qs }}&amp;by={{ by }}&amp;{{ fields_qs }}">{{ chip.label }}</a>{% endfor %}
     </div>
   </div>
   {% endif %}{% endfor %}
@@ -31,14 +32,14 @@ mix, the piece table and the workbook — is the same filtered set.{% endcomment
       
     </div>
     <div class="row" style="gap:8px">
-      <a class="btn" href="{% url 'stock:reports_export' %}?{{ filter_qs }}&amp;by={{ by }}">Export to Excel</a>
+      <a class="btn" href="{% url 'stock:reports_export' %}?{{ filter_qs }}&amp;by={{ by }}&amp;{{ fields_qs }}">Export to Excel</a>
       {% if caps.view_margin %}<a class="btn" href="{% url 'stock:margin_report' %}">Margin report →</a>{% endif %}
     </div>
   </div>
   <div class="frow" style="margin-top:10px">
     <div class="flabel">Group by</div>
     <div class="fchips">
-      {% for chip in group_chips %}<a class="fchip" aria-pressed="{% if chip.active %}true{% else %}false{% endif %}" href="{% url 'stock:reports' %}?{{ filter_qs }}&amp;by={{ chip.key }}">{{ chip.label }}</a>{% endfor %}
+      {% for chip in group_chips %}<a class="fchip" aria-pressed="{% if chip.active %}true{% else %}false{% endif %}" href="{% url 'stock:reports' %}?{{ filter_qs }}&amp;by={{ chip.key }}&amp;{{ fields_qs }}">{{ chip.label }}</a>{% endfor %}
     </div>
   </div>
   <table style="margin-top:14px">
@@ -72,5 +73,42 @@ mix, the piece table and the workbook — is the same filtered set.{% endcomment
   <h3 style="margin:0">The pieces behind it</h3>
   <span class="dim" style="font-size:12.5px">{{ total }} piece{{ total|pluralize }}{% if capped %} — capped at {{ total }}, narrow the filters{% endif %}</span>
 </div>
-{% include "stock/_piece_rows.html" %}
+{% comment %}The columns are picked here and travel as ?f=, so the workbook
+carries exactly what the table shows. Only the fields this role may see are
+offered — the view drops anything else a hand-edited URL asks for.{% endcomment %}
+<form method="get" action="{% url 'stock:reports' %}" style="margin-bottom:8px">
+  {% for key, values in picked.items %}{% for value in values %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}{% endfor %}
+  {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+  <input type="hidden" name="by" value="{{ by }}">
+  <details>
+    <summary class="btn sm">Columns ({{ fields|length }})</summary>
+    <div class="row" style="flex-wrap:wrap;gap:6px 14px;margin-top:8px">
+      {% for option in field_options %}<label style="font-size:13px"><input type="checkbox" name="f" value="{{ option.key }}"{% if option.on %} checked{% endif %}> {{ option.label }}</label>{% endfor %}
+      <button class="btn sm" type="submit">Apply</button>
+    </div>
+  </details>
+</form>
+<div class="card" style="padding-top:8px">
+<table>
+  <thead><tr>{% for label in field_labels %}<th>{{ label }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for cells in table %}
+  <tr>{% for key, value in cells %}
+    {% if key == "photo" %}<td>{% if value %}<img src="{{ value }}" alt="" width="48" height="48" loading="lazy" style="object-fit:cover;border-radius:6px">{% endif %}</td>
+    {% elif key == "jewel_code" %}<td><a class="code" href="{% url 'stock:piece_detail' value %}">{{ value }}</a></td>
+    {% else %}<td>{{ value|default_if_none:"—" }}</td>{% endif %}
+  {% endfor %}</tr>
+  {% empty %}
+  <tr><td colspan="{{ field_labels|length }}"><div class="empty">No pieces match.</div></td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if page.has_other_pages %}
+<div class="row" style="margin-top:10px">
+  <span class="dim" style="font-size:12.5px">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+  {% if page.has_previous %}<a class="btn sm" href="{% querystring page=page.previous_page_number %}">Previous</a>{% endif %}
+  {% if page.has_next %}<a class="btn sm" href="{% querystring page=page.next_page_number %}">Next</a>{% endif %}
+</div>
+{% endif %}
+</div>
 {% endblock %}

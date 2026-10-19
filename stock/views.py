@@ -34,12 +34,16 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from openpyxl import Workbook
+from openpyxl.drawing.image import Image as SheetImage
+from openpyxl.utils import get_column_letter
+from PIL import Image
 
 from accounts.capabilities import ADJUST_STOCK, ALL, EDIT_BOM, SCREEN_CODES, SCREENS, VIEW_COST, VIEW_MARGIN, VIEW_SALE, VIEW_VENDOR
 from accounts.models import ADMIN_ROLE, Role
 from crm import services as crm_services
 from crm.models import Customer
 from mediahub import services as media_services
+from mediahub import storage as media_storage
 from mediahub.models import MediaAsset
 
 from . import identify, services
@@ -1695,6 +1699,43 @@ REPORT_GROUPS = {
 #: a report is read on a screen, not streamed — past this it is an export job
 REPORT_LIMIT = 5000
 
+#: the piece columns a report can carry, in the order they print. ``photo`` is
+#: the piece's first photo; every other key is a ``piece_row`` key, so a field
+#: the role may not see is neither offered nor printed, whatever the URL asks.
+REPORT_FIELDS = {
+    "photo": "Photo",
+    "jewel_code": "Jewel code",
+    "design_name": "Design",
+    "style_code": "Style",
+    "category": "Category",
+    "sub_category": "Sub-category",
+    "collection": "Collection",
+    "karat": "Karat",
+    "metal_colour": "Metal colour",
+    "size_label": "Size",
+    "diamond_quality": "Diamond quality",
+    "measured_gross_wt_gm": "Gross wt (g)",
+    "net_metal_wt_gm": "Net metal (g)",
+    "stock_state_display": "Status",
+    "location": "Location",
+    "huid": "HUID",
+    "received_on": "Received",
+    "on_website": "On website",
+    "remarks": "Remarks",
+    "sale_price": "Sale price (₹)",
+    "cost_price": "Cost (₹)",
+    "current_cost": "Cost today (₹)",
+    "margin": "Margin (₹)",
+    "vendor_name": "Vendor",
+}
+#: the piece table's own columns, plus the photo, when nothing is ticked
+REPORT_DEFAULT_FIELDS = (
+    "photo", "jewel_code", "design_name", "category", "karat", "stock_state_display", "location",
+    "measured_gross_wt_gm", "sale_price", "cost_price", "current_cost", "margin", "vendor_name",
+)
+#: photos embedded in one workbook — each one is a bucket read
+REPORT_PHOTO_LIMIT = 500
+
 
 def _report(request):
     """Everything the report screen and its workbook show, built once.
@@ -1726,6 +1767,16 @@ def _report(request):
     if by not in REPORT_GROUPS or (rows and REPORT_GROUPS[by][1] not in rows[0]):
         by = "location"
     group_label, group_key = REPORT_GROUPS[by]
+    # the piece table reads in the summary's groups, category-wise inside each
+    ordered = sorted(
+        zip(pieces, rows),
+        key=lambda pair: (str(pair[1].get(group_key) or ""), pair[1].get("category") or "", pair[1]["jewel_code"]),
+    )
+    pieces, rows = [piece for piece, _ in ordered], [row for _, row in ordered]
+
+    offered = [key for key in REPORT_FIELDS if allowed(request.user, key)]
+    wanted = set(request.GET.getlist("f")) or set(REPORT_DEFAULT_FIELDS)
+    fields = [key for key in offered if key in wanted] or [key for key in offered if key in REPORT_DEFAULT_FIELDS]
 
     columns = [("pieces", "Pieces"), ("gross_wt", "Gross wt (g)"), ("net_wt", "Net metal (g)")]
     if allowed(request.user, "cost_price"):
@@ -1767,6 +1818,9 @@ def _report(request):
         "summary": summary,
         "totals": totals,
         "rows": rows,
+        "fields": fields,
+        "field_options": [{"key": key, "label": REPORT_FIELDS[key], "on": key in fields} for key in offered],
+        "fields_qs": urlencode([("f", key) for key in fields]),
         "materials": _material_mix(request.user, pieces),
         "capped": len(pieces) == REPORT_LIMIT,
     }
@@ -1806,6 +1860,12 @@ def reports(request):
     context = _report(request)
     page = Paginator(context["rows"], PAGE_SIZE).get_page(request.GET.get("page"))
     picked, query = context["picked"], context["q"]
+    fields = context["fields"]
+    thumbs = _piece_thumbs(row["jewel_code_id"] for row in page) if "photo" in fields else {}
+    table = [
+        [(key, thumbs.get(row["jewel_code_id"]) if key == "photo" else row.get(key)) for key in fields]
+        for row in page
+    ]
 
     def chips(label, options, key, gate=True):
         return {"label": label, "chips": _filter_chips(options, key, picked, query) if gate else []}
@@ -1817,6 +1877,8 @@ def reports(request):
         | {
             "page": page,
             "rows": list(page),
+            "table": table,
+            "field_labels": [REPORT_FIELDS[key] for key in fields],
             "total": len(context["rows"]),
             # the legacy's own order first, then the dimensions this screen adds
             "chip_rows": [
@@ -1868,10 +1930,17 @@ def reports_export(request):
             materials.append([line.get(key) for key in headers])
 
     detail = book.create_sheet("Pieces")
-    fields = list(report["rows"][0].keys()) if report["rows"] else ["jewel_code"]
-    detail.append(fields)
-    for row in report["rows"]:
-        detail.append([_cell(row.get(field)) for field in fields])
+    fields = report["fields"]
+    detail.append([REPORT_FIELDS[key] for key in fields])
+    photos = _report_photos(row["jewel_code_id"] for row in report["rows"]) if "photo" in fields else {}
+    if photos:
+        column = get_column_letter(fields.index("photo") + 1)
+        detail.column_dimensions[column].width = 12
+    for line, row in enumerate(report["rows"], start=2):
+        detail.append([None if key == "photo" else _cell(row.get(key)) for key in fields])
+        if row["jewel_code_id"] in photos:
+            detail.add_image(SheetImage(photos[row["jewel_code_id"]]), f"{column}{line}")
+            detail.row_dimensions[line].height = 62
 
     response = HttpResponse(
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -1883,6 +1952,38 @@ def reports_export(request):
         f"{len(report['rows'])} rows by {report['by']}", row_count=len(report["rows"]),
     )
     return response
+
+
+def _report_photos(piece_ids):
+    """``{piece_id: JPEG}`` — each piece's first photo, shrunk to fit a cell.
+
+    The list-sized copy where one has been made, so a workbook never pulls
+    originals. A photo that will not load or will not open leaves its cell
+    blank: a missing picture is not a reason to refuse the stock report.
+
+    ponytail: one bucket read per piece, one after another, capped at
+    REPORT_PHOTO_LIMIT; read them in a thread pool if exports grow past that.
+    """
+    photos = {}
+    grouped = media_services.for_pieces(list(piece_ids)[:REPORT_PHOTO_LIMIT], kinds=HERO_KINDS)
+    for piece_id, assets in grouped.items():
+        asset = next((a for a in assets if a.is_image), None)
+        if asset is None:
+            continue
+        try:
+            if asset.has_inline:
+                data = bytes(MediaAsset.objects.values_list("inline_data", flat=True).get(pk=asset.pk))
+            else:
+                data = media_storage.get_bytes(asset.thumb_key or asset.storage_key)
+            with Image.open(io.BytesIO(data)) as picture:
+                picture.thumbnail((80, 80))
+                out = io.BytesIO()
+                picture.convert("RGB").save(out, "JPEG", quality=80)
+        except Exception:  # storage off, a key gone, bytes that are not a picture
+            logger.warning("report photo skipped for piece %s", piece_id, exc_info=True)
+            continue
+        photos[piece_id] = out
+    return photos
 
 
 def _cell(value):
