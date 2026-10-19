@@ -13,6 +13,7 @@ urlpatterns = [
     path("pieces/new/", views.piece_form, name="piece_new"),
     path("pieces/<str:jewel_code>/", views.piece_detail, name="piece_detail"),
     path("pieces/<str:jewel_code>/edit/", views.piece_form, name="piece_edit"),
+    path("pieces/<str:jewel_code>/sheet.xlsx", views.piece_sheet, name="piece_sheet"),
     path("pieces/<str:jewel_code>/bom/", views.piece_bom, name="piece_bom"),
     path("pieces/<str:jewel_code>/bom/edit/", views.piece_bom_edit, name="piece_bom_edit"),
     path("pieces/<str:jewel_code>/scenarios/", views.piece_scenarios, name="piece_scenarios"),

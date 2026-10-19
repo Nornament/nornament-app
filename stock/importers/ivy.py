@@ -397,3 +397,108 @@ def parse(fileobj):
                     piece.lines.append(line)
         pieces.append(piece)
     return latest_per_jewel_code(pieces)
+
+
+# ── one piece back out, in the same shape ────────────────────────────────
+#: the blank upload on the Data page. A piece sheet is that file filled in,
+#: so it cannot drift from what the importer reads.
+TEMPLATE = "downloads/stock-upload-template.xlsx"
+
+
+def _band_for(material):
+    """Which band a BOM line goes back into — ``guess.BAND_CATEGORY`` read backwards."""
+    category = material.category_id
+    if category == "METAL":
+        return "metal"
+    if category in ("DIAMOND", "POLKI"):
+        return "diamond"
+    if category == "LABOUR":
+        return "charge"
+    if category == "OTHER":
+        return "other"
+    return "stone"
+
+
+def piece_workbook(user, piece):
+    """One piece as a filled-in stock upload: its details and its current BOM.
+
+    Cost is the BOM as frozen; sale is today's, line by line, exactly as the
+    Sale breakup shows it — metal moves daily. The making charge goes back to
+    BG/BH, where the importer looks for it. A figure this login may not see is
+    left blank rather than written, by the same rule as every other export, so
+    a SALES download re-imports with its cost missing, never with a wrong one.
+    """
+    from django.contrib.staticfiles import finders
+
+    from stock import services
+    from stock.importers.commit import MAKING_CODE
+    from stock.masking import allowed
+
+    book = load_workbook(finders.find(TEMPLATE))
+    sheet = book[SHEET]
+    where = {cell.value: cell.column for cell in sheet[HEADER_ROW][:HEADER_BLOCK_END]}
+
+    def shown(field, value):
+        return value if allowed(user, field) else None
+
+    def put(row, column, value):
+        if column and value not in (None, ""):
+            sheet.cell(row, column if isinstance(column, int) else col(column), value)
+
+    first, style = FIRST_DATA_ROW, piece.style
+    header = {
+        HEADER_FIELDS["sr_no"]: piece.src_ref,
+        HEADER_FIELDS["style_code"]: style.style_code,
+        HEADER_FIELDS["jewel_code"]: piece.jewel_code,
+        HEADER_FIELDS["category"]: style.category.name,
+        HEADER_FIELDS["sub_category"]: piece.sub_category,
+        "Location Name": piece.location.name if piece.location_id else None,
+        HEADER_FIELDS["inw_date"]: piece.received_on,
+        HEADER_FIELDS["vendor"]: shown("vendor_name", piece.vendor.name if piece.vendor_id else None),
+        HEADER_FIELDS["collection"]: style.collection.name if style.collection_id else None,
+        "Item Size": piece.size_label,
+        HEADER_FIELDS["stock_type"]: piece.stock_type,
+        HEADER_FIELDS["fg_date"]: piece.fg_date,
+        HEADER_FIELDS["remarks"]: piece.remarks,
+    }
+    for label, value in header.items():
+        put(first, where.get(label), value)
+    put(first, "BI", piece.metal_purity)
+    put(first, "Y", piece.diamond_quality)
+
+    version = services.current_version(piece)
+    put(first, "BE", shown("cost_price", version.total_cost_price if version else None))
+    put(first, "BF", shown("sale_price", services.live_sale_price(piece)))
+
+    # each band fills down from the piece's first row on its own, as it is read
+    next_row = dict.fromkeys(BANDS, first)
+    making = None
+    for priced in services.sale_lines(piece):
+        line, material = priced["line"], priced["line"].material
+        if material.item_code == MAKING_CODE:
+            cost, sale = making or (0, 0)
+            making = (cost + (line.cost_amount or 0), sale + (priced["sale_amount"] or 0))
+            continue
+        band = _band_for(material)
+        spec, row = BANDS[band], next_row[band]
+        # the BI–BR band has no code column: the importer mints OTH-<name>, so
+        # writing the name without that prefix lands back on the same material
+        code = material.item_code.removeprefix("OTH-") if band == "other" else material.item_code
+        values = {
+            "key": code,
+            "name": code if band == "other" else material.item_name,
+            "size_band": line.size_band,
+            "pcs": line.pcs,
+            "qty": line.qty_value,
+            "cost_rate": shown("cost_rate", line.cost_rate),
+            "cost_amount": shown("cost_amount", line.cost_amount),
+            "sale_rate": shown("sale_rate", priced["sale_rate"]),
+            "sale_amount": shown("sale_amount", priced["sale_amount"]),
+        }
+        for part, value in values.items():
+            put(row, spec.get(part), value)
+        next_row[band] += 1
+    if making:
+        put(first, "BG", shown("cost_amount", making[0]))
+        put(first, "BH", shown("sale_amount", making[1]))
+    return book

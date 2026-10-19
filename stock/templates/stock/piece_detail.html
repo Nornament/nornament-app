@@ -18,6 +18,7 @@
   </div>
   <div class="row">
     {# ponytail: "Edit details" is hidden, not removed — the piece_edit view and its URL are untouched. #}
+    <a class="btn" href="{% url 'stock:piece_sheet' piece.jewel_code %}" download title="The final BOM and details, in the stock upload layout">⇩ Excel</a>
     {% if not piece.is_terminal %}
       {% if caps.adjust_stock or caps.edit_bom %}<button class="btn" onclick="document.getElementById('movedlg').showModal()">⇄ Move</button>{% endif %}
       {% if caps.edit_bom and not open_repair %}<button class="btn" onclick="document.getElementById('repairdlg').showModal()">⚒ Send for repair</button>{% endif %}

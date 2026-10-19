@@ -295,6 +295,9 @@ def test_every_stock_and_crm_screen_is_in_the_sales_walk():
         # needs a CRM sale this fixture does not create; refused for SALES in
         # test_the_purchase_screens_refuse_a_login_without_adjust_stock
         "crm:edit_purchase",
+        # a workbook, which the walk cannot read as text; its cells are checked
+        # for a SALES login in stock/tests/test_piece_sheet.py
+        "stock:piece_sheet",
         # gated whole, and asserted to 403 above
         "stock:piece_bom", "stock:margin_report",
         # need an object that this fixture does not create

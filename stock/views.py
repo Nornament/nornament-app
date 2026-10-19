@@ -651,6 +651,24 @@ def piece_detail(request, jewel_code):
     return render(request, "stock/piece_detail.html", context)
 
 
+@login_required
+@tab_required("stock", "styles")
+def piece_sheet(request, jewel_code):
+    """The piece's final BOM and details as a stock upload workbook.
+
+    The same layout the Data page imports, so the file is both the document
+    and a way back in. Gated like the piece page; masked inside the builder.
+    """
+    piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = f'attachment; filename="{piece.jewel_code}.xlsx"'
+    ivy.piece_workbook(request.user, piece).save(response)
+    services.log(request.user, "EXPORT", "jewel_code", piece.pk, "piece sheet", row_count=1)
+    return response
+
+
 def _bom_context(request, piece):
     """The material breakup, for the detail tab and the standalone BOM page.
 
