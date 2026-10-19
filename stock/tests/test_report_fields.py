@@ -65,3 +65,33 @@ def test_the_photo_is_embedded_and_a_broken_one_does_not_fail_the_export(client,
     MediaAsset.objects.filter(piece=received_piece).update(inline_data=None, storage_key="pieces/gone.png")
     sheet = _sheet(client, f=["photo", "jewel_code"])
     assert len(sheet._images) == 0 and sheet["B2"].value == "ER00738"
+
+
+def test_all_columns_and_a_link_to_every_file(client, admin_user_, received_piece, chart):
+    """f=all is every column this role may see; the Media sheet links each
+    file, the design's CAD included, through the app so the link never expires."""
+    client.force_login(admin_user_)
+    received_piece.hallmark_centre = "BIS Mumbai"
+    received_piece.save()
+    photo = MediaAsset.objects.create(
+        piece=received_piece, kind="PHOTO", mime_type="image/png", file_name="front.png",
+        inline_data=_png(), confirmed_at=timezone.now(),
+    )
+    cad = MediaAsset.objects.create(
+        style=received_piece.style, kind="CAD", mime_type="application/octet-stream", file_name="ring.3dm",
+        storage_key="stock/style/1/ring.3dm", confirmed_at=timezone.now(),
+    )
+    book = load_workbook(io.BytesIO(client.get(reverse("stock:reports_export"), {"f": "all"}).content))
+    header = [cell.value for cell in book["Pieces"][1]]
+    assert {"Hallmark centre", "Story", "Tag price (₹)", "Media files", "Cost (₹)"} <= set(header)
+    row = {label: cell for label, cell in zip(header, book["Pieces"][2])}
+    assert row["Hallmark centre"].value == "BIS Mumbai"
+    assert row["Media files"].value == 2 and row["Media files"].hyperlink
+
+    files = list(book["Media"].iter_rows(min_row=2, values_only=True))
+    assert {(name, kind, on) for _, _, kind, on, name, _ in files} == {
+        ("front.png", "Photo", "Piece"), ("ring.3dm", "CAD", "Design"),
+    }
+    links = {row[5] for row in files}
+    assert links == {f"http://testserver{reverse('mediahub:media', args=[pk])}" for pk in (photo.pk, cad.pk)}
+    assert book["Media"]["F2"].hyperlink.target in links

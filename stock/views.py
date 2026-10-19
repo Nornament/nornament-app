@@ -16,6 +16,7 @@ import re
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 from functools import wraps
+from operator import attrgetter
 from types import SimpleNamespace
 from urllib.parse import urlencode
 
@@ -1747,6 +1748,44 @@ REPORT_FIELDS = {
     "current_cost": "Cost today (₹)",
     "margin": "Margin (₹)",
     "vendor_name": "Vendor",
+    "vendor_code": "Vendor code",
+    "bom_weight_gm": "BOM wt (g)",
+    "bom_version": "BOM version",
+    "length_mm": "Length (mm)",
+    "breadth_mm": "Breadth (mm)",
+    "height_mm": "Height (mm)",
+    "stock_type": "Stock type",
+    "fg_date": "FG date",
+    "hallmarked_on": "Hallmarked on",
+    "hallmark_centre": "Hallmark centre",
+    "disposed_on": "Disposed on",
+    "website_url": "Website link",
+    "story": "Story",
+    "website_description": "Website description",
+    "gold_rate_used": "Gold rate (₹/g)",
+    "metal_cost_rate": "Metal cost rate (₹/g)",
+    "current_margin": "Margin today (₹)",
+    "src_system": "Source",
+    "src_ref": "Source ref",
+    "src_net_wt_gm": "Source net wt (g)",
+    "src_cost_price": "Source cost (₹)",
+    "src_sale_price": "Source sale (₹)",
+    "src_tag_price": "Tag price (₹)",
+    "updated_at": "Updated",
+    "media": "Media files",
+}
+#: report columns the list row does not carry, read straight off the piece
+REPORT_PIECE_ATTRS = {
+    "length_mm": "length_mm",
+    "breadth_mm": "breadth_mm",
+    "height_mm": "height_mm",
+    "stock_type": "stock_type",
+    "fg_date": "fg_date",
+    "hallmarked_on": "hallmarked_on",
+    "hallmark_centre": "hallmark_centre",
+    "website_url": "website_url",
+    "story": "style.story",
+    "website_description": "style.website_description",
 }
 #: the piece table's own columns, plus the photo, when nothing is ticked
 REPORT_DEFAULT_FIELDS = (
@@ -1796,7 +1835,15 @@ def _report(request):
 
     offered = [key for key in REPORT_FIELDS if allowed(request.user, key)]
     wanted = set(request.GET.getlist("f")) or set(REPORT_DEFAULT_FIELDS)
+    if "all" in wanted:
+        wanted = set(offered)
     fields = [key for key in offered if key in wanted] or [key for key in offered if key in REPORT_DEFAULT_FIELDS]
+    for piece, row in zip(pieces, rows):
+        row.update({key: attrgetter(path)(piece) for key, path in REPORT_PIECE_ATTRS.items() if key in fields})
+    media = _report_media(pieces) if "media" in fields else {}
+    if "media" in fields:
+        for row in rows:
+            row["media"] = len(media.get(row["jewel_code_id"], []))
 
     columns = [("pieces", "Pieces"), ("gross_wt", "Gross wt (g)"), ("net_wt", "Net metal (g)")]
     if allowed(request.user, "cost_price"):
@@ -1842,8 +1889,28 @@ def _report(request):
         "field_options": [{"key": key, "label": REPORT_FIELDS[key], "on": key in fields} for key in offered],
         "fields_qs": urlencode([("f", key) for key in fields]),
         "materials": _material_mix(request.user, pieces),
+        "media": media,
         "capped": len(pieces) == REPORT_LIMIT,
     }
+
+
+def _report_media(pieces):
+    """``{piece_id: [asset, …]}`` — every file a piece shows on its media tab:
+    its own, and the design's (CAD, graph, drawing) shared by all its pieces."""
+    by_style = defaultdict(list)
+    for piece in pieces:
+        by_style[piece.style_id].append(piece.pk)
+    assets = (
+        media_services.without_bytes(MediaAsset.objects)
+        .filter(Q(piece__in=pieces) | Q(style_id__in=list(by_style)), is_archived=False, derivative_of__isnull=True)
+        .filter(Q(confirmed_at__isnull=False) | Q(has_inline=True))
+        .order_by("kind", "rank_order", "media_id")
+    )
+    media = defaultdict(list)
+    for asset in assets:
+        for piece_id in [asset.piece_id] if asset.piece_id else by_style.get(asset.style_id, []):
+            media[piece_id].append(asset)
+    return media
 
 
 def _material_mix(user, pieces):
@@ -1958,9 +2025,28 @@ def reports_export(request):
         detail.column_dimensions[column].width = 12
     for line, row in enumerate(report["rows"], start=2):
         detail.append([None if key == "photo" else _cell(row.get(key)) for key in fields])
+        if "media" in fields and row.get("media"):
+            cell = detail.cell(line, fields.index("media") + 1)
+            cell.hyperlink = request.build_absolute_uri(reverse("stock:piece_detail", args=[row["jewel_code"]]))
+            cell.style = "Hyperlink"
         if row["jewel_code_id"] in photos:
             detail.add_image(SheetImage(photos[row["jewel_code_id"]]), f"{column}{line}")
             detail.row_dimensions[line].height = 62
+
+    if report["media"]:
+        # one row per file, each a link that works as long as the file does:
+        # the app's own address signs a fresh bucket URL on every click
+        files = book.create_sheet("Media")
+        files.append(["Jewel code", "Design", "Kind", "Belongs to", "File name", "Link"])
+        for row in report["rows"]:
+            for asset in report["media"].get(row["jewel_code_id"], []):
+                url = request.build_absolute_uri(reverse("mediahub:media", args=[asset.pk]))
+                files.append([
+                    row["jewel_code"], row.get("design_name"), asset.get_kind_display(),
+                    "Piece" if asset.piece_id else "Design", asset.file_name, url,
+                ])
+                files.cell(files.max_row, 6).hyperlink = url
+                files.cell(files.max_row, 6).style = "Hyperlink"
 
     response = HttpResponse(
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
