@@ -406,6 +406,10 @@ def test_the_price_slider_filters_on_its_range(client, admin_user_, received_pie
     open_ended = client.get(url, {"price": f"{price - 1000}-"}).content.decode()
     assert "ER00738" in inside and "ER00738" in open_ended
     assert "ER00738" not in outside and "No pieces match" in outside
+    # a hand-edited URL is ignored, not a 500
+    for junk in ("NaN-", "-Infinity", "1-sNaN"):
+        assert client.get(url, {"price": junk}).status_code == 200
+        assert client.get(reverse("stock:piece_rows"), {"price": junk}).status_code == 200
 
 
 def test_a_bom_remark_is_saved_and_shown_on_the_breakup(client, admin_user_, received_piece, materials):

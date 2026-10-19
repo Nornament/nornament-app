@@ -290,9 +290,11 @@ def _price_range(value):
     if not dash:
         return None
     try:
-        return (Decimal(low or 0), Decimal(high) if high else None)
+        band = (Decimal(low or 0), Decimal(high) if high else None)
     except InvalidOperation:
         return None
+    # "NaN" and "Infinity" parse as Decimals and then blow up every comparison
+    return band if all(end is None or end.is_finite() for end in band) else None
 
 
 def _in_price_bands(pieces, chosen):
@@ -3546,7 +3548,9 @@ def piece_form(request, jewel_code=None):
                 saved.save()
                 BomVersion.objects.create(piece=saved, version_no=1, is_current=True, reason="INITIAL")
                 services.receive_piece(request.user, saved, location, moved_at=saved.received_on)
-                messages.success(request, f"{saved.jewel_code} received into {location.name}.")
+                messages.success(request, f"{saved.jewel_code} received into {location.name}. Now add what it is made of.")
+                # a piece with no BOM has no price, so the next step is the BOM
+                return redirect("stock:piece_bom_edit", jewel_code=saved.jewel_code)
             else:
                 saved.save()
                 services.log(request.user, "PIECE_EDITED", "jewel_code", str(saved.pk))

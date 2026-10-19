@@ -12,6 +12,7 @@ own; the legacy searched from the top bar instead.{% endcomment %}
            style="flex:1;max-width:340px"
            hx-get="{% url 'stock:piece_rows' %}" hx-target="#rows" hx-trigger="keyup changed delay:300ms"
            hx-include="closest form">
+    {% if caps.edit_bom %}<a class="btn primary" href="{% url 'stock:piece_new' %}" style="margin-left:auto">+ Add a piece</a>{% endif %}
   </div>
   <div class="frow">
     <div class="flabel">Category</div>
