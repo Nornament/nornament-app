@@ -273,4 +273,4 @@ def test_the_manifest_declares_a_share_target(client, admin_user_):
     manifest = client.get(reverse("crm:manifest")).json()
     assert manifest["share_target"]["method"] == "POST"
     assert manifest["share_target"]["action"].endswith("share-target")
-    assert manifest["start_url"] == reverse("crm:dashboard")
+    assert manifest["start_url"] == manifest["scope"] == "/"  # one install, stock and CRM

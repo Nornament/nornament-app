@@ -1472,11 +1472,13 @@ def manifest(request):
     """
     return JsonResponse(
         {
-            "name": "Nornament CRM",
+            # one app for both halves: "/" sends each login to its own first
+            # screen, so a CRM-only role still opens on the CRM
+            "name": "Nornament",
             "short_name": "Nornament",
-            "description": "Nornament Jewellery CRM — Customers, Orders, Repairs",
-            "start_url": reverse("crm:dashboard"),
-            "scope": reverse("crm:dashboard"),
+            "description": "Nornament Jewellery — Stock, Customers, Orders, Repairs",
+            "start_url": "/",
+            "scope": "/",
             "display": "standalone",
             "background_color": "#F7F6F3",
             "theme_color": "#B08C3C",
@@ -1500,14 +1502,16 @@ def manifest(request):
 
 
 def service_worker(request):
-    """Served from /crm/ so its scope is /crm/ — a worker's scope cannot be
-    broader than the path it is served from, and /static/ would be too narrow."""
+    """Served from /sw.js so its scope is the whole app — a worker's scope
+    cannot be broader than the path it is served from, and /static/ would be
+    too narrow. /crm/sw.js still answers, so a phone that installed the old
+    CRM-only app keeps its worker until the page swaps it out."""
     path = finders.find("js/crm-sw.js")
     if not path:
         raise Http404("service worker not collected")
     with open(path, "rb") as handle:
         response = HttpResponse(handle.read(), content_type="text/javascript")
-    response["Service-Worker-Allowed"] = reverse("crm:dashboard")
+    response["Service-Worker-Allowed"] = "/"
     return response
 
 

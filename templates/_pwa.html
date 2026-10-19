@@ -1,0 +1,22 @@
+{% load static %}{% comment %}
+Installable on a phone: one manifest and one worker for stock and CRM alike.
+The manifest view needs the login, and a manifest is fetched without cookies
+unless the link asks for them. The worker used to live at /crm/; a phone that
+installed it then still has that one, and it is dropped here so two workers
+never answer the same page.
+{% endcomment %}
+  <meta name="theme-color" content="#B08C3C">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Nornament">
+  <link rel="manifest" href="{% url 'crm:manifest' %}" crossorigin="use-credentials">
+  <link rel="apple-touch-icon" href="{% static 'img/icon-192.png' %}">
+  <script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function (all) {
+      all.forEach(function (r) { if (new URL(r.scope).pathname !== '/') r.unregister(); });
+    }).catch(function () {});
+    /* a worker that will not register costs nothing but the share target */
+    navigator.serviceWorker.register('{% url "service_worker" %}', {scope: '/'}).catch(function () {});
+  }
+  </script>

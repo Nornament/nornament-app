@@ -13,6 +13,7 @@ did not look alike.
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+{% include "_pwa.html" %}
   <title>{% block title %}Nornament{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'css/app.css' %}{{ asset_v }}">
   <script>document.documentElement.dataset.theme = localStorage.theme ??

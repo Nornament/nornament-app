@@ -1,6 +1,8 @@
 from django.contrib import admin
 from django.urls import include, path
 
+from crm.views import service_worker
+
 from .views import healthz
 
 urlpatterns = [
@@ -10,6 +12,7 @@ urlpatterns = [
     path("accounts/", include("accounts.urls")),
     path("admin/", admin.site.urls),
     path("healthz", healthz, name="healthz"),
+    path("sw.js", service_worker, name="service_worker"),
 ]
 
 # The Django admin is for superusers only. Django's default lets in any

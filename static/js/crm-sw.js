@@ -42,7 +42,8 @@ self.addEventListener('fetch', (event) => {
       } catch (error) {
         /* a share we cannot read is a share the page will report as empty */
       }
-      return Response.redirect(new URL('share/', self.registration.scope).pathname, 303);
+      /* beside the share target, whatever scope this worker was registered at */
+      return Response.redirect(url.pathname.replace(/share-target$/, 'share/'), 303);
     })());
     return;
   }
