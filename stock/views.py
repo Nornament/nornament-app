@@ -1408,8 +1408,21 @@ def count_open(request):
 @tab_required("count")
 def count_detail(request, count_id):
     count = get_object_or_404(StockCount, pk=count_id)
-    state = services.count_state(request.user, count)
+    state = _with_tiles(services.count_state(request.user, count))
     return render(request, "stock/count_detail.html", {"count": count, "state": state})
+
+
+def _with_tiles(state):
+    """An open count's missing pieces as photo tiles, so a counter can tap the
+    piece they can see instead of reading its tag. A piece with no photo still
+    gets a tile — the grid is the whole of what is outstanding, not the
+    photographed part of it. A closed count keeps its frozen code list."""
+    if state["status"] != StockCount.OPEN:
+        return state
+    codes = dict(Piece.objects.filter(jewel_code__in=state["missing_list"]).values_list("jewel_code", "pk"))
+    thumbs = _piece_thumbs(codes.values())
+    state["missing_tiles"] = [{"code": code, "thumb": thumbs.get(codes.get(code))} for code in state["missing_list"]]
+    return state
 
 
 @login_required
@@ -1422,7 +1435,7 @@ def count_scan(request, count_id):
         result = services.scan_piece(request.user, count, request.POST.get("code", ""))
     except (ValidationError, PermissionDenied) as error:
         result = {"verdict": "ERROR", "code": request.POST.get("code", ""), "note": _message(error)}
-    state = services.count_state(request.user, count)
+    state = _with_tiles(services.count_state(request.user, count))
     return render(request, "stock/_count_scan_result.html", {"count": count, "result": result, "state": state})
 
 
@@ -1432,10 +1445,10 @@ def count_scan(request, count_id):
 def count_unscan(request, count_id):
     count = get_object_or_404(StockCount, pk=count_id)
     try:
-        state = services.unscan_piece(request.user, count, request.POST.get("code", ""))
+        state = _with_tiles(services.unscan_piece(request.user, count, request.POST.get("code", "")))
     except (ValidationError, PermissionDenied) as error:
         messages.error(request, _message(error))
-        state = services.count_state(request.user, count)
+        state = _with_tiles(services.count_state(request.user, count))
     return render(request, "stock/_count_scan_result.html", {"count": count, "result": None, "state": state})
 
 
@@ -1574,6 +1587,11 @@ def identify_view(request):
         return render(request, "stock/identify.html", context)
 
     status = 200
+    # asked from a stock take: each card offers "Count this", posted down the
+    # same scan path as a typed code — the photo suggests, the person confirms
+    count_id = request.POST.get("count", "")
+    if count_id.isdigit():
+        context["count"] = StockCount.objects.filter(pk=count_id, status=StockCount.OPEN).first()
     photo = request.FILES.get("photo")
     if photo is None or photo.size > settings.IDENTIFY_MAX_BYTES:
         context["error"] = "Take a photo of the piece — up to 15 MB."

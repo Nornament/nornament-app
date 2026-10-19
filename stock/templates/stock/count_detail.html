@@ -20,7 +20,25 @@
            placeholder="Scan a tag, or type a jewel code and press Enter">
     <button class="btn" type="submit">Add</button>
   </form>
-  
+  {% if 'stock' in tabs %}
+  {% comment %}No tag to read: photograph it and pick the match. The identify
+  screen does the matching; the count id makes its cards offer "Count this".
+  The before-swap line is the identify screen's own, for its 400 and 503.{% endcomment %}
+  <form method="post" enctype="multipart/form-data" action="{% url 'stock:identify' %}"
+        hx-post="{% url 'stock:identify' %}" hx-encoding="multipart/form-data"
+        hx-target="#count-identify" hx-trigger="change" hx-indicator="#count-identify-busy"
+        hx-on::before-swap="if ([400, 503].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false }"
+        style="margin-top:8px">
+    {% csrf_token %}<input type="hidden" name="count" value="{{ count.pk }}">
+    <label class="btn" style="position:relative;display:block;text-align:center;padding:12px;cursor:pointer">
+      📷 No tag? Photograph the piece
+      <input type="file" name="photo" accept="image/*" capture="environment" required
+             style="position:absolute;width:1px;height:1px;opacity:0">
+    </label>
+  </form>
+  <p id="count-identify-busy" class="htmx-indicator hint" style="text-align:center">Matching…</p>
+  <div id="count-identify"></div>
+  {% endif %}
   {% endif %}
 
   <div id="count-state">{% include "stock/_count_state.html" %}</div>

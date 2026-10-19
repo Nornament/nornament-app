@@ -595,6 +595,15 @@ dialog#viewerdlg{padding:0;max-width:1120px;width:94vw}
 .ccols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px}
 @media (max-width:820px){ .ccols{grid-template-columns:1fr} }
 .ccols h4{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+/* tap-to-count tiles: thumb-sized on a phone, the tag code under each photo */
+.ctiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;max-height:460px;overflow:auto;
+  border:1px solid var(--line);border-radius:8px;padding:8px}
+.ctiles form{margin:0}
+.ctile{display:flex;flex-direction:column;width:100%;padding:0;border:1px solid var(--line);border-radius:8px;
+  background:var(--surface);color:inherit;font:inherit;cursor:pointer;overflow:hidden}
+.ctile img,.ctile .noimg{display:block;width:100%;aspect-ratio:1;object-fit:cover;background:var(--surface-2)}
+.ctile .pc{font-family:var(--mono);font-weight:600;font-size:12px;padding:7px 4px;text-align:center}
+.ctile:hover,.ctile:focus-visible{border-color:var(--brand)}
 
 /* ---------- Django-port compat: the templates' class names, mapped onto the legacy skin ---------- */
 .nav a{display:flex;align-items:center;gap:9px;width:100%;text-align:left;text-decoration:none;

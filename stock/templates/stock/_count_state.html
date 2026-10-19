@@ -17,9 +17,31 @@
   </div>
 </div>
 
-<div class="ccols">
+{% if count.status == 'OPEN' %}
+{% comment %}Tap the piece you can see: each tile posts its code down the same
+scan path as the box above, so the verdict and the undo are the same too.{% endcomment %}
+<div style="margin-top:18px">
+  <h4 style="margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">
+    Not found yet · {{ state.missing }} — tap one you can see</h4>
+  <div class="ctiles">
+    {% for tile in state.missing_tiles %}
+    <form hx-post="{% url 'stock:count_scan' count.pk %}" hx-target="#count-state" hx-swap="outerHTML"
+          method="post" action="{% url 'stock:count_scan' count.pk %}">
+      {% csrf_token %}<input type="hidden" name="code" value="{{ tile.code }}">
+      <button class="ctile" title="Count {{ tile.code }}">
+        {% if tile.thumb %}<img src="{{ tile.thumb }}" alt="" loading="lazy" decoding="async">{% else %}<span class="noimg"></span>{% endif %}
+        <span class="pc">{{ tile.code }}</span>
+      </button>
+    </form>
+    {% empty %}<span class="dim" style="font-size:13px">Nothing outstanding.</span>{% endfor %}
+  </div>
+</div>
+{% endif %}
+<div class="ccols"{% if count.status == 'OPEN' %} style="grid-template-columns:1fr"{% endif %}>
+  {% if count.status != 'OPEN' %}
   <div><h4>Not found yet · {{ state.missing }}</h4>
     <div class="cscroll">{% for code in state.missing_list %}<span class="cpill"><span class="pc">{{ code }}</span></span>{% empty %}<span class="dim" style="font-size:13px">Nothing outstanding.</span>{% endfor %}</div></div>
+  {% endif %}
   <div><h4>Should not be here · {{ state.unexpected }}</h4>
     <div class="cscroll">{% for item in state.unexpected_list %}<span class="cpill p-warn"><span class="pc">{{ item.code }}</span>{% if item.note %}<span class="pn">{{ item.note }}</span>{% endif %}</span>{% empty %}<span class="dim" style="font-size:13px">Nothing unexpected.</span>{% endfor %}</div></div>
 </div>
