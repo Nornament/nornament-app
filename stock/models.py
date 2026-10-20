@@ -251,6 +251,8 @@ class Style(AppModel):
     style_id = models.AutoField(primary_key=True)
     style_code = models.CharField(max_length=64, unique=True)
     name = models.CharField(max_length=160, blank=True, null=True)
+    #: what the team calls the design, typed by hand; ``name`` is the marketing one
+    internal_name = models.CharField(max_length=160, blank=True, null=True)
     category = models.ForeignKey(Category, on_delete=models.PROTECT, db_column="category_id", related_name="styles")
     collection = models.ForeignKey(
         Collection, null=True, blank=True, on_delete=models.SET_NULL, db_column="collection_id", related_name="styles"
@@ -497,6 +499,7 @@ class Piece(AppModel):
     huid = models.CharField(max_length=32, unique=True, null=True, blank=True)
     hallmarked_on = models.DateField(null=True, blank=True)
     hallmark_centre = models.CharField(max_length=120, blank=True, null=True)
+    hallmarked = models.CharField(max_length=3, choices=[("YES", "Yes"), ("NO", "No")], blank=True, null=True)
     stock_state = models.CharField(max_length=16, choices=StockState.choices, default=StockState.NOT_RECEIVED)
     location = models.ForeignKey(
         Location, null=True, blank=True, on_delete=models.PROTECT, db_column="location_id", related_name="pieces"
@@ -724,6 +727,29 @@ class StockMovement(AppModel):
 
     def __str__(self):
         return f"{self.move_type} {self.piece_id}"
+
+
+class PastSale(AppModel):
+    """A sale from before this app, typed in from the old books.
+
+    Not a ``Sale``: it moves no stock, books no commission and has no BOM
+    behind it. It is history someone remembers, kept beside the real sales.
+    """
+
+    past_sale_id = models.BigAutoField(primary_key=True)
+    piece = models.ForeignKey(Piece, on_delete=models.CASCADE, db_column="jewel_code_id", related_name="past_sales")
+    customer_name = models.CharField(max_length=160, blank=True, null=True)
+    sold_on = models.DateField(null=True, blank=True)
+    sold_price = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    remarks = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, db_column="created_by", related_name="+"
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "past_sale"
+        ordering = ["-sold_on", "-past_sale_id"]
 
 
 class Sale(AppModel):

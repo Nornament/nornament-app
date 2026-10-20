@@ -21,9 +21,12 @@ from .models import (
     Category,
     Collection,
     Location,
+    JobCard,
     Material,
     MaterialCategory,
+    PastSale,
     Piece,
+    PieceCertificate,
     RateChart,
     RateChartLine,
     Scenario,
@@ -61,6 +64,7 @@ class PieceForm(forms.ModelForm):
             "huid",
             "hallmarked_on",
             "hallmark_centre",
+            "hallmarked",
             "fg_date",
             "vendor",
             "scenario",
@@ -82,7 +86,8 @@ class PieceForm(forms.ModelForm):
             "length_mm": "Length (mm)",
             "breadth_mm": "Breadth (mm)",
             "height_mm": "Height (mm)",
-            "huid": "HUID",
+            "huid": "HUID No",
+            "hallmarked": "Hallmark",
             "hallmarked_on": "Hallmarked on",
             "hallmark_centre": "Hallmarking centre",
             "fg_date": "FG date",
@@ -366,6 +371,7 @@ class StyleForm(forms.ModelForm):
         model = Style
         fields = [
             "style_code",
+            "internal_name",
             "name",
             "category",
             "collection",
@@ -378,7 +384,8 @@ class StyleForm(forms.ModelForm):
         ]
         labels = {
             "style_code": "Style code *",
-            "name": "Design name",
+            "internal_name": "Internal name",
+            "name": "Design name (marketing)",
             "category": "Category *",
             "collection": "Collection",
             "state": "Design state",
@@ -550,3 +557,41 @@ class ScenarioForm(forms.ModelForm):
         if commit:
             scenario.save()
         return scenario
+
+
+class CertificateForm(forms.ModelForm):
+    """The piece's certificate, two lines edited in place on the summary."""
+
+    class Meta:
+        model = PieceCertificate
+        fields = ["company", "cert_number"]
+        labels = {"company": "Certificate company", "cert_number": "Certificate no"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.required = False
+
+
+class JobCardNoForm(forms.ModelForm):
+    class Meta:
+        model = JobCard
+        fields = ["job_no"]
+        labels = {"job_no": "Job card"}
+
+
+class VendorTatForm(forms.ModelForm):
+    class Meta:
+        model = Vendor
+        fields = ["avg_tat_days"]
+        labels = {"avg_tat_days": "Vendor average TAT (days)"}
+
+
+class PastSaleForm(forms.ModelForm):
+    """A sale from the old books, typed in on the History tab."""
+
+    class Meta:
+        model = PastSale
+        fields = ["sold_on", "customer_name", "sold_price", "remarks"]
+        labels = {"sold_on": "Date", "customer_name": "Customer", "sold_price": "Price (₹)", "remarks": "Remarks"}
+        widgets = {"sold_on": DateInput, "remarks": forms.TextInput}

@@ -12,8 +12,13 @@
       {% if thumb %}<img src="{{ thumb }}" alt="{{ piece.jewel_code }}">{% else %}<span class="thnone">no photo</span>{% endif %}</a>
     <div>
       <div style="font-family:var(--mono);font-size:24px;font-weight:600;letter-spacing:-.02em">{{ piece.jewel_code }}</div>
-      <div class="dim" style="font-size:13px">{{ row.design_name|default:row.style_code }} · {{ row.karat|default:"—" }} ·
-        {% include "stock/_chip.html" with state=piece.stock_state label=row.stock_state_display %}</div>
+      <div class="dim" style="font-size:13px">{{ piece.style.internal_name|default:row.design_name|default:row.style_code }} · {{ row.karat|default:"—" }}</div>
+      {# availability sits with the picture: where it is and what state it is in #}
+      <div class="row" style="gap:8px;margin-top:4px;font-size:13px">
+        {% include "stock/_chip.html" with state=piece.stock_state label=row.stock_state_display %}
+        <span>📍 {{ row.location|default:"no location" }}</span>
+        {% if row.disposed_on %}<span class="dim">· disposed {{ row.disposed_on }}</span>{% endif %}
+      </div>
     </div>
   </div>
   <div class="row">
@@ -43,9 +48,8 @@
     <dl>
       <div class="biorow"><dt>Jewel code</dt><dd class="mono">{{ piece.jewel_code }}
         <span class="dim" style="font-size:11px">· cannot be changed</span></dd></div>
+      <div class="biorow"><dt>Internal name</dt><dd>{% include "stock/_inline.html" with name="internal_name" field=design_inline.internal_name value=piece.style.internal_name on_design=True %}</dd></div>
       <div class="biorow"><dt>Style / design no</dt><dd class="mono">{% include "stock/_inline.html" with name="style" field=inline.style value=piece.style.style_code %}</dd></div>
-      <div class="biorow"><dt>Design name</dt><dd>{{ row.design_name|default:"—" }}
-        {% if caps.edit_bom %}<a class="dim" style="font-size:11px" href="{% url 'stock:style_edit' piece.style.style_code %}?next={{ request.get_full_path|urlencode }}">· on the design</a>{% endif %}</dd></div>
       <div class="biorow"><dt>Category</dt><dd>{{ row.category|default:"—" }}</dd></div>
       <div class="biorow"><dt>Collection</dt><dd>{{ row.collection|default:"—" }}</dd></div>
       <div class="biorow"><dt>Sub category</dt><dd>{% include "stock/_inline.html" with name="sub_category" field=inline.sub_category value=row.sub_category %}</dd></div>
@@ -53,10 +57,9 @@
     <dl>
       <div class="biorow"><dt>Karat</dt><dd>{% include "stock/_inline.html" with name="metal_purity" field=inline.metal_purity value=row.karat %}</dd></div>
       <div class="biorow"><dt>Colour</dt><dd>{% include "stock/_inline.html" with name="metal_colour" field=inline.metal_colour value=row.metal_colour %}</dd></div>
-      <div class="biorow"><dt>Quality</dt><dd>{% include "stock/_inline.html" with name="diamond_quality" field=inline.diamond_quality value=row.diamond_quality %}</dd></div>
       <div class="biorow"><dt>Size</dt><dd>{% include "stock/_inline.html" with name="size_label" field=inline.size_label value=row.size_label %}</dd></div>
       <div class="biorow"><dt>FG date</dt><dd>{% include "stock/_inline.html" with name="received_on" field=inline.received_on value=row.received_on %}</dd></div>
-      {% if caps.view_vendor %}<div class="biorow"><dt>Vendor</dt><dd>{% include "stock/_inline.html" with name="vendor" field=inline.vendor value=row.vendor_name %}</dd></div>{% endif %}
+      <div class="biorow"><dt>Design name (marketing)</dt><dd>{% include "stock/_inline.html" with name="name" field=design_inline.name value=piece.style.name on_design=True %}</dd></div>
     </dl>
   </div>
 </div>
@@ -84,53 +87,31 @@
 <div class="card"><h3>Compliance</h3>
   <div class="bio">
     <dl>
-      <div class="biorow"><dt>Hallmarked</dt><dd>{% if piece.huid or piece.hallmarked_on %}<span class="chip c-good">Yes</span>{% else %}<span class="chip c-warn">not recorded</span>{% endif %}</dd></div>
-      <div class="biorow"><dt>Hallmarked on</dt><dd>{% include "stock/_inline.html" with name="hallmarked_on" field=inline.hallmarked_on value=piece.hallmarked_on %}</dd></div>
-      <div class="biorow"><dt>Hallmarking centre</dt><dd>{% include "stock/_inline.html" with name="hallmark_centre" field=inline.hallmark_centre value=piece.hallmark_centre %}</dd></div>
-      <div class="biorow"><dt>HUID</dt><dd class="mono">{% include "stock/_inline.html" with name="huid" field=inline.huid value=row.huid %}</dd></div>
+      <div class="biorow"><dt>Hallmark</dt><dd>{% include "stock/_inline.html" with name="hallmarked" field=inline.hallmarked value=piece.get_hallmarked_display %}</dd></div>
+      <div class="biorow"><dt>HUID No</dt><dd class="mono">{% include "stock/_inline.html" with name="huid" field=inline.huid value=row.huid %}</dd></div>
     </dl>
     <dl>
-      <div class="biorow"><dt>Certificate company</dt><dd>{{ certificate.company|default:"—" }}</dd></div>
-      <div class="biorow"><dt>Certificate code</dt><dd class="mono">{{ certificate.cert_number|default:"—" }}</dd></div>
-    </dl>
-  </div>
-  
-</div>
-
-<div class="card"><h3>Availability</h3>
-  <div class="bio">
-    <dl>
-      <div class="biorow"><dt>Status</dt><dd>{% include "stock/_chip.html" with state=piece.stock_state label=row.stock_state_display %}</dd></div>
-      <div class="biorow"><dt>Location</dt><dd>{{ row.location|default:"—" }}</dd></div>
-    </dl>
-    <dl>
-      <div class="biorow"><dt>Received on</dt><dd>{{ row.received_on|default:"—" }}</dd></div>
-      <div class="biorow"><dt>Disposed on</dt><dd>{{ row.disposed_on|default:"—" }}</dd></div>
+      <div class="biorow"><dt>Certificate company</dt><dd>{% include "stock/_inline.html" with name="company" field=cert_inline.company value=certificate.company %}</dd></div>
+      <div class="biorow"><dt>Certificate no</dt><dd class="mono">{% include "stock/_inline.html" with name="cert_number" field=cert_inline.cert_number value=certificate.cert_number %}</dd></div>
     </dl>
   </div>
 </div>
 
-<div class="card"><h3>Planning</h3>
-  <div class="bio">
-    <dl>
-      <div class="biorow"><dt>NOS floor (this design)</dt><dd>{{ planning.floor }}</dd></div>
-      <div class="biorow"><dt>Live pieces of design</dt><dd>{{ planning.live }}</dd></div>
-    </dl>
-    <dl>
-      <div class="biorow"><dt>Should make</dt><dd>{% if planning.short %}<span class="chip c-ser">yes — {{ planning.short }} short</span>{% else %}<span class="chip c-good">no</span>{% endif %}</dd></div>
-    </dl>
-  </div>
+{% if caps.view_sale %}
+<div class="card"><div class="spread"><h3>Sales history</h3><a class="btn sm" href="?tab=history#sales">History →</a></div>
+  {% include "stock/_sales_history.html" %}
 </div>
+{% endif %}
 
 {% if caps.view_vendor %}
 <div class="card"><h3>Vendor &amp; turnaround</h3>
   <div class="bio">
     <dl>
-      <div class="biorow"><dt>Vendor</dt><dd>{% if row.vendor_name %}{{ row.vendor_name }}{% if row.vendor_code %} ({{ row.vendor_code }}){% endif %}{% else %}<span class="dim">not recorded</span>{% endif %}</dd></div>
-      <div class="biorow"><dt>Job card</dt><dd class="mono">{% if job_card %}{{ job_card.job_no }}{% else %}<span class="dim">not recorded</span>{% endif %}</dd></div>
+      <div class="biorow"><dt>Vendor</dt><dd>{% include "stock/_inline.html" with name="vendor" field=inline.vendor value=row.vendor_name %}</dd></div>
+      <div class="biorow"><dt>Job card</dt><dd class="mono">{% include "stock/_inline.html" with name="job_no" field=job_inline.job_no value=job_card.job_no %}</dd></div>
     </dl>
     <dl>
-      <div class="biorow"><dt>Vendor average TAT</dt><dd>{% if row.vendor_avg_tat_days %}{{ row.vendor_avg_tat_days }} days{% else %}<span class="dim">no completed jobs yet</span>{% endif %}</dd></div>
+      <div class="biorow"><dt>Vendor average TAT (days)</dt><dd>{% if tat_inline %}{% include "stock/_inline.html" with name="avg_tat_days" field=tat_inline.avg_tat_days value=row.vendor_avg_tat_days %}{% else %}{{ row.vendor_avg_tat_days|default:"—" }}{% endif %}</dd></div>
     </dl>
   </div>
 </div>
@@ -422,16 +403,15 @@
 </div>
 
 {% if caps.view_sale %}
-<div class="card"><h3>Sales</h3>
-  
-  <table><thead><tr><th>Date</th><th class="num">Sold price</th>
-    {% if caps.view_margin %}<th class="num">Margin</th>{% endif %}<th>Invoice</th><th>Source</th></tr></thead><tbody>
-    {% for entry in sales %}
-    <tr><td class="dim">{{ entry.sold_on }}</td><td class="num mono">{{ entry.sold_price|floatformat:0 }}</td>
-      {% if caps.view_margin %}<td class="num mono">{{ entry.margin_amt|default_if_none:"—"|floatformat:0 }}</td>{% endif %}
-      <td class="dim">{{ entry.invoice_no|default:"—" }}</td><td class="dim">{{ entry.source }}</td></tr>
-    {% empty %}<tr><td colspan="5"><div class="empty">Not sold.</div></td></tr>{% endfor %}
-  </tbody></table>
+<div class="card" id="sales"><h3>Sales history</h3>
+  {% include "stock/_sales_history.html" with removable=past_sale_form %}
+  {% if past_sale_form %}
+  <form method="post" action="{% url 'stock:piece_past_sale' piece.jewel_code %}" class="row" style="margin-top:12px;flex-wrap:wrap;gap:8px">{% csrf_token %}
+    {% for field in past_sale_form %}<div>{{ field.label_tag }}{{ field }}</div>{% endfor %}
+    <div class="tight"><button class="btn primary">Add an old sale</button></div>
+  </form>
+  <p class="hint">For sales from before this app: what the old books say. It moves no stock and books no commission.</p>
+  {% endif %}
 </div>
 {% endif %}
 {% endif %}

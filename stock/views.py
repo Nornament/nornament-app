@@ -63,6 +63,10 @@ from .forms import (
     BomLineFormSet,
     RateChartForm,
     CategoryForm,
+    CertificateForm,
+    JobCardNoForm,
+    PastSaleForm,
+    VendorTatForm,
     CollectionForm,
     LocationForm,
     MaterialForm,
@@ -95,6 +99,7 @@ from .models import (
     Metal,
     MetalPurity,
     Piece,
+    PastSale,
     PieceCertificate,
     PieceLink,
     RateChart,
@@ -632,13 +637,18 @@ def piece_detail(request, jewel_code):
         context |= _bom_context(request, piece)
     if tab == "overview" and request.user.has_perm(EDIT_BOM):
         context["inline"] = _inline_form(piece)
+        context["design_inline"] = _design_inline_form(piece.style)
+        context |= _side_inline_forms(piece)
         context["customers"] = Customer.objects.order_by("name")
+    if tab in ("overview", "history") and allowed(request.user, "sold_price"):
+        # the real sales and the ones typed in from the old books, one list
+        context["sales"] = Sale.objects.filter(piece=piece).order_by("-sold_on")
+        context["past_sales"] = piece.past_sales.select_related("created_by")
     if tab == "history":
         context["bom_versions"] = piece.bom_versions.order_by("-version_no")
         context["repairs"] = RepairJob.objects.filter(piece=piece).select_related("vendor").order_by("-opened_on")
-        context["sales"] = (
-            Sale.objects.filter(piece=piece).order_by("-sold_on") if allowed(request.user, "sold_price") else []
-        )
+        if request.user.has_perm(EDIT_BOM) and allowed(request.user, "sold_price"):
+            context["past_sale_form"] = PastSaleForm()
     if allowed(request.user, "gold_rate_used"):
         purity = MetalPurity.objects.select_related("metal").filter(pk=piece.metal_purity or "").first()
         if purity:
@@ -652,6 +662,35 @@ def piece_detail(request, jewel_code):
         context["job_card"] = JobCard.objects.filter(piece=piece).order_by("-issued_on").first()
     context["pricing"] = _margin_panel(row)
     return render(request, "stock/piece_detail.html", context)
+
+
+@login_required
+@tab_required("stock")
+@require_POST
+def piece_past_sale(request, jewel_code):
+    """Add or remove a sale typed in from the old books (History tab)."""
+    piece = get_object_or_404(_visible_pieces(request), jewel_code__iexact=jewel_code)
+    services.require(request.user, EDIT_BOM, "You cannot edit this piece's history.")
+    if not allowed(request.user, "sold_price"):
+        raise PermissionDenied("You cannot see sales, so you cannot record one.")
+    back = reverse("stock:piece_detail", args=[piece.jewel_code]) + "?tab=history"
+    if request.POST.get("delete"):
+        gone = piece.past_sales.filter(pk=request.POST["delete"]).delete()[0]
+        if gone:
+            services.log(request.user, "DELETE", "past_sale", request.POST["delete"], f"old sale removed from {piece.jewel_code}")
+        return redirect(back)
+    form = PastSaleForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "; ".join(f"{field}: {e}" for field, errors in form.errors.items() for e in errors))
+    elif not any(form.cleaned_data.values()):
+        messages.error(request, "Fill in at least one field.")
+    else:
+        past = form.save(commit=False)
+        past.piece, past.created_by = piece, request.user
+        past.save()
+        services.log(request.user, "INSERT", "past_sale", past.pk, f"old sale recorded on {piece.jewel_code}")
+        messages.success(request, "Old sale recorded.")
+    return redirect(back)
 
 
 @login_required
@@ -868,6 +907,7 @@ INLINE_FIELDS = (
     "huid",
     "hallmarked_on",
     "hallmark_centre",
+    "hallmarked",
     "remarks",
     "on_website",
     "website_url",
@@ -875,7 +915,7 @@ INLINE_FIELDS = (
 
 #: the design's copy, edited in place on the piece's Marketing tab. It lives on
 #: the design, so a change shows on every piece cut from it.
-DESIGN_INLINE_FIELDS = ("name", "collection", "story", "website_description")
+DESIGN_INLINE_FIELDS = ("internal_name", "name", "collection", "story", "website_description")
 
 
 def _inline_form(piece):
@@ -894,11 +934,54 @@ def _inline_form(piece):
 
 def _design_inline_form(style):
     """``StyleForm`` the same way, for the copy on the Marketing tab."""
-    form = StyleForm(instance=style)
-    for name in DESIGN_INLINE_FIELDS:
+    return _inplace(StyleForm(instance=style), DESIGN_INLINE_FIELDS)
+
+
+def _inplace(form, names=None):
+    for name in names or form.fields:
         widget = form.fields[name].widget
         widget.attrs["class"] = f"inplace {widget.attrs.get('class', '')}".strip()
     return form
+
+
+#: summary-page fields that live on a row other than the piece: the first
+#: certificate, the latest job card, and the vendor itself
+CERT_FIELDS = ("company", "cert_number")
+VENDOR_FIELDS = ("job_no", "avg_tat_days")
+
+
+def _side_inline_forms(piece):
+    """The certificate, job card and vendor editors, one form per row they save to."""
+    job = JobCard.objects.filter(piece=piece).order_by("-issued_on").first()
+    return {
+        "cert_inline": _inplace(CertificateForm(instance=piece.certificates.first())),
+        "job_inline": _inplace(JobCardNoForm(instance=job)),
+        "tat_inline": _inplace(VendorTatForm(instance=piece.vendor)) if piece.vendor_id else None,
+    }
+
+
+def _save_side_field(request, piece, field):
+    """Save one certificate, job card or vendor field from the summary page."""
+    if field in CERT_FIELDS:
+        form = modelform_factory(PieceCertificate, form=CertificateForm, fields=[field])(
+            request.POST, instance=piece.certificates.first() or PieceCertificate(piece=piece)
+        )
+    elif field == "job_no":
+        job = JobCard.objects.filter(piece=piece).order_by("-issued_on").first() or JobCard(
+            piece=piece, style=piece.style, vendor=piece.vendor, issued_on=timezone.localdate(), created_by=request.user
+        )
+        form = JobCardNoForm(request.POST, instance=job)
+    elif piece.vendor_id:
+        # the vendor's own figure: every piece from this vendor reads it
+        form = VendorTatForm(request.POST, instance=piece.vendor)
+    else:
+        messages.error(request, "Pick the vendor first.")
+        return
+    if form.is_valid():
+        form.save()
+        services.log(request.user, "UPDATE", "jewel_code", piece.pk, f"{field} edited on the detail screen")
+    else:
+        messages.error(request, "; ".join(f"{field}: {e}" for errors in form.errors.values() for e in errors))
 
 
 @login_required
@@ -910,10 +993,13 @@ def piece_field(request, jewel_code):
     if not request.user.has_perm(EDIT_BOM):
         raise PermissionDenied("You are not authorised to edit this piece.")
     field = request.POST.get("field")
-    if field not in INLINE_FIELDS:
+    if field not in INLINE_FIELDS + CERT_FIELDS + VENDOR_FIELDS:
         raise PermissionDenied(f"{field!r} is not editable here.")
-    if field == "vendor" and not request.user.has_perm(VIEW_VENDOR):
+    if field in ("vendor",) + VENDOR_FIELDS and not request.user.has_perm(VIEW_VENDOR):
         raise PermissionDenied("You cannot see vendors, so you cannot change one.")
+    if field in CERT_FIELDS + VENDOR_FIELDS:
+        _save_side_field(request, piece, field)
+        return _redirect_back(request, reverse("stock:piece_detail", args=[piece.jewel_code]))
     form = modelform_factory(Piece, form=PieceForm, fields=[field])(request.POST, instance=piece)
     if form.is_valid():
         form.save()
@@ -1726,6 +1812,7 @@ REPORT_LIMIT = 5000
 REPORT_FIELDS = {
     "photo": "Photo",
     "jewel_code": "Jewel code",
+    "internal_name": "Internal name",
     "design_name": "Design",
     "style_code": "Style",
     "category": "Category",
@@ -1756,6 +1843,7 @@ REPORT_FIELDS = {
     "height_mm": "Height (mm)",
     "stock_type": "Stock type",
     "fg_date": "FG date",
+    "hallmarked": "Hallmark",
     "hallmarked_on": "Hallmarked on",
     "hallmark_centre": "Hallmark centre",
     "disposed_on": "Disposed on",
@@ -1776,6 +1864,8 @@ REPORT_FIELDS = {
 }
 #: report columns the list row does not carry, read straight off the piece
 REPORT_PIECE_ATTRS = {
+    "internal_name": "style.internal_name",
+    "hallmarked": "hallmarked",
     "length_mm": "length_mm",
     "breadth_mm": "breadth_mm",
     "height_mm": "height_mm",
@@ -2048,9 +2138,19 @@ def reports_export(request):
             "cost_at_sale": sale.cost_at_sale,
             "margin_amt": sale.margin_amt,
             "bom_version_at_sale": sale.bom_version_at_sale,
+            "remarks": sale.remarks,
         }
         for sale in Sale.objects.filter(piece_id__in=piece_ids)
         .select_related("piece", "location", "customer", "salesperson").order_by("sold_on", "sale_id")
+    ] + [
+        # typed in from the old books on the History tab
+        {
+            "jewel_code": past.piece.jewel_code, "sold_on": past.sold_on, "location": None,
+            "customer_name": past.customer_name, "customer_phone": None, "salesperson": "Old books",
+            "sold_price": past.sold_price, "discount_amt": None, "cost_at_sale": None, "margin_amt": None,
+            "bom_version_at_sale": None, "remarks": past.remarks,
+        }
+        for past in PastSale.objects.filter(piece_id__in=piece_ids).select_related("piece").order_by("sold_on")
     ])
     _history_sheet(book, "Movements", request.user, [
         {
@@ -2100,7 +2200,7 @@ HISTORY_LABELS = {
     "jewel_code": "Jewel code", "sold_on": "Sold on", "location": "Location", "customer_name": "Customer",
     "customer_phone": "Phone", "salesperson": "Salesperson", "sold_price": "Sold price (₹)",
     "discount_amt": "Discount (₹)", "cost_at_sale": "Cost at sale (₹)", "margin_amt": "Margin (₹)",
-    "bom_version_at_sale": "BOM version", "moved_at": "When", "move_type": "Movement",
+    "bom_version_at_sale": "BOM version", "remarks": "Remarks", "moved_at": "When", "move_type": "Movement",
     "from_location": "From", "to_location": "To", "resulting_state": "Status after",
     "reference_no": "Reference", "party_name": "Party", "reason": "Reason", "user": "By",
 }

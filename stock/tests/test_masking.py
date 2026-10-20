@@ -285,6 +285,8 @@ def test_every_stock_and_crm_screen_is_in_the_sales_walk():
         # POST-only and gated on edit_bom; asserted in stock/tests/test_piece_media.py
         "stock:piece_link", "stock:piece_unlink", "stock:piece_marketing",
         "stock:piece_media_display",
+        # POST-only, gated on edit_bom and sold_price; asserted in test_piece_summary.py
+        "stock:piece_past_sale",
         "stock:count_open", "stock:count_scan", "stock:count_unscan", "stock:count_close",
         "stock:repair_complete", "stock:repair_open", "stock:reserve_piece", "crm:add_purchase",
         "crm:customer_delete", "crm:customer_temperature", "crm:delete_purchase",

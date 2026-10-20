@@ -1,0 +1,20 @@
+{% comment %}The piece's sales: the ones made in this app, then the ones typed
+in from the old books. Shown only to roles that see sales.{% endcomment %}
+<table><thead><tr><th>Date</th><th>Customer</th><th class="num">Price</th>
+  {% if caps.view_margin %}<th class="num">Margin</th>{% endif %}<th>Remarks</th><th>Source</th>{% if removable %}<th></th>{% endif %}</tr></thead><tbody>
+  {% for entry in sales %}
+  <tr><td class="dim">{{ entry.sold_on }}</td><td>{{ entry.customer.name|default:entry.customer_name|default:"—" }}</td>
+    <td class="num mono">{{ entry.sold_price|floatformat:0 }}</td>
+    {% if caps.view_margin %}<td class="num mono">{{ entry.margin_amt|default_if_none:"—"|floatformat:0 }}</td>{% endif %}
+    <td>{{ entry.remarks|default:"—" }}{% if entry.invoice_no %} <span class="dim">· Inv {{ entry.invoice_no }}</span>{% endif %}</td><td class="dim">{{ entry.get_source_display }}</td>{% if removable %}<td></td>{% endif %}</tr>
+  {% endfor %}
+  {% for entry in past_sales %}
+  <tr><td class="dim">{{ entry.sold_on|default:"—" }}</td><td>{{ entry.customer_name|default:"—" }}</td>
+    <td class="num mono">{{ entry.sold_price|default_if_none:"—"|floatformat:0 }}</td>
+    {% if caps.view_margin %}<td class="num">—</td>{% endif %}
+    <td>{{ entry.remarks|default:"—" }}</td><td class="dim">Old books</td>
+    {% if removable %}<td><form method="post" action="{% url 'stock:piece_past_sale' piece.jewel_code %}" class="inline">{% csrf_token %}
+      <button class="btn sm" name="delete" value="{{ entry.pk }}" onclick="return confirm('Remove this old sale?')">Remove</button></form></td>{% endif %}</tr>
+  {% endfor %}
+  {% if not sales and not past_sales %}<tr><td colspan="7"><div class="empty">No sales recorded.</div></td></tr>{% endif %}
+</tbody></table>
