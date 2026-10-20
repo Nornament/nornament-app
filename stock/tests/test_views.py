@@ -512,3 +512,39 @@ def test_a_sales_login_cannot_change_categories(client, sales_user):
     response = client.post(reverse("stock:settings") + "?tab=cats", {"name": "Sneaky", "code": "", "sort_order": 1})
     assert response.status_code == 403
     assert not Category.objects.filter(name="Sneaky").exists()
+
+
+def test_a_jewel_code_with_a_slash_does_not_take_the_list_down(client, admin_user_, received_piece, chart):
+    """Staging's 500: an imported code 'HB/4' could not be linked to, so any
+    list page it landed on — the price slider put it on page one — failed."""
+    from stock.models import Piece
+
+    Piece.objects.filter(pk=received_piece.pk).update(jewel_code="HB/4")
+    client.force_login(admin_user_)
+    detail = reverse("stock:piece_detail", args=["HB/4"])
+    assert detail.endswith("/pieces/HB/4/")
+
+    page = client.get(reverse("stock:piece_list"), {"price": "0-"})
+    assert page.status_code == 200 and detail in page.content.decode()
+    assert client.get(detail).status_code == 200
+    assert client.get(detail, {"tab": "history"}).status_code == 200
+    # a sub-route still reaches its own view, not a piece called "HB/4/bom"
+    assert client.get(reverse("stock:piece_sheet", args=["HB/4"]))["Content-Type"].startswith("application/vnd")
+    response = client.post(reverse("stock:piece_field", args=["HB/4"]), {"field": "size_label", "size_label": "7"})
+    assert response.status_code == 302
+    assert Piece.objects.get(pk=received_piece.pk).size_label == "7"
+
+
+def test_every_piece_route_resolves_to_itself_for_a_slashed_code():
+    """The routes take the code as a path, so their order decides who answers."""
+    from django.urls import resolve
+
+    from stock import urls
+
+    for route in urls.urlpatterns:
+        if "jewel_code" not in str(route.pattern):
+            continue
+        extra = [5] if route.pattern.converters.keys() - {"jewel_code"} else []
+        url = reverse(f"stock:{route.name}", args=["HB/4", *extra])
+        match = resolve(url)
+        assert (match.url_name, match.kwargs["jewel_code"]) == (route.name, "HB/4"), url
