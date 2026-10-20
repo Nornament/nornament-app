@@ -259,15 +259,23 @@ class CategoryForm(forms.ModelForm):
 
     class Meta:
         model = Category
-        fields = ["name", "code", "code_prefix", "sort_order"]
-        labels = {"name": "Category", "code": "Code", "code_prefix": "Code prefix", "sort_order": "Order"}
+        # the code is internal (imports and style codes join on it), so it is
+        # made from the name and never asked for; the prefix is what people use
+        fields = ["code_prefix", "name", "sort_order"]
+        labels = {"name": "Category", "code_prefix": "Code prefix", "sort_order": "Order"}
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["code"].required = False
-
-    def clean_code(self):
-        return _code_or_name(self)
+    def save(self, commit=True):
+        category = super().save(commit=False)
+        if not category.code:
+            base = _code_or_name(self) or "CATEGORY"
+            code, n = base, 1
+            while Category.objects.filter(code=code).exists():
+                n += 1
+                code = f"{base[:29]}{n}"
+            category.code = code
+        if commit:
+            category.save()
+        return category
 
 
 def _code_or_name(form):

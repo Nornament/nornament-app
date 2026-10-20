@@ -95,3 +95,28 @@ def test_all_columns_and_a_link_to_every_file(client, admin_user_, received_piec
     links = {row[5] for row in files}
     assert links == {f"http://testserver{reverse('mediahub:media', args=[pk])}" for pk in (photo.pk, cad.pk)}
     assert book["Media"]["F2"].hyperlink.target in links
+
+
+def test_every_sale_and_movement_of_the_pieces_comes_along(client, admin_user_, sales_user, received_piece, chart):
+    """The workbook carries each piece's history too; a login that cannot see
+    sale figures gets the moves and no sale numbers."""
+    from decimal import Decimal
+
+    from stock import services
+
+    services.sell_piece(admin_user_, received_piece, sold_price=Decimal("300000"))
+    client.force_login(admin_user_)
+    book = load_workbook(io.BytesIO(client.get(reverse("stock:reports_export"), {"state": "SOLD"}).content))
+    sales = list(book["Sales"].values)
+    assert sales[0][:2] == ("Jewel code", "Sold on") and "Sold price (₹)" in sales[0]
+    assert sales[1][0] == "ER00738" and 300000 in sales[1]
+    moves = list(book["Movements"].values)
+    assert moves[0][:3] == ("Jewel code", "When", "Movement") and any(row[0] == "ER00738" for row in moves[1:])
+
+    role = Role.objects.get(group__name="SALES")
+    role.screens = [*role.screens, "reports"]
+    role.save()
+    client.force_login(sales_user)
+    book = load_workbook(io.BytesIO(client.get(reverse("stock:reports_export"), {"state": "SOLD"}).content))
+    header = next(book["Sales"].values) if "Sales" in book.sheetnames else ()
+    assert "Cost at sale (₹)" not in header and "Margin (₹)" not in header

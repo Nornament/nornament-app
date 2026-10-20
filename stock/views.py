@@ -2033,6 +2033,42 @@ def reports_export(request):
             detail.add_image(SheetImage(photos[row["jewel_code_id"]]), f"{column}{line}")
             detail.row_dimensions[line].height = 62
 
+    # every sale and every move of the pieces in the report, one row each
+    piece_ids = [row["jewel_code_id"] for row in report["rows"]]
+    _history_sheet(book, "Sales", request.user, [
+        {
+            "jewel_code": sale.piece.jewel_code if sale.piece_id else None,
+            "sold_on": sale.sold_on,
+            "location": sale.location.name if sale.location_id else None,
+            "customer_name": sale.customer.name if sale.customer_id else sale.customer_name,
+            "customer_phone": sale.customer_phone,
+            "salesperson": sale.salesperson.get_full_name() or sale.salesperson.username if sale.salesperson_id else None,
+            "sold_price": sale.sold_price,
+            "discount_amt": sale.discount_amt,
+            "cost_at_sale": sale.cost_at_sale,
+            "margin_amt": sale.margin_amt,
+            "bom_version_at_sale": sale.bom_version_at_sale,
+        }
+        for sale in Sale.objects.filter(piece_id__in=piece_ids)
+        .select_related("piece", "location", "customer", "salesperson").order_by("sold_on", "sale_id")
+    ])
+    _history_sheet(book, "Movements", request.user, [
+        {
+            "jewel_code": move.piece.jewel_code,
+            "moved_at": move.moved_at,
+            "move_type": move.get_move_type_display(),
+            "from_location": move.from_location.name if move.from_location_id else None,
+            "to_location": move.to_location.name if move.to_location_id else None,
+            "resulting_state": move.get_resulting_state_display(),
+            "reference_no": move.reference_no,
+            "party_name": move.party_name,
+            "reason": move.reason,
+            "user": move.user.get_full_name() or move.user.username if move.user_id else None,
+        }
+        for move in StockMovement.objects.filter(piece_id__in=piece_ids)
+        .select_related("piece", "from_location", "to_location", "user").order_by("moved_at", "movement_id")
+    ])
+
     if report["media"]:
         # one row per file, each a link that works as long as the file does:
         # the app's own address signs a fresh bucket URL on every click
@@ -2058,6 +2094,27 @@ def reports_export(request):
         f"{len(report['rows'])} rows by {report['by']}", row_count=len(report["rows"]),
     )
     return response
+
+
+HISTORY_LABELS = {
+    "jewel_code": "Jewel code", "sold_on": "Sold on", "location": "Location", "customer_name": "Customer",
+    "customer_phone": "Phone", "salesperson": "Salesperson", "sold_price": "Sold price (₹)",
+    "discount_amt": "Discount (₹)", "cost_at_sale": "Cost at sale (₹)", "margin_amt": "Margin (₹)",
+    "bom_version_at_sale": "BOM version", "moved_at": "When", "move_type": "Movement",
+    "from_location": "From", "to_location": "To", "resulting_state": "Status after",
+    "reference_no": "Reference", "party_name": "Party", "reason": "Reason", "user": "By",
+}
+
+
+def _history_sheet(book, title, user, rows):
+    """A sheet of history rows, masked per reader like every other export."""
+    rows = [mask(user, row) for row in rows]
+    if not rows:
+        return
+    sheet = book.create_sheet(title)
+    sheet.append([HISTORY_LABELS[key] for key in rows[0]])
+    for row in rows:
+        sheet.append([_cell(value) for value in row.values()])
 
 
 def _report_photos(piece_ids):
@@ -2097,7 +2154,10 @@ def _cell(value):
     if isinstance(value, (int, float, Decimal, bool)) or value is None:
         return value
     if isinstance(value, (datetime.date, datetime.datetime)):
-        return value.replace(tzinfo=None) if isinstance(value, datetime.datetime) else value
+        if isinstance(value, datetime.datetime) and timezone.is_aware(value):
+            # Excel has no zones: write the shop's clock, not UTC
+            return timezone.localtime(value).replace(tzinfo=None)
+        return value
     return str(value)
 
 
@@ -2280,6 +2340,10 @@ def _merge_step(post, decisions, section):
                 choice["action"] = "update" if post.get(f"update:{key}") else "skip"
         elif field in post:
             choice["action"] = post.get(field)
+        # "use existing" names which one; the guess stands until someone picks
+        picked = post.get(f"{field}:target") or ""
+        if choice.get("action") == "map" and picked.isdigit():
+            choice["target"] = int(picked)
     return decisions
 
 
@@ -2404,6 +2468,7 @@ def import_step(request, batch_id, step):
         row.action = choice.get("action", row.action)
         row.map_to = choice.get("map_to", "")
         row.category = (choice.get("fields") or {}).get("category_id", "")
+        row.target_pk = choice.get("target")
         if step != "materials" and step in IMPORT_CREATE_FORMS and choice.get("target"):
             # the saved answer, not the fuzzy guess: a row made in the modal
             # may not be the one the name happens to resemble
@@ -2438,6 +2503,10 @@ def import_step(request, batch_id, step):
         "material_categories": MaterialCategory.objects.order_by("sort_order"),
         "locations": Location.objects.filter(is_active=True),
         "create_form": IMPORT_CREATE_FORMS[step](prefix="new") if step in IMPORT_CREATE_FORMS else None,
+        "existing": (
+            IMPORT_CREATE_FORMS[step]._meta.model.objects.order_by("name")
+            if step != "materials" and step in IMPORT_CREATE_FORMS else None
+        ),
     })
 
 

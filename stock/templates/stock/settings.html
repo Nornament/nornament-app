@@ -11,11 +11,10 @@
   <div class="spread" style="margin-bottom:4px">
     <div><h3>Categories</h3></div>
   </div>
-  <table style="margin-top:14px"><thead><tr><th>Code prefix</th><th>Category</th><th>Code</th>
+  <table style="margin-top:14px"><thead><tr><th>Code prefix</th><th>Category</th>
     <th class="num">Designs</th><th class="num">Pieces</th><th></th></tr></thead><tbody>
     {% for row in categories %}
     <tr><td class="mono">{{ row.code_prefix|default:"—" }}</td><td>{{ row.name }}</td>
-      <td class="code">{{ row.code }}</td>
       <td class="num">{{ row.designs }}</td><td class="num">{{ row.pieces }}</td>
       <td class="row tight">{% if caps.edit_bom %}
         <a class="btn sm" href="?tab=cats&amp;edit={{ row.pk }}">Edit</a>

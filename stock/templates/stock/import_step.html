@@ -108,6 +108,15 @@
                 <option value="map" {% if row.action == 'map' %}selected{% endif %}>use existing</option>
                 <option value="skip" {% if row.action == 'skip' %}selected{% endif %}>skip</option>
               </select>
+              {% if existing is not None %}
+              <select name="{{ step }}:{{ row.key }}:target" class="imp-target" aria-label="Which existing one"
+                      {% if row.action != 'map' %}hidden{% endif %}>
+                <option value="">Choose which…</option>
+                {% for item in existing %}
+                <option value="{{ item.pk }}" {% if item.pk == row.target_pk %}selected{% endif %}>{{ item.name }}</option>
+                {% endfor %}
+              </select>
+              {% endif %}
               {% if create_form %}
               <button type="button" class="btn sm imp-new" onclick="impNew(this)"
                       {% if row.action != 'create' %}hidden{% endif %}>Set up…</button>
@@ -188,6 +197,8 @@ function impNew(el){
   // "create new" opens the modal, filled from what the sheet says about this row
   var tr = el.closest('tr'), sel = tr.querySelector('.imp-sel'), data = Object.assign({}, sel.dataset);
   tr.querySelector('.imp-new').hidden = sel.value !== 'create';
+  var pick = tr.querySelector('.imp-target');
+  if (pick) pick.hidden = sel.value !== 'map';
   if (sel.value !== 'create') return;
   var dlg = document.getElementById('impnewdlg'), cat = tr.querySelector('.imp-cat');
   if (cat) data.category = cat.value;

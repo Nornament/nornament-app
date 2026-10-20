@@ -236,6 +236,9 @@ def analyse(pieces):
     )
 
 
+UNPICKED = "Choose which existing one"
+
+
 def unresolved(plan, decisions):
     """Blocked rows the reviewer's decisions have not answered.
 
@@ -282,6 +285,14 @@ def unresolved(plan, decisions):
                     row.problem = f"{code} is retired, so nothing new can be assigned to it."
                     still.append(row)
                 continue
+            if section != "materials" and action == "map":
+                # mapped onto nothing, every piece naming it would land blank
+                unpicked = not choice.get("target", getattr(row.target, "pk", None))
+                if unpicked or (row.problem or "").startswith(UNPICKED):
+                    row.problem = f"{UNPICKED} {row.key!r} should use." if unpicked else None
+                if unpicked:
+                    still.append(row)
+                    continue
             if row.problem:
                 still.append(row)
     return still

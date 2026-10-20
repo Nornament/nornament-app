@@ -818,3 +818,22 @@ def test_create_new_makes_the_row_in_a_modal_and_points_the_sheet_at_it(
         assert made.code == name.replace(" ", "").upper()
         batch.refresh_from_db()
         assert batch.decisions[section][key] == batch.decisions[section][key] | {"action": "map", "target": made.pk}
+
+
+def test_use_existing_names_which_one_and_unnamed_is_refused(parsed, materials):
+    """'use existing' on a category picks the row from a list; left unpicked,
+    the commit is held rather than landing every piece with no category."""
+    from stock.models import Category
+    from stock.views import _merge_step
+
+    idol = Category.objects.create(code="IDOL", name="Idols")
+    plan = analyse(parsed)
+    decisions = default_decisions(plan)
+    key = next(r.key for r in plan.categories if r.action == "create" or r.target)
+
+    decisions["categories"][key].update(action="map", target=None)
+    assert any(r.key == key for r in analyse_mod.unresolved(plan, decisions))
+
+    _merge_step({f"categories:{key}": "map", f"categories:{key}:target": str(idol.pk)}, decisions, "categories")
+    assert decisions["categories"][key]["target"] == idol.pk
+    assert not any(r.key == key for r in analyse_mod.unresolved(plan, decisions))

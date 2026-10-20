@@ -49,6 +49,8 @@ GATED_FIELDS = {
     "supplier_name": VIEW_VENDOR,
     # a customer is seen by those who see sales
     "customer_name": VIEW_SALE,
+    "customer_phone": VIEW_SALE,
+    "discount_amt": VIEW_SALE,
 }
 
 

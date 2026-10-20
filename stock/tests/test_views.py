@@ -388,7 +388,7 @@ def test_the_stock_report_filters_and_exports_the_same_set(client, admin_user_, 
     assert "ER00738" not in empty
 
     book = load_workbook(io.BytesIO(client.get(reverse("stock:reports_export")).content))
-    assert book.sheetnames == ["Summary", "Materials", "Pieces"]
+    assert book.sheetnames == ["Summary", "Materials", "Pieces", "Movements"]  # received is a move
     assert book["Pieces"].max_row == 2  # one header, one piece
     assert book["Summary"]["A2"].value  # the group it fell in
 
@@ -480,13 +480,16 @@ def test_an_admin_adds_renames_and_deletes_a_category_from_settings(client, admi
 
     client.force_login(admin_user_)
     url = reverse("stock:settings") + "?tab=cats"
-    client.post(url, {"name": "Nose Pins", "code": "", "code_prefix": "NP", "sort_order": 80})
+    page = client.get(url).content.decode()
+    assert "<th>Code prefix</th><th>Category</th>\n" in page and 'id="id_code"' not in page
+    client.post(url, {"name": "Nose Pins", "code_prefix": "NP", "sort_order": 80})
     pins = Category.objects.get(name="Nose Pins")
-    assert pins.code == "NOSEPINS"  # blank code comes from the name
+    assert pins.code == "NOSEPINS"  # never asked for: made from the name
 
-    client.post(url, {"pk": pins.pk, "name": "Nose Rings", "code": pins.code, "code_prefix": "NR", "sort_order": 80})
+    client.post(url, {"pk": pins.pk, "name": "Nose Rings", "code_prefix": "NR", "sort_order": 80})
     pins.refresh_from_db()
-    assert (pins.name, pins.code_prefix) == ("Nose Rings", "NR")
+    # a rename keeps the internal code, so nothing joined on it moves
+    assert (pins.name, pins.code_prefix, pins.code) == ("Nose Rings", "NR", "NOSEPINS")
 
     client.post(url, {"delete": pins.pk})
     assert not Category.objects.filter(pk=pins.pk).exists()
