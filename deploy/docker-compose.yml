@@ -29,6 +29,8 @@ services:
         condition: service_healthy
     environment: &app-env
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      # off unless set; on in production shows settings to anyone who hits an error
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
       DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS}
       POSTGRES_HOST: db
