@@ -373,23 +373,37 @@ def _piece_thumbs(piece_ids):
     return {asset.piece_id: urls[asset.pk] for asset in firsts if urls.get(asset.pk)}
 
 
-@login_required
-@tab_required("stock", "styles")
-def piece_list(request):
+def _list_page(request):
+    """The filtered page both list views draw, each row with its photo or None."""
     pieces, query, picked = _filtered(request)
-    low, high = _slider_positions(picked["price"])
     page = Paginator(pieces, PAGE_SIZE).get_page(request.GET.get("page"))
     rows = rows_for(request.user, page)
     thumbs = _pin_thumbs(page)
+    for row in rows:
+        row["thumb"] = thumbs.get(row["jewel_code_id"])
+    return page, rows, query, picked
+
+
+def _piece_view(request):
+    """Cards or list: picked with ``?view=``, then kept for the session."""
+    view = request.GET.get("view")
+    if view in ("cards", "list"):
+        request.session["piece_view"] = view
+    return request.session.get("piece_view", "cards")
+
+
+@login_required
+@tab_required("stock", "styles")
+def piece_list(request):
+    page, rows, query, picked = _list_page(request)
+    low, high = _slider_positions(picked["price"])
     return render(
         request,
         "stock/piece_list.html",
         {
             "page": page,
             "rows": rows,
-            "pins": [
-                {"row": row, "thumb": thumbs[row["jewel_code_id"]]} for row in rows if row["jewel_code_id"] in thumbs
-            ],
+            "view": _piece_view(request),
             "q": query,
             # the legacy's own order: category, location, status, price
             "category_chips": _filter_chips(
@@ -419,12 +433,11 @@ def piece_list(request):
 @tab_required("stock", "styles")
 def piece_rows(request):
     """The HTMX half of the list: the same rows, no chrome."""
-    pieces, _, _ = _filtered(request)
-    page = Paginator(pieces, PAGE_SIZE).get_page(request.GET.get("page"))
+    page, rows, _, _ = _list_page(request)
     return render(
         request,
         "stock/_piece_rows.html",
-        {"page": page, "rows": rows_for(request.user, page)},
+        {"page": page, "rows": rows, "view": _piece_view(request)},
     )
 
 
@@ -1828,6 +1841,7 @@ REPORT_FIELDS = {
     "location": "Location",
     "huid": "HUID",
     "received_on": "Received",
+    "days_in_stock": "Days in stock",
     "on_website": "On website",
     "remarks": "Remarks",
     "sale_price": "Sale price (₹)",

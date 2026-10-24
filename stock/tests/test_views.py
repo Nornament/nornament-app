@@ -59,6 +59,35 @@ def test_search_filters_the_rows(client, admin_user_, received_piece):
     assert "ER00738" not in miss and "No pieces match" in miss
 
 
+def test_days_in_stock_counts_to_today_or_to_the_day_it_left(piece):
+    import datetime
+
+    from django.utils import timezone
+
+    from stock.masking import days_in_stock
+
+    today = timezone.localdate()
+    piece.received_on = piece.fg_date = None
+    assert days_in_stock(piece) is None
+    piece.fg_date = today - datetime.timedelta(days=30)
+    assert days_in_stock(piece) == 30  # the IVY FG date, when nothing was received
+    piece.received_on = today - datetime.timedelta(days=12)
+    assert days_in_stock(piece) == 12  # received wins
+    piece.disposed_on = today - datetime.timedelta(days=2)
+    assert days_in_stock(piece) == 10  # a sold piece stops counting
+
+
+def test_the_list_toggles_cards_and_list_and_remembers(client, admin_user_, received_piece):
+    client.force_login(admin_user_)
+    cards = client.get(reverse("stock:piece_list")).content.decode()
+    assert 'class="masonry"' in cards and "<table" not in cards  # cards by default
+    listed = client.get(reverse("stock:piece_list"), {"view": "list"}).content.decode()
+    assert "<table" in listed and "<th class=\"num\">Days</th>" in listed
+    # the choice holds for the HTMX search, which does not send it
+    partial = client.get(reverse("stock:piece_rows"), {"q": "ER007"}).content.decode()
+    assert "<table" in partial and "ER00738" in partial
+
+
 def test_the_scan_flow_returns_a_row_partial_not_a_page(client, admin_user_, received_piece):
     client.force_login(admin_user_)
     count = services.open_count(admin_user_, "MUM")

@@ -11,6 +11,8 @@ permanent regression test in ``stock/tests/test_masking.py`` is what keeps this
 honest — it logs in as a SALES user, renders every screen and asserts no cost,
 vendor or margin value appears anywhere in the response.
 """
+from django.utils import timezone
+
 from accounts.capabilities import MANAGE_MATERIALS, VIEW_COST, VIEW_MARGIN, VIEW_SALE, VIEW_VENDOR
 
 #: field name -> the permission required to see it
@@ -110,6 +112,7 @@ def piece_row(user, piece, *, with_prices=True):
         "location": piece.location.name if piece.location_id else None,
         "received_on": piece.received_on,
         "disposed_on": piece.disposed_on,
+        "days_in_stock": days_in_stock(piece),
         "huid": piece.huid,
         "bom_version": version.version_no if version else None,
         "on_website": piece.on_website,
@@ -140,6 +143,19 @@ def piece_row(user, piece, *, with_prices=True):
             "current_margin": (sale_price - cost_today) if sale_price is not None else None,
         }
     return mask(user, row)
+
+
+def days_in_stock(piece):
+    """Days from the piece's arrival to its leaving, or to today while it stays.
+
+    Counted on every read, never stored: a stored count is out of date the next
+    morning. Received wins over the FG date an IVY import brings; with neither
+    there is nothing to count from.
+    """
+    start = piece.received_on or piece.fg_date
+    if start is None:
+        return None
+    return ((piece.disposed_on or timezone.localdate()) - start).days
 
 
 def rows_for(user, pieces, **kwargs):

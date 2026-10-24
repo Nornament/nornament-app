@@ -9,9 +9,13 @@ own; the legacy searched from the top bar instead.{% endcomment %}
   <div class="frow">
     <label class="flabel" for="q">Search</label>
     <input id="q" type="search" name="q" value="{{ q }}" placeholder="Jewel code, style, HUID"
-           style="flex:1;max-width:340px"
+           style="flex:1;min-width:200px;max-width:340px"
            hx-get="{% url 'stock:piece_rows' %}" hx-target="#rows" hx-trigger="keyup changed delay:300ms"
            hx-include="closest form">
+    <div class="fchips" style="flex:none" role="group" aria-label="View">
+      <a class="fchip" aria-pressed="{% if view == 'cards' %}true{% else %}false{% endif %}" href="{% querystring view='cards' %}">Cards</a>
+      <a class="fchip" aria-pressed="{% if view == 'list' %}true{% else %}false{% endif %}" href="{% querystring view='list' %}">List</a>
+    </div>
     {% if caps.edit_bom %}<a class="btn primary" href="{% url 'stock:piece_new' %}" style="margin-left:auto">+ Add a piece</a>{% endif %}
   </div>
   <div class="frow">
@@ -49,29 +53,6 @@ own; the legacy searched from the top bar instead.{% endcomment %}
   </div>
   {% endif %}
 </form>
-{% if pins %}
-<div class="masonry">
-  {% for pin in pins %}
-  <article class="pin">
-    <a class="shine" href="{% url 'stock:piece_detail' pin.row.jewel_code %}"><img class="art" src="{{ pin.thumb }}" alt="{{ pin.row.jewel_code }}" loading="lazy" decoding="async"></a>
-    <div class="badge">{% include "stock/_chip.html" with state=pin.row.stock_state label=pin.row.stock_state_display %}</div>
-    <div class="meta">
-      <div class="pcode"><a class="code" href="{% url 'stock:piece_detail' pin.row.jewel_code %}">{{ pin.row.jewel_code }}</a></div>
-      <div class="pname">{{ pin.row.design_name|default:pin.row.style_code }}</div>
-      <div class="prow">
-        <span class="price">{% if caps.view_sale %}{% if pin.row.sale_price %}₹{{ pin.row.sale_price|floatformat:0 }}{% else %}<span class="chip c-ser">not costed</span>{% endif %}{% endif %}</span>
-      </div>
-      {% comment %}Cost on a card is over the shoulder of whoever walks past the
-      screen, so it is the superuser's alone here — narrower than view_cost, which
-      still governs the table and the BOM.{% endcomment %}
-      <div class="sub"><span>{{ pin.row.karat|default:"—" }}</span>
-        <span>·</span><span>{{ pin.row.location|default:"—" }}</span>
-        {% if user.is_superuser and pin.row.current_cost %}<span>·</span><span>cost ₹{{ pin.row.current_cost|floatformat:0 }}</span>{% endif %}</div>
-    </div>
-  </article>
-  {% endfor %}
-</div>
-{% endif %}
 <div id="rows">{% include "stock/_piece_rows.html" %}</div>
 
 <script>

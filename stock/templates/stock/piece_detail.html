@@ -59,6 +59,7 @@
       <div class="biorow"><dt>Colour</dt><dd>{% include "stock/_inline.html" with name="metal_colour" field=inline.metal_colour value=row.metal_colour %}</dd></div>
       <div class="biorow"><dt>Size</dt><dd>{% include "stock/_inline.html" with name="size_label" field=inline.size_label value=row.size_label %}</dd></div>
       <div class="biorow"><dt>FG date</dt><dd>{% include "stock/_inline.html" with name="received_on" field=inline.received_on value=row.received_on %}</dd></div>
+      <div class="biorow"><dt>Days in stock</dt><dd class="mono">{{ row.days_in_stock|default_if_none:"—" }}{% if row.days_in_stock is not None %} <span class="dim" style="font-size:11px">since {{ piece.received_on|default:piece.fg_date|date:"j M Y" }}</span>{% endif %}</dd></div>
       <div class="biorow"><dt>Design name (marketing)</dt><dd>{% include "stock/_inline.html" with name="name" field=design_inline.name value=piece.style.name on_design=True %}</dd></div>
     </dl>
   </div>
