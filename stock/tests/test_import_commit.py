@@ -80,6 +80,18 @@ def test_categories_match_existing_ones_by_fuzzy_name(parsed):
     assert row.target.name == "Earrings"
 
 
+def test_an_earring_is_not_filed_under_ring(parsed):
+    """'ring' is inside 'earring'; with only Ring in the catalogue, every
+    earring in a sheet landed on it."""
+    from stock.models import Category
+
+    Category.objects.filter(name__icontains="ear").delete()
+    Category.objects.create(code="RNG", name="Ring")
+    plan = analyse(parsed)
+    row = next(r for r in plan.categories if r.key == "Earring")
+    assert row.action == "create"
+
+
 def test_a_singular_category_maps_onto_the_seeded_plural(parsed):
     """The seed migration ships 'Rings'; the sheet writes 'Ring'."""
     plan = analyse(parsed)
@@ -497,7 +509,9 @@ def test_mapping_a_material_onto_nothing_is_refused_not_silently_dropped(parsed,
     decisions = default_decisions(plan)
     decisions["materials"]["SP01C"]["action"] = "map"      # SP01C does not exist
     blocked = analyse_mod.unresolved(plan, decisions)
-    assert any(r.key == "SP01C" for r in blocked)
+    row = next(r for r in blocked if r.key == "SP01C")
+    # held without a problem, the row is never marked on the Materials step
+    assert "SP01C" in row.problem
 
 
 # ── the piece diff only reports real differences ─────────────────────────
@@ -837,3 +851,14 @@ def test_use_existing_names_which_one_and_unnamed_is_refused(parsed, materials):
     _merge_step({f"categories:{key}": "map", f"categories:{key}:target": str(idol.pk)}, decisions, "categories")
     assert decisions["categories"][key]["target"] == idol.pk
     assert not any(r.key == key for r in analyse_mod.unresolved(plan, decisions))
+
+
+def test_a_style_already_in_the_catalogue_does_not_hold_the_commit(parsed, materials, import_reference):
+    """Styles have no review step; one that exists is found by code at commit,
+    so the 'choose which one' gate must not hold it as unanswered forever."""
+    from stock.models import Category
+
+    code = parsed[0].style_code
+    Style.objects.create(style_code=code, name="Already here", category=Category.objects.first())
+    plan = analyse(parsed)
+    assert not any(r.key == code for r in analyse_mod.unresolved(plan, default_decisions(plan)))

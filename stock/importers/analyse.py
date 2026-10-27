@@ -82,25 +82,35 @@ def _match_score(target, candidate):
     Earrings. Ranking exact above plural above containment — and preferring
     the closest containment by length — keeps "Ring" on "Rings" while still
     letting "Bracelet" reach "Bangles / Bracelets".
+
+    The other way round needs a word boundary: with only "Ring" in the
+    catalogue, ``ring`` inside ``earring`` filed every earring as a Ring. Both
+    names arrive as lower-case words split by single spaces.
     """
-    if target == candidate:
+    flat_target, flat_candidate = target.replace(" ", ""), candidate.replace(" ", "")
+    if flat_target == flat_candidate:
         return 0
-    if target + "s" == candidate or candidate + "s" == target:
+    if flat_target + "s" == flat_candidate or flat_candidate + "s" == flat_target:
         return 1
-    shorter, longer = sorted((target, candidate), key=len)
-    if len(shorter) >= MIN_CONTAINMENT and shorter in longer:
-        return 2 + (len(longer) - len(shorter))
+    shorter, longer = sorted((target, candidate), key=lambda words: len(words.replace(" ", "")))
+    size = len(shorter.replace(" ", ""))
+    if size >= MIN_CONTAINMENT and re.search(rf"\b{re.escape(shorter)}", longer):
+        return 2 + (len(longer.replace(" ", "")) - size)
     return None
+
+
+def _words(name):
+    return re.sub(r"[^a-z]+", " ", (name or "").lower()).strip()
 
 
 def _fuzzy(name, existing):
     """The existing row this name most plausibly means, or None."""
-    target = _norm(name)
+    target = _words(name)
     if not target:
         return None
     scored = []
     for row in existing:
-        score = _match_score(target, _norm(row.name))
+        score = _match_score(target, _words(row.name))
         if score is not None:
             scored.append((score, row))
     if not scored:
@@ -279,13 +289,21 @@ def unresolved(plan, decisions):
                 # without a word, which is worse than refusing to start
                 code = choice.get("map_to") or (row.fields or {}).get("item_code", row.key)
                 if code not in available:
+                    # without a problem the row is held but never marked, and
+                    # the screen says "marked on the Materials step" over nothing
+                    row.problem = row.problem or (
+                        f"{code!r} is not a material here, and this import does not create it. "
+                        "Type a code you already have, or choose “create new”."
+                    )
                     still.append(row)
                 elif not Material.objects.filter(item_code=code, is_active=True).exists() \
                         and Material.objects.filter(item_code=code).exists():
                     row.problem = f"{code} is retired, so nothing new can be assigned to it."
                     still.append(row)
                 continue
-            if section != "materials" and action == "map":
+            # styles have no step to pick on and commit finds them by code, so
+            # an existing style would otherwise hold every upload that names it
+            if section not in ("materials", "styles") and action == "map":
                 # mapped onto nothing, every piece naming it would land blank
                 unpicked = not choice.get("target", getattr(row.target, "pk", None))
                 if unpicked or (row.problem or "").startswith(UNPICKED):
