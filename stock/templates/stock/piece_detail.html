@@ -58,8 +58,6 @@
       <div class="biorow"><dt>Karat</dt><dd>{% include "stock/_inline.html" with name="metal_purity" field=inline.metal_purity value=row.karat %}</dd></div>
       <div class="biorow"><dt>Colour</dt><dd>{% include "stock/_inline.html" with name="metal_colour" field=inline.metal_colour value=row.metal_colour %}</dd></div>
       <div class="biorow"><dt>Size</dt><dd>{% include "stock/_inline.html" with name="size_label" field=inline.size_label value=row.size_label %}</dd></div>
-      <div class="biorow"><dt>FG date</dt><dd>{% include "stock/_inline.html" with name="received_on" field=inline.received_on value=row.received_on %}</dd></div>
-      <div class="biorow"><dt>Days in stock</dt><dd class="mono">{{ row.days_in_stock|default_if_none:"—" }}{% if row.days_in_stock is not None %} <span class="dim" style="font-size:11px">since {{ piece.received_on|default:piece.fg_date|date:"j M Y" }}</span>{% endif %}</dd></div>
       <div class="biorow"><dt>Design name (marketing)</dt><dd>{% include "stock/_inline.html" with name="name" field=design_inline.name value=piece.style.name on_design=True %}</dd></div>
     </dl>
   </div>
@@ -104,19 +102,24 @@
 </div>
 {% endif %}
 
-{% if caps.view_vendor %}
-<div class="card"><h3>Vendor &amp; turnaround</h3>
+{# FG date and age sit here for every role; only the vendor rows need view_vendor #}
+<div class="card"><h3>{% if caps.view_vendor %}Vendor &amp; turnaround{% else %}In stock{% endif %}</h3>
   <div class="bio">
     <dl>
+      {% if caps.view_vendor %}
       <div class="biorow"><dt>Vendor</dt><dd>{% include "stock/_inline.html" with name="vendor" field=inline.vendor value=row.vendor_name %}</dd></div>
       <div class="biorow"><dt>Job card</dt><dd class="mono">{% include "stock/_inline.html" with name="job_no" field=job_inline.job_no value=job_card.job_no %}</dd></div>
+      {% endif %}
+      <div class="biorow"><dt>FG date</dt><dd>{% include "stock/_inline.html" with name="received_on" field=inline.received_on value=row.received_on %}</dd></div>
     </dl>
     <dl>
+      {% if caps.view_vendor %}
       <div class="biorow"><dt>Vendor average TAT (days)</dt><dd>{% if tat_inline %}{% include "stock/_inline.html" with name="avg_tat_days" field=tat_inline.avg_tat_days value=row.vendor_avg_tat_days %}{% else %}{{ row.vendor_avg_tat_days|default:"—" }}{% endif %}</dd></div>
+      {% endif %}
+      <div class="biorow"><dt>Days since</dt><dd class="mono">{{ row.days_in_stock|default_if_none:"—" }}{% if row.days_in_stock is not None %} <span class="dim" style="font-size:11px">since {{ piece.received_on|default:piece.fg_date|date:"j M Y" }}</span>{% endif %}</dd></div>
     </dl>
   </div>
 </div>
-{% endif %}
 
 {# ── Sale BOM & Breakup ───────────────────────────────────────────────── #}
 {% elif tab == 'bom' %}
@@ -364,7 +367,7 @@
 {# ── History ──────────────────────────────────────────────────────────── #}
 {% elif tab == 'history' %}
 <div class="card"><h3>Movement ledger</h3>
-  <table><thead><tr><th>Event</th><th>From</th><th>To</th><th>Resulting state</th><th>Date</th><th>By</th><th>Reason</th></tr></thead><tbody>
+  <table><thead><tr><th>Event</th><th>From</th><th>To</th><th>Resulting state</th><th>Date</th><th class="num">Days in stock</th><th>By</th><th>Reason</th></tr></thead><tbody>
     {% for movement in movements %}
     <tr>
       <td>{{ movement.move_type|lower }}</td>
@@ -372,10 +375,11 @@
       <td class="dim">{{ movement.to_location.code|default:"—" }}</td>
       <td>{% include "stock/_chip.html" with state=movement.resulting_state label=movement.resulting_state %}</td>
       <td class="dim">{{ movement.moved_at|date:"d M Y H:i" }}</td>
+      <td class="num mono">{{ movement.days_in_stock|default_if_none:"—" }}</td>
       <td class="dim">{{ movement.user|default:"—" }}</td>
       <td class="dim">{{ movement.reason|default:"—" }}</td>
     </tr>
-    {% empty %}<tr><td colspan="7"><div class="empty">Never moved.</div></td></tr>{% endfor %}
+    {% empty %}<tr><td colspan="8"><div class="empty">Never moved.</div></td></tr>{% endfor %}
   </tbody></table>
 </div>
 

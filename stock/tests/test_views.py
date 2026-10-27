@@ -75,6 +75,7 @@ def test_days_in_stock_counts_to_today_or_to_the_day_it_left(piece):
     assert days_in_stock(piece) == 12  # received wins
     piece.disposed_on = today - datetime.timedelta(days=2)
     assert days_in_stock(piece) == 10  # a sold piece stops counting
+    assert days_in_stock(piece, today - datetime.timedelta(days=7)) == 5  # its age on a movement's day
 
 
 def test_the_list_toggles_cards_and_list_and_remembers(client, admin_user_, received_piece):

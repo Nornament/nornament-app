@@ -84,7 +84,7 @@ from .importers import analyse as analyse_import
 from .importers import commit as commit_import
 from .importers import guess
 from .importers import ivy
-from .masking import allowed, mask, piece_row, rows_for
+from .masking import allowed, days_in_stock, mask, piece_row, rows_for
 from .models import (
     ActivityLog,
     Category,
@@ -608,6 +608,10 @@ def piece_detail(request, jewel_code):
     tab = request.GET.get("tab") or "overview"
     if tab not in dict(detail_tabs):
         tab = "overview"
+    movements = list(piece.movements.select_related("from_location", "to_location", "user")[:20])
+    for movement in movements:
+        # how long it had sat in stock when it moved
+        movement.days_in_stock = days_in_stock(piece, timezone.localdate(movement.moved_at))
     context = {
         "nav": "stock",
         "piece": piece,
@@ -619,7 +623,7 @@ def piece_detail(request, jewel_code):
         "open_repair": RepairJob.objects.filter(piece=piece).exclude(status="DONE").first(),
         "gaps": services.piece_gaps(piece),
         "reconciliation": services.weight_reconciliation(piece),
-        "movements": piece.movements.select_related("from_location", "to_location", "user")[:20],
+        "movements": movements,
         "media": piece.media.filter(is_archived=False).order_by("rank_order"),
         "thumb": _piece_thumbs([piece.pk]).get(piece.pk),
         "locations": Location.objects.filter(is_active=True),
