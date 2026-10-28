@@ -75,8 +75,6 @@ def test_days_in_stock_counts_to_today_or_to_the_day_it_left(piece):
     assert days_in_stock(piece) == 12  # received wins
     piece.disposed_on = today - datetime.timedelta(days=2)
     assert days_in_stock(piece) == 10  # a sold piece stops counting
-    assert days_in_stock(piece, today - datetime.timedelta(days=7)) == 5  # its age on a movement's day
-
 
 def test_the_list_toggles_cards_and_list_and_remembers(client, admin_user_, received_piece):
     client.force_login(admin_user_)
@@ -578,3 +576,29 @@ def test_every_piece_route_resolves_to_itself_for_a_slashed_code():
         url = reverse(f"stock:{route.name}", args=["HB/4", *extra])
         match = resolve(url)
         assert (match.url_name, match.kwargs["jewel_code"]) == (route.name, "HB/4"), url
+
+
+def test_the_ledger_counts_days_at_each_location_not_since_arrival(client, admin_user_, received_piece, locations):
+    """Received at MUM ten days ago, moved to HO four days ago: 6 at MUM, 4 at HO."""
+    import datetime
+
+    from django.utils import timezone
+
+    from stock.enums import MovementType, StockState
+    from stock.models import StockMovement
+
+    now = timezone.now()
+    received_piece.movements.update(moved_at=now - datetime.timedelta(days=10))
+    StockMovement.objects.create(
+        piece=received_piece,
+        move_type=MovementType.TRANSFER_IN,
+        from_location=locations["MUM"],
+        to_location=locations["HO"],
+        resulting_state=StockState.IN_STOCK,
+        moved_at=now - datetime.timedelta(days=4),
+    )
+    client.force_login(admin_user_)
+    ledger = client.get(
+        reverse("stock:piece_detail", kwargs={"jewel_code": received_piece.jewel_code}), {"tab": "history"}
+    ).context["movements"]
+    assert [(m.to_location.code, m.days_here) for m in ledger] == [("HO", 4), ("MUM", 6)]

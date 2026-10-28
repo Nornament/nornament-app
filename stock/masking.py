@@ -145,18 +145,17 @@ def piece_row(user, piece, *, with_prices=True):
     return mask(user, row)
 
 
-def days_in_stock(piece, on=None):
+def days_in_stock(piece):
     """Days from the piece's arrival to its leaving, or to today while it stays.
 
     Counted on every read, never stored: a stored count is out of date the next
     morning. Received wins over the FG date an IVY import brings; with neither
-    there is nothing to count from. ``on`` asks how old it was on that day — a
-    movement's date, say.
+    there is nothing to count from.
     """
     start = piece.received_on or piece.fg_date
     if start is None:
         return None
-    return ((on or piece.disposed_on or timezone.localdate()) - start).days
+    return ((piece.disposed_on or timezone.localdate()) - start).days
 
 
 def rows_for(user, pieces, **kwargs):

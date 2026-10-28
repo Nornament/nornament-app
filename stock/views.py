@@ -84,7 +84,7 @@ from .importers import analyse as analyse_import
 from .importers import commit as commit_import
 from .importers import guess
 from .importers import ivy
-from .masking import allowed, days_in_stock, mask, piece_row, rows_for
+from .masking import allowed, mask, piece_row, rows_for
 from .models import (
     ActivityLog,
     Category,
@@ -613,9 +613,13 @@ def piece_detail(request, jewel_code):
     if tab not in dict(detail_tabs):
         tab = "overview"
     movements = list(piece.movements.select_related("from_location", "to_location", "user")[:20])
+    # days at each row's location: newest first, so a stay ends where the row
+    # above it began, and the top one runs to today (or the day it left)
+    until = piece.disposed_on or timezone.localdate()
     for movement in movements:
-        # how long it had sat in stock when it moved
-        movement.days_in_stock = days_in_stock(piece, timezone.localdate(movement.moved_at))
+        arrived = timezone.localdate(movement.moved_at)
+        movement.days_here = (until - arrived).days if movement.to_location_id else None
+        until = arrived
     context = {
         "nav": "stock",
         "piece": piece,

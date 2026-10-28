@@ -116,7 +116,7 @@
       {% if caps.view_vendor %}
       <div class="biorow"><dt>Vendor average TAT (days)</dt><dd>{% if tat_inline %}{% include "stock/_inline.html" with name="avg_tat_days" field=tat_inline.avg_tat_days value=row.vendor_avg_tat_days %}{% else %}{{ row.vendor_avg_tat_days|default:"—" }}{% endif %}</dd></div>
       {% endif %}
-      <div class="biorow"><dt>Days since</dt><dd class="mono">{{ row.days_in_stock|default_if_none:"—" }}{% if row.days_in_stock is not None %} <span class="dim" style="font-size:11px">since {{ piece.received_on|default:piece.fg_date|date:"j M Y" }}</span>{% endif %}</dd></div>
+      <div class="biorow"><dt>Days since</dt><dd class="mono">{{ row.days_in_stock|default_if_none:"—" }}</dd></div>
     </dl>
   </div>
 </div>
@@ -367,7 +367,7 @@
 {# ── History ──────────────────────────────────────────────────────────── #}
 {% elif tab == 'history' %}
 <div class="card"><h3>Movement ledger</h3>
-  <table><thead><tr><th>Event</th><th>From</th><th>To</th><th>Resulting state</th><th>Date</th><th class="num">Days in stock</th><th>By</th><th>Reason</th></tr></thead><tbody>
+  <table><thead><tr><th>Event</th><th>From</th><th>To</th><th>Resulting state</th><th>Date</th><th class="num">Days here</th><th>By</th><th>Reason</th></tr></thead><tbody>
     {% for movement in movements %}
     <tr>
       <td>{{ movement.move_type|lower }}</td>
@@ -375,7 +375,7 @@
       <td class="dim">{{ movement.to_location.code|default:"—" }}</td>
       <td>{% include "stock/_chip.html" with state=movement.resulting_state label=movement.resulting_state %}</td>
       <td class="dim">{{ movement.moved_at|date:"d M Y H:i" }}</td>
-      <td class="num mono">{{ movement.days_in_stock|default_if_none:"—" }}</td>
+      <td class="num mono" title="Days at {{ movement.to_location.code|default:'this location' }}">{{ movement.days_here|default_if_none:"—" }}</td>
       <td class="dim">{{ movement.user|default:"—" }}</td>
       <td class="dim">{{ movement.reason|default:"—" }}</td>
     </tr>
