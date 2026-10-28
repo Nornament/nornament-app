@@ -18,6 +18,14 @@ own; the legacy searched from the top bar instead.{% endcomment %}
     </div>
     {% if caps.edit_bom %}<a class="btn primary" href="{% url 'stock:piece_new' %}" style="margin-left:auto">+ Add a piece</a>{% endif %}
   </div>
+  {% if picked.style %}
+  <div class="frow">
+    <div class="flabel">Design</div>
+    <div class="fchips">
+      {% for code in picked.style %}<a class="fchip" aria-pressed="true" href="{% querystring style=None page=None %}" title="Show every design">{{ code }} ✕</a>{% endfor %}
+    </div>
+  </div>
+  {% endif %}
   <div class="frow">
     <div class="flabel">Category</div>
     <div class="fchips">

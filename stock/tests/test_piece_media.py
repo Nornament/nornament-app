@@ -6,8 +6,10 @@ must read from the other, and every write must refuse a login without
 ``edit_bom``.
 """
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
 
@@ -336,3 +338,71 @@ def test_a_login_without_edit_bom_sees_the_copy_but_no_editors(client, received_
     assert 'class="editable' not in page
     url = reverse("stock:piece_marketing", kwargs={"jewel_code": received_piece.jewel_code})
     assert client.post(url, {"action": "field", "field": "story", "story": "x"}).status_code == 403
+
+
+# ── a design code that is also another piece's jewel code ───────────────
+@pytest.fixture
+def same_code_twice(received_piece):
+    """Design RG00006 is cut as piece RG00003; piece RG00006 is cut from RG00009.
+
+    The live catalogue has exactly this: two products that both read RG00006.
+    """
+    category = received_piece.style.category
+    design = Style.objects.create(style_code="RG00006", category=category)
+    other = Style.objects.create(style_code="RG00009", category=category)
+    of_design = Piece.objects.create(jewel_code="RG00003", style=design, stock_state=StockState.NOT_RECEIVED)
+    namesake = Piece.objects.create(jewel_code="RG00006", style=other, stock_state=StockState.NOT_RECEIVED)
+    return design, of_design, namesake
+
+
+def _upload(client, scope, entity_id, file_name, mime):
+    reserved = client.post(
+        reverse("mediahub:presign"),
+        data={"scope": scope, "entity_id": entity_id, "file_name": file_name, "mime_type": mime},
+        content_type="application/json",
+    ).json()
+    sent = client.post(reserved["url"], {"file": SimpleUploadedFile(file_name, file_name.encode(), mime)})
+    assert sent.status_code == 200, sent.content
+    return MediaAsset.objects.get(pk=reserved["media_id"])
+
+
+def test_a_piece_and_a_design_sharing_a_code_keep_their_own_files(client, graphic_user, same_code_twice, settings, monkeypatch):
+    """The Graphic team's report: a change on one RG00006 showed on the other."""
+    from mediahub import services as media_services
+    from mediahub import storage
+
+    design, of_design, namesake = same_code_twice
+    settings.MEDIA_DIRECT_UPLOAD = False  # bytes through Django, into the fake bucket
+    bucket = {}
+    monkeypatch.setattr(storage, "put_bytes", lambda key, data, ct: bucket.__setitem__(key, data))
+    # the WebP encode and the embedding are not what is under test
+    monkeypatch.setattr(media_services, "finish_upload_later", SimpleNamespace(enqueue=lambda pk: None))
+    client.force_login(graphic_user)
+
+    # each upload goes from the media tab the team would stand on
+    photo = _upload(client, "piece", namesake.pk, "RG00006.jpg", "image/jpeg")
+    cad = _upload(client, "style", design.pk, "RG00006.3dm", "application/octet-stream")
+    MediaAsset.objects.filter(pk=cad.pk).update(kind=MediaKind.CAD)
+
+    assert (photo.piece, photo.style) == (namesake, None)
+    assert (cad.piece, cad.style) == (None, design)
+    assert len(bucket) == 2, "the same file name must not land on the same bucket key"
+
+    def drawn(piece):
+        sections = _detail(client, piece, "media").context["media_sections"]
+        return {tile["asset"].pk for section in sections for tile in section["tiles"]}
+
+    assert drawn(namesake) == {photo.pk}, "piece RG00006 shows design RG00006's file"
+    assert drawn(of_design) == {cad.pk}, "design RG00006's piece shows piece RG00006's photo"
+
+
+def test_the_design_card_lists_that_design_and_not_its_namesake_piece(client, graphic_user, same_code_twice):
+    design, of_design, namesake = same_code_twice
+    client.force_login(graphic_user)
+
+    cards = client.get(reverse("stock:style_list")).content.decode()
+    assert "?style=RG00006" in cards and "?q=RG00006" not in cards
+
+    listed = client.get(reverse("stock:piece_list"), {"style": "RG00006"}).content.decode()
+    assert "RG00003" in listed
+    assert "pieces/RG00006/" not in listed, "a design's card opened the piece that only shares its code"

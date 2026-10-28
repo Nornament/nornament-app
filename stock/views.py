@@ -235,7 +235,7 @@ PRICE_STEP = 25_000
 #: The dimensions the filter bar carries: the legacy's four first, then the
 #: four the reports screen adds. One filter function serves every screen, so a
 #: key added here works on the list, the CSV and the report at once.
-FILTER_KEYS = ("category", "location", "state", "price", "collection", "karat", "vendor", "material")
+FILTER_KEYS = ("style", "category", "location", "state", "price", "collection", "karat", "vendor", "material")
 
 
 def _filtered(request):
@@ -256,6 +256,10 @@ def _filtered(request):
             | Q(src_ref__icontains=query)
         )
     picked = {key: [value for value in request.GET.getlist(key) if value] for key in FILTER_KEYS}
+    if picked["style"]:
+        # exact, unlike ``q``: a design's card must not also list the piece
+        # whose jewel code happens to read the same (design RG00006, piece RG00006)
+        pieces = pieces.filter(style__style_code__in=picked["style"])
     if picked["category"]:
         pieces = pieces.filter(style__category__code__in=picked["category"])
     if picked["location"]:

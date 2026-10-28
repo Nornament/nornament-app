@@ -20,11 +20,11 @@
     {% for style in styles %}
     <article class="dcard">
       {% if style.thumb %}
-      <a href="{% url 'stock:piece_list' %}?q={{ style.style_code|urlencode }}"><img class="jart sq" src="{{ style.thumb }}" alt="{{ style.style_code }}" loading="lazy"></a>
+      <a href="{% url 'stock:piece_list' %}?style={{ style.style_code|urlencode }}"><img class="jart sq" src="{{ style.thumb }}" alt="{{ style.style_code }}" loading="lazy"></a>
       {% endif %}
       <div class="m">
         <div class="pcode" style="font-family:var(--mono);font-size:13px;font-weight:600">
-          <a href="{% url 'stock:piece_list' %}?q={{ style.style_code|urlencode }}">{{ style.style_code }}</a></div>
+          <a href="{% url 'stock:piece_list' %}?style={{ style.style_code|urlencode }}">{{ style.style_code }}</a></div>
         <div class="pname" style="font-size:12.5px;color:var(--muted)">{{ style.name|default:"—" }}</div>
         <div class="sub" style="font-size:11.5px;color:var(--muted);margin-top:8px;display:flex;gap:7px;flex-wrap:wrap">
           <span>{{ style.category.name }}</span><span>·</span>
